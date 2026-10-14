@@ -154,6 +154,47 @@ input[type="date"], select { font: inherit; padding: 8px 10px; border: 1px solid
 .vol tr.checkrow td { background: var(--gray-soft); }
 .note { font-size: 0.85rem; color: var(--muted); border-left: 3px solid var(--line); padding-left: 10px; }
 ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; }
+/* 승강장 안전문 */
+.psdhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dirtabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.dirtab { appearance: none; border: 0; background: var(--surface); color: var(--muted); font: inherit; font-size: 0.88rem; font-weight: 600; padding: 7px 14px; cursor: pointer; }
+.dirtab + .dirtab { border-left: 1px solid var(--line); }
+.dirtab[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.strip-wrap { overflow-x: auto; padding-bottom: 4px; }
+.strip { display: flex; gap: 10px; min-width: max-content; }
+.car { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.carlabel { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-align: center; letter-spacing: 0.04em; }
+.cardoors { display: flex; gap: 4px; }
+.psd { appearance: none; border: 2px solid transparent; background: none; padding: 2px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font: inherit; color: var(--ink); }
+.psd[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.psd-head { width: 40px; height: 7px; border-radius: 2px; background: var(--st); }
+.psd-glass { width: 40px; height: 46px; border: 1.5px solid var(--muted); border-radius: 2px; display: flex; gap: 2px; padding: 2px; background: var(--surface); }
+.psd-glass i { flex: 1; background: var(--accent-soft); border: 1px solid var(--line); }
+.psd-no { font-family: var(--font-data); font-size: 0.75rem; }
+.c-red { --st: var(--red); --st-soft: var(--red-soft); }
+.c-amber { --st: var(--amber); --st-soft: var(--amber-soft); }
+.c-green { --st: var(--green); --st-soft: var(--green-soft); }
+.c-check { --st: var(--gray); --st-soft: var(--gray-soft); }
+.doorgrid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 760px) { .doorgrid { grid-template-columns: minmax(0, 1fr); } }
+.doorfig { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.doorsvg { width: 100%; max-width: 360px; height: auto; }
+.doorsvg .hdr { fill: var(--gray-soft); stroke: var(--muted); stroke-width: 1.5; }
+.doorsvg .hdrcap { fill: var(--muted); font-size: 10px; font-family: var(--font-body); }
+.doorsvg .rail { fill: var(--muted); }
+.doorsvg .fixed { fill: var(--bg); stroke: var(--muted); stroke-width: 1.5; }
+.doorsvg .leaf { fill: var(--accent-soft); stroke: var(--muted); stroke-width: 1.5; }
+.doorsvg .stripe { stroke: var(--red); stroke-width: 3; opacity: 0.7; }
+.doorsvg .floor { stroke: var(--ink); stroke-width: 2; }
+.doorsvg .chip { cursor: pointer; }
+.doorsvg .chip rect { fill: var(--st-soft); stroke: var(--st); stroke-width: 1.5; }
+.doorsvg .chip text { fill: var(--ink); font-size: 12px; font-weight: 600; font-family: var(--font-body); }
+.doorsvg .chip:hover rect, .doorsvg .chip:focus-visible rect { stroke-width: 3; }
+.doorsvg .chip:focus { outline: none; }
+.doorparts { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ptable .prow { cursor: pointer; }
+.ptable .prow:hover, .ptable .prow:focus-visible { background: var(--accent-soft); outline: none; }
+
 /* 역 이동 */
 .switcher { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .swbtn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 0.88rem; padding: 7px 12px; border-radius: 8px; cursor: pointer; }
@@ -242,7 +283,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   const DOOR_PARTS = PARTS.filter(p => p.unit === "door");
   const PART = Object.fromEntries(PARTS.map(p => [p.code, p]));
   const DOORS = [];
-  ["상행", "하행"].forEach(side => { for (let n = 1; n <= 16; n++) DOORS.push({ id: (side === "상행" ? "U" : "D") + String(n).padStart(2, "0"), side, n, label: side + " " + n + "번" }); });
+  // 방향별 4량 × 문 4개 = 16개 (임시값). 번호는 "호차-문" (예: 1-1)
+  const SIDES = { U: "부전 방면", D: "북울산 방면" };
+  Object.entries(SIDES).forEach(([sid, side]) => { for (let n = 1; n <= 16; n++) { const car = Math.ceil(n / 4), pos = (n - 1) % 4 + 1; DOORS.push({ id: sid + String(n).padStart(2, "0"), sid, side, n, car, pos, no: car + "-" + pos, label: side + " " + car + "-" + pos }); } });
   const DOOR = Object.fromEntries(DOORS.map(d => [d.id, d]));
   const REASONS = { fail: "고장", prev: "예방 교체", with: "함께 교체" };
 
@@ -347,7 +390,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   // ---------- 화면 ----------
   const app = document.getElementById("app");
   let view = { name: "route" };
-  function go(v) { view = v; render(); window.scrollTo(0, 0); }
+  function go(v) { const keep = v.keep; view = v; render(); if (!keep) window.scrollTo(0, 0); }
   document.getElementById("tab-route").onclick = () => go({ name: "route" });
   document.getElementById("tab-volume").onclick = () => go({ name: "volume" });
   document.getElementById("tab-weather").onclick = () => go({ name: "weather", simSt: 11 });
@@ -380,7 +423,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   const tipAttr = (t, r) => `data-tip="${esc(JSON.stringify({ t, r }))}"`;
 
   function bind() {
-    app.querySelectorAll("[data-go]").forEach(el => el.addEventListener("click", () => go(JSON.parse(el.dataset.go))));
+    app.querySelectorAll("[data-go]").forEach(el => {
+      el.addEventListener("click", () => go(JSON.parse(el.dataset.go)));
+      if (el.tagName !== "BUTTON") el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(JSON.parse(el.dataset.go)); } });
+    });
     const jump = app.querySelector("#st-jump");
     if (jump) jump.addEventListener("change", () => go({ name: "station", st: Number(jump.value) }));
     const tt = app.querySelector("#tbltoggle");
@@ -417,17 +463,36 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   function vStation() {
     const s = ST[view.st], units = stationUnits(s.i), c = counts(units);
     const psc = units[0];
-    const head = `<tr><th>문</th>${DOOR_PARTS.map(p => `<th>${p.name}</th>`).join("")}</tr>`;
-    let rows = "";
-    ["상행", "하행"].forEach(side => {
-      rows += `<tr class="sidehead"><td colspan="${DOOR_PARTS.length + 1}">${side} 승강장</td></tr>`;
-      DOORS.filter(d => d.side === side).forEach(d => {
-        rows += `<tr><th class="door">${d.n}번</th>` + DOOR_PARTS.map(p => {
-          const u = units.find(x => x.door === d.id && x.code === p.code);
-          return `<td class="cell"><button class="cellbtn ${STATE[u.s][1]}" title="${esc(d.label + " " + p.name + " · " + STATE[u.s][0] + " · " + dur(u.left))}" ${goAttr({ name: "part", st: s.i, door: d.id, code: p.code })}>${u.left < 0 ? "지남" : Math.round(u.left / 30.44) + "개월"}</button></td>`;
-        }).join("") + `</tr>`;
-      });
-    });
+    const RANK = { red: 0, check: 1, amber: 2, green: 3 };
+    const doorUnits = id => DOOR_PARTS.map(p => units.find(x => x.door === id && x.code === p.code));
+    const worst = id => doorUnits(id).reduce((a, u) => RANK[u.s] < RANK[a.s] ? u : a);
+    const sid = view.side || "U";
+    const sideDoors = DOORS.filter(d => d.sid === sid);
+    const door = DOOR[view.door] && DOOR[view.door].sid === sid ? DOOR[view.door] : sideDoors.reduce((a, d) => { const wa = worst(a.id), wd = worst(d.id); return RANK[wd.s] < RANK[wa.s] || (RANK[wd.s] === RANK[wa.s] && wd.left < wa.left) ? d : a; });
+    const at = (d, keep) => ({ name: "station", st: s.i, side: sid, door: d, keep });
+    const dirTabs = `<div class="dirtabs" role="group" aria-label="방향 선택">${Object.entries(SIDES).map(([k, v]) => `<button class="dirtab" aria-pressed="${k === sid}" ${goAttr({ name: "station", st: s.i, side: k, keep: true })}>${v}</button>`).join("")}</div>`;
+    const strip = `<div class="strip-wrap"><div class="strip">${[1, 2, 3, 4].map(car => `<div class="car"><div class="carlabel">${car}호차</div><div class="cardoors">${sideDoors.filter(d => d.car === car).map(d => {
+        const w = worst(d.id);
+        return `<button class="psd ${"c-" + w.s}" aria-pressed="${d.id === door.id}" aria-label="${esc(d.no + " · " + STATE[w.s][0])}" ${goAttr(at(d.id, true))}><span class="psd-head"></span><span class="psd-glass"><i></i><i></i></span><span class="psd-no">${d.no}</span></button>`;
+      }).join("")}</div></div>`).join("")}</div></div>`;
+    const du = doorUnits(door.id);
+    const u = c2 => du.find(x => x.code === c2);
+    const chip = (code, label, x, y, w) => { const x0 = u(code); return `<g class="chip c-${x0.s}" tabindex="0" role="link" aria-label="${esc(PART[code].name + " " + STATE[x0.s][0])}" ${goAttr({ name: "part", st: s.i, door: door.id, code })}><rect x="${x}" y="${y}" width="${w}" height="24" rx="5"/><text x="${x + w / 2}" y="${y + 16}" text-anchor="middle">${label}</text></g>`; };
+    const doorSvg = `<svg class="doorsvg" viewBox="0 0 360 250" role="img" aria-label="안전문 ${door.no} 구조와 부품 상태">
+        <rect class="hdr" x="16" y="8" width="328" height="62" rx="6"/>
+        <text class="hdrcap" x="24" y="22">기계함</text>
+        ${chip("MOTOR", "모터", 24, 32, 56)}${chip("BELT", "벨트", 86, 32, 56)}${chip("PULLEY", "풀리", 148, 32, 56)}${chip("DCM", "DCM", 210, 32, 60)}${chip("IFM", "IFM", 276, 32, 60)}
+        <rect class="rail" x="16" y="76" width="328" height="4" rx="2"/>
+        ${chip("HANGER", "행거", 148, 84, 64)}
+        <rect class="fixed" x="16" y="112" width="72" height="122"/>
+        <rect class="leaf" x="90" y="112" width="89" height="122"/>
+        <rect class="leaf" x="181" y="112" width="89" height="122"/>
+        <rect class="fixed" x="272" y="112" width="72" height="122"/>
+        <line class="stripe" x1="96" x2="173" y1="168" y2="168"/><line class="stripe" x1="187" x2="264" y1="168" y2="168"/>
+        <line class="floor" x1="8" x2="352" y1="238" y2="238"/>
+      </svg>`;
+    const order = [...du].sort((a, b) => RANK[a.s] - RANK[b.s] || a.left - b.left);
+    const partRows = order.map(x => `<tr class="prow" tabindex="0" ${goAttr({ name: "part", st: s.i, door: door.id, code: x.code })}><td><b>${PART[x.code].name}</b></td><td>${pill(x.s)}</td><td class="num">${yr(x.c.base)}</td><td class="num">${iso(x.due)}</td><td class="num">${dur(x.left)}</td></tr>`).join("");
     const prev = ST[s.i - 1], next = ST[s.i + 1];
     const switcher = `<div class="switcher">
         <button class="swbtn" ${prev ? goAttr({ name: "station", st: prev.i }) : "disabled"}>‹ ${prev ? prev.name : "이전 역 없음"}</button>
@@ -439,18 +504,28 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       ${switcher}
       <div class="panel">
         <h2>${s.name}</h2>
-        <dl class="kv"><dt>개통일</dt><dd>${s.openLabel} (스크린도어 설치일로 가정)</dd><dt>관측소</dt><dd>${s.obs} ASOS (가정)</dd><dt>문 수</dt><dd>상행 16 + 하행 16 = 32개 (임시값)</dd></dl>
+        <dl class="kv"><dt>개통일</dt><dd>${s.openLabel} (스크린도어 설치일로 가정)</dd><dt>관측소</dt><dd>${s.obs} ASOS (가정)</dd><dt>문 수</dt><dd>방향마다 4량 × 4개 = 16개 (임시값)</dd></dl>
         <div class="legend">${pill("red")} ${c.red} ${pill("check")} ${c.check} ${pill("amber")} ${c.amber} ${pill("green")} ${c.green}</div>
-        <button class="btn" ${goAttr({ name: "form", st: s.i })}>교체 기록 입력</button>
+      </div>
+      <div class="panel">
+        <div class="psdhead"><h3>승강장 안전문</h3>${dirTabs}</div>
+        <p class="small muted">문 위 색은 그 문 부품 중 가장 급한 상태입니다. 문을 누르면 아래에 부품이 나옵니다.</p>
+        ${strip}
+        <div class="legend">${pill("red")}<span class="muted">6개월 이하</span>${pill("check")}<span class="muted">기록 없이 지남</span>${pill("amber")}<span class="muted">1년 이하</span>${pill("green")}<span class="muted">여유</span></div>
+      </div>
+      <div class="panel doorpanel">
+        <div class="psdhead"><h2>안전문 ${door.no}</h2><span class="muted small">${door.side}</span></div>
+        <div class="doorgrid">
+          <figure class="doorfig">${doorSvg}<figcaption class="small muted">기계함과 행거의 부품을 누르면 상세로 갑니다.</figcaption></figure>
+          <div class="doorparts">
+            <div class="scroll"><table class="ptable"><tr><th>부품</th><th>상태</th><th>권장 주기</th><th>다음 교체</th><th>남은 기간</th></tr>${partRows}</table></div>
+            <button class="btn" ${goAttr({ name: "form", st: s.i, door: door.id })}>안전문 ${door.no} 교체 기록 입력</button>
+          </div>
+        </div>
       </div>
       <div class="panel">
         <h3>역 공통 설비</h3>
         <button class="row" ${goAttr({ name: "part", st: s.i, door: null, code: "PSC" })}>${pill(psc.s)}<span class="what"><b>종합제어반 릴레이</b><br><span class="small muted">예정일 ${iso(psc.due)} · 실내 설비라 날씨 보정 없음</span></span><span class="small num">${dur(psc.left)}</span></button>
-      </div>
-      <div class="panel">
-        <h3>문 × 부품</h3>
-        <p class="small muted">칸의 숫자는 다음 교체 예정일까지 남은 기간입니다. 칸을 누르면 부품 상세로 갑니다.</p>
-        <div class="scroll"><table class="matrix">${head}${rows}</table></div>
       </div>
     </section>`;
   }
@@ -491,7 +566,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     }
     const hist = u.hist.length ? `<div class="list">${u.hist.map(r => `<div class="row" style="cursor:default"><span class="pill s-check">${REASONS[r.reason]}</span><span class="what">${iso(r.date)}${r.parts.length > 1 ? ` <span class="small muted">· 함께: ${r.parts.filter(x => x !== p.code).map(x => PART[x].name).join(", ")}</span>` : ""}</span><span class="small muted">${r.example ? "예시 기록" : "입력한 기록"}</span></div>`).join("")}</div>` : `<p class="muted">교체 기록이 없습니다. 개통일(${iso(s.open)})을 설치일로 봅니다.</p>`;
     return `<section class="view">
-      <nav class="crumbs"><button ${goAttr({ name: "route" })}>노선</button><span>›</span><button ${goAttr({ name: "station", st: s.i })}>${s.name}</button><span>›</span><span>${where(u)} ${p.name}</span></nav>
+      <nav class="crumbs"><button ${goAttr({ name: "route" })}>노선</button><span>›</span><button ${goAttr(view.door ? { name: "station", st: s.i, side: DOOR[view.door].sid, door: view.door } : { name: "station", st: s.i })}>${s.name}</button><span>›</span><span>${where(u)} ${p.name}</span></nav>
       <div class="panel">
         <h2>${s.name} · ${where(u)} · ${p.name}</h2>
         <div class="legend">${pill(u.s)} <span class="num">${dur(u.left)}</span></div>
