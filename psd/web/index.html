@@ -1,0 +1,682 @@
+<title>동해선 PSD 교체주기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃은 목업(목업/동해선_PSD_교체주기_목업.html)과 동일하게 두고, 데이터만 실제 API에서 받는다 */
+:root {
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --ink: #15202d;
+  --muted: #5a6677;
+  --line: #d9e1eb;
+  --rail: #8fb2dd;
+  --accent: #1d5ea8;
+  --accent-soft: #e6eef8;
+  --red: #cf4430;
+  --red-soft: #fbe8e4;
+  --amber: #c98a12;
+  --amber-soft: #fbf1dc;
+  --green: #2b9457;
+  --green-soft: #e2f3e9;
+  --gray: #7d8796;
+  --gray-soft: #eceff3;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151d; --surface: #17202b; --ink: #e5ebf2; --muted: #9aa7b7; --line: #2a3644;
+    --rail: #4d76a6; --accent: #7fb0f0; --accent-soft: #1d2b3c;
+    --red: #f0705c; --red-soft: #3a211d; --amber: #eeb54a; --amber-soft: #3a2f18;
+    --green: #4cc27e; --green-soft: #183224; --gray: #8a94a3; --gray-soft: #252e39;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151d; --surface: #17202b; --ink: #e5ebf2; --muted: #9aa7b7; --line: #2a3644;
+  --rail: #4d76a6; --accent: #7fb0f0; --accent-soft: #1d2b3c;
+  --red: #f0705c; --red-soft: #3a211d; --amber: #eeb54a; --amber-soft: #3a2f18;
+  --green: #4cc27e; --green-soft: #183224; --gray: #8a94a3; --gray-soft: #252e39;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; margin: 0; }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.3; }
+h1 { font-size: 1.35rem; font-weight: 700; }
+h2 { font-size: 1.12rem; font-weight: 700; }
+h3 { font-size: 0.98rem; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+.top-inner { max-width: 980px; margin: 0 auto; padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; }
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand .line-chip { font-size: 0.75rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; letter-spacing: 0.02em; }
+.tabs { display: flex; gap: 4px; }
+.tab { appearance: none; border: 0; background: none; font: inherit; font-weight: 600; color: var(--muted); padding: 8px 12px 10px; border-bottom: 3px solid transparent; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mockbar { background: var(--accent-soft); color: var(--ink); font-size: 0.82rem; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+.mockbar-inner { max-width: 980px; margin: 0 auto; }
+
+.view { display: flex; flex-direction: column; gap: 18px; padding-top: 18px; }
+.crumbs { display: flex; gap: 6px; flex-wrap: wrap; font-size: 0.88rem; color: var(--muted); }
+.crumbs button { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 0.92rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; }
+
+.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.s-red { color: var(--red); background: var(--red-soft); }
+.s-amber { color: var(--amber); background: var(--amber-soft); }
+.s-green { color: var(--green); background: var(--green-soft); }
+.s-check { color: var(--gray); background: var(--gray-soft); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.82rem; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.stat b { font-family: var(--font-data); font-size: 1.5rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stat.red b { color: var(--red); } .stat.amber b { color: var(--amber); } .stat.check b { color: var(--gray); }
+
+.route { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.route li { position: relative; }
+.route li + li .st { border-top: 1px solid var(--line); }
+.route li::before { content: ""; position: absolute; left: 28px; top: 0; bottom: 0; width: 3px; background: var(--rail); }
+.route li:first-child::before { top: 50%; }
+.route li:last-child::before { bottom: 50%; }
+.st { appearance: none; width: 100%; text-align: left; background: none; border: 0; font: inherit; color: inherit; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 52px; position: relative; }
+.st:hover { background: var(--accent-soft); }
+.st::before { content: ""; position: absolute; left: 21px; top: 50%; width: 17px; height: 17px; margin-top: -8.5px; border-radius: 50%; background: var(--surface); border: 3px solid var(--rail); box-sizing: border-box; }
+.st .name { font-weight: 600; }
+.st .meta { font-size: 0.82rem; color: var(--muted); }
+.st .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.st .badges { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.st .chev { color: var(--muted); }
+
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; font-size: 0.88rem; width: 100%; }
+th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 600; color: var(--muted); font-size: 0.8rem; }
+
+.list { display: flex; flex-direction: column; }
+.row { appearance: none; background: none; border: 0; border-top: 1px solid var(--line); font: inherit; color: inherit; text-align: left; cursor: pointer; display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 2px; }
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--accent-soft); }
+.row .what { min-width: 0; }
+.linkbtn { appearance: none; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; padding: 6px 0; align-self: flex-start; }
+
+.cycle { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.cycle .big { font-family: var(--font-data); font-size: 2rem; font-variant-numeric: tabular-nums; }
+.rangebar { position: relative; height: 30px; margin: 4px 0 0; }
+.rangebar .track { position: absolute; left: 0; right: 0; top: 13px; height: 4px; background: var(--line); border-radius: 2px; }
+.rangebar .band { position: absolute; top: 9px; height: 12px; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 6px; }
+.rangebar .tick { position: absolute; top: 3px; width: 2px; height: 24px; background: var(--ink); }
+.rangebar .base { position: absolute; top: 8px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--accent); }
+.rangeaxis { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); font-family: var(--font-data); }
+
+.btn { appearance: none; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 8px; cursor: pointer; align-self: flex-start; }
+.btn.ghost { background: none; color: var(--accent); }
+.form { display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label, .field legend { font-weight: 600; font-size: 0.9rem; }
+fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+input[type="date"], select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); max-width: 260px; }
+.checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.checks label { font-weight: 400; display: flex; gap: 6px; align-items: center; }
+.err { color: var(--red); font-size: 0.88rem; }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 0.9rem; z-index: 20; }
+
+.vol td.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.vol td.barcell { width: 30%; min-width: 120px; }
+.vbar { height: 10px; background: var(--accent); border-radius: 3px; }
+.vol tr.checkrow td { background: var(--gray-soft); }
+.note { font-size: 0.85rem; color: var(--muted); border-left: 3px solid var(--line); padding-left: 10px; }
+ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; }
+
+.psdhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dirtabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.dirtab { appearance: none; border: 0; background: var(--surface); color: var(--muted); font: inherit; font-size: 0.88rem; font-weight: 600; padding: 7px 14px; cursor: pointer; }
+.dirtab + .dirtab { border-left: 1px solid var(--line); }
+.dirtab[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.strip-wrap { overflow-x: auto; padding-bottom: 4px; }
+.strip { display: flex; gap: 10px; min-width: max-content; }
+.car { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.carlabel { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-align: center; letter-spacing: 0.04em; }
+.cardoors { display: flex; gap: 4px; }
+.psd { appearance: none; border: 2px solid transparent; background: none; padding: 2px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font: inherit; color: var(--ink); }
+.psd[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.psd-head { width: 40px; height: 7px; border-radius: 2px; background: var(--st); }
+.psd-glass { width: 40px; height: 46px; border: 1.5px solid var(--muted); border-radius: 2px; display: flex; gap: 2px; padding: 2px; background: var(--surface); }
+.psd-glass i { flex: 1; background: var(--accent-soft); border: 1px solid var(--line); }
+.psd-no { font-family: var(--font-data); font-size: 0.75rem; }
+.c-빨강 { --st: var(--red); --st-soft: var(--red-soft); }
+.c-노랑 { --st: var(--amber); --st-soft: var(--amber-soft); }
+.c-초록 { --st: var(--green); --st-soft: var(--green-soft); }
+.c-확인_필요 { --st: var(--gray); --st-soft: var(--gray-soft); }
+.doorgrid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 760px) { .doorgrid { grid-template-columns: minmax(0, 1fr); } }
+.doorfig { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.doorsvg { width: 100%; max-width: 360px; height: auto; }
+.doorsvg .hdr { fill: var(--gray-soft); stroke: var(--muted); stroke-width: 1.5; }
+.doorsvg .hdrcap { fill: var(--muted); font-size: 10px; font-family: var(--font-body); }
+.doorsvg .rail { fill: var(--muted); }
+.doorsvg .fixed { fill: var(--bg); stroke: var(--muted); stroke-width: 1.5; }
+.doorsvg .leaf { fill: var(--accent-soft); stroke: var(--muted); stroke-width: 1.5; }
+.doorsvg .stripe { stroke: var(--red); stroke-width: 3; opacity: 0.7; }
+.doorsvg .floor { stroke: var(--ink); stroke-width: 2; }
+.doorsvg .chip { cursor: pointer; }
+.doorsvg .chip rect { fill: var(--st-soft); stroke: var(--st); stroke-width: 1.5; }
+.doorsvg .chip text { fill: var(--ink); font-size: 12px; font-weight: 600; font-family: var(--font-body); }
+.doorsvg .chip:hover rect, .doorsvg .chip:focus-visible rect { stroke-width: 3; }
+.doorsvg .chip:focus { outline: none; }
+.doorparts { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ptable .prow { cursor: pointer; }
+.ptable .prow:hover, .ptable .prow:focus-visible { background: var(--accent-soft); outline: none; }
+
+.switcher { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.swbtn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 0.88rem; padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+.swbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.swbtn:disabled { color: var(--muted); cursor: default; opacity: 0.6; }
+
+.mk { display: block; overflow: visible; }
+.mk .axisl, .chart .grid { stroke: var(--line); stroke-width: 1; }
+.mk .refl, .chart .refl { stroke: var(--muted); stroke-width: 1; }
+.mk .dot, .chart .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.mk .band { fill: var(--accent); opacity: 0.25; }
+.chart .whisker { stroke: var(--accent); stroke-width: 1.5; opacity: 0.45; }
+.chart text { fill: var(--muted); font-family: var(--font-data); font-size: 11px; }
+.chart text.lab { fill: var(--ink); font-family: var(--font-body); font-size: 11.5px; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit:focus-visible, .mk:focus-visible { outline: 2px solid var(--accent); }
+.chart:hover .dot { opacity: 0.85; }
+.rowchart th, .rowchart td { padding: 4px 8px; }
+.rowchart td.nm { font-weight: 500; }
+.cap { display: block; font-weight: 400; font-size: 0.72rem; color: var(--muted); }
+.charts2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.charts2 figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.charts2 figcaption { font-weight: 600; font-size: 0.92rem; }
+.charts2 svg { width: 100%; height: auto; }
+.tip { position: fixed; z-index: 30; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 0.82rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); display: flex; flex-direction: column; gap: 2px; max-width: 240px; }
+.tip strong { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.tip span { color: var(--muted); }
+.sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 20px; }
+.sliders .field label { display: flex; justify-content: space-between; gap: 8px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.delta-up { color: var(--green); } .delta-down { color: var(--red); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (max-width: 520px) {
+  .st { padding-left: 48px; }
+  .cycle .big { font-size: 1.6rem; }
+}
+</style>
+
+<div class="top">
+  <div class="top-inner">
+    <div class="brand"><h1>동해선 PSD 교체주기</h1><span class="line-chip">부전 – 북울산 · 24개 역</span></div>
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tab-route" role="tab" aria-selected="true">노선</button>
+      <button class="tab" id="tab-weather" role="tab" aria-selected="false">날씨 영향</button>
+      <button class="tab" id="tab-volume" role="tab" aria-selected="false">교체 물량</button>
+    </div>
+  </div>
+</div>
+<div class="mockbar"><div class="mockbar-inner"><b>실제 연결</b> · 기상청 10년치 날씨와 MySQL로 계산한 실제 값입니다. 문 수(역당 32개)·설치일(개통일)은 멘토 확인 전까지 임시값입니다.</div></div>
+<main class="wrap" id="app"></main>
+<div class="toast" id="toast" hidden></div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- API ----------
+  async function api(path) {
+    const r = await fetch(path);
+    if (!r.ok) throw new Error((await r.text()) || (path + " 실패"));
+    return r.json();
+  }
+  async function apiPost(path, body) {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(Array.isArray(data.detail) ? data.detail.map(d => d.msg).join(", ") : (data.detail || (path + " 실패")));
+    return data;
+  }
+
+  // 부품 종류: 화면 표시용 고정 목록(이름·단위). 값은 아니라 한 번만 받아 둔다
+  let PART_TYPES = [], PART = {}, DOOR_PART_CODES = [], STATION_PART_CODES = [];
+  async function loadPartTypes() {
+    if (PART_TYPES.length) return;
+    const { part_types } = await api("/api/part-types");
+    PART_TYPES = part_types;
+    PART = Object.fromEntries(PART_TYPES.map(p => [p.code, p]));
+    DOOR_PART_CODES = PART_TYPES.filter(p => p.unit === "door").map(p => p.code);
+    STATION_PART_CODES = PART_TYPES.filter(p => p.unit === "station").map(p => p.code);
+  }
+
+  const REASONS = { fail: "고장", prev: "예방 교체", with: "함께 교체" };
+  const STATE = { 빨강: ["빨강", "s-red"], 노랑: ["노랑", "s-amber"], 초록: ["초록", "s-green"], 확인_필요: ["확인 필요", "s-check"] };
+  const RANK = { 빨강: 0, 확인_필요: 1, 노랑: 2, 초록: 3 };
+  const JUDGE = {
+    같음: ["10년과 같음", "s-check", "비중을 어떻게 잡아도 10년과 0.5년 이내로 차이 납니다."],
+    짧음_확실: ["짧음 확실", "s-red", "원인 비중을 어떻게 잡아도 10년보다 짧습니다."],
+    김_확실: ["김 확실", "s-green", "원인 비중을 어떻게 잡아도 10년보다 깁니다. 10년보다 늦은 교체는 권고하지 않고 참고로만 보여 줍니다."],
+    불확실: ["불확실", "s-amber", "원인 비중에 따라 10년보다 짧게도, 길게도 나옵니다."],
+    날씨무관: ["날씨 보정 없음", "s-check", "날씨가 수명을 줄인다는 정량 근거를 찾지 못해 제조사 권장 10년을 씁니다."]
+  };
+  const SRC = {
+    DCM: [["Nichicon 콘덴서 수명 계산기", "https://www.nichicon.com/en-us/design-support/lifetime-calculator/"], ["Norris-Landzberg 납땜 피로", "https://accendoreliability.com/norris-landzberg-solder-joint-fatigue/"], ["Peck 습도 모델", "https://metricgate.com/docs/peck-temperature-humidity-bias/"]],
+    IFM: [["Peck 습도 모델", "https://metricgate.com/docs/peck-temperature-humidity-bias/"]],
+    MOTOR: [["NSWC-98 식 14-4 권선 온도 계수", "https://everyspec.com/USN/NSWC/NSWC-98_RELIABILITY_HDBK_SEP1998_55321/"]]
+  };
+
+  // ---------- 유틸 ----------
+  function fmtDateKR(s) { const [y, m, d] = s.split("-").map(Number); return `${y}년 ${m}월 ${d}일`; }
+  function openLabel(station) { return station.id === 24 ? "2026년 9월(일자 미정)" : fmtDateKR(station.open_date); }
+  function yr(x) { return x.toFixed(1) + "년"; }
+  function dur(days) {
+    const a = Math.abs(days), m = Math.round(a / 30.44);
+    const t = m >= 12 ? Math.floor(m / 12) + "년" + (m % 12 ? " " + (m % 12) + "개월" : "") : (m ? m + "개월" : a + "일");
+    return days < 0 ? t + " 지남" : t + " 남음";
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+  function pill(status) { return `<span class="pill ${STATE[status][1]}">${STATE[status][0]}</span>`; }
+  function jpill(j) { return `<span class="pill ${JUDGE[j][1]}">${JUDGE[j][0]}</span>`; }
+  function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => { t.hidden = true; }, 2400); }
+  function worstDoor(doors) { return doors.reduce((a, d) => (RANK[d.worst_status] < RANK[a.worst_status] || (RANK[d.worst_status] === RANK[a.worst_status] && d.worst_days_left < a.worst_days_left)) ? d : a); }
+
+  // ---------- 화면 ----------
+  const app = document.getElementById("app");
+  let view = { name: "route" };
+  function go(v) { const keep = v.keep; view = v; render(); if (!keep) window.scrollTo(0, 0); }
+  document.getElementById("tab-route").onclick = () => go({ name: "route" });
+  document.getElementById("tab-volume").onclick = () => go({ name: "volume" });
+  document.getElementById("tab-weather").onclick = () => go({ name: "weather" });
+
+  async function render() {
+    const tab = view.name === "volume" ? "volume" : view.name === "weather" ? "weather" : "route";
+    ["route", "weather", "volume"].forEach(t => document.getElementById("tab-" + t).setAttribute("aria-selected", String(t === tab)));
+    app.innerHTML = `<p class="muted" style="padding-top:18px">불러오는 중…</p>`;
+    try {
+      await loadPartTypes();
+      const html = await ({ route: vRoute, station: vStation, part: vPart, form: vForm, volume: vVolume, weather: vWeather }[view.name])();
+      app.innerHTML = html;
+      bind();
+    } catch (e) {
+      app.innerHTML = `<section class="view"><div class="panel"><h2>불러오지 못했습니다</h2><p class="small muted">${esc(e.message || String(e))}</p><button class="btn" id="retry">다시 시도</button></div></section>`;
+      app.querySelector("#retry").addEventListener("click", render);
+    }
+  }
+
+  const tipEl = document.getElementById("tip");
+  function showTip(el) {
+    const d = JSON.parse(el.dataset.tip);
+    tipEl.replaceChildren();
+    const t = document.createElement("b"); t.textContent = d.t; tipEl.append(t);
+    d.r.forEach(([k, v]) => { const row = document.createElement("div"), vv = document.createElement("strong"), kk = document.createElement("span"); vv.textContent = v; kk.textContent = " " + k; row.append(vv, kk); tipEl.append(row); });
+    tipEl.hidden = false;
+  }
+  function placeTip(x, y) {
+    const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    tipEl.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x + 14)) + "px";
+    tipEl.style.top = Math.max(8, y - h - 12) + "px";
+  }
+  app.addEventListener("pointermove", e => { const el = e.target.closest && e.target.closest("[data-tip]"); if (!el) { tipEl.hidden = true; return; } showTip(el); placeTip(e.clientX, e.clientY); });
+  app.addEventListener("pointerleave", () => { tipEl.hidden = true; });
+  app.addEventListener("focusin", e => { const el = e.target.closest && e.target.closest("[data-tip]"); if (!el) return; showTip(el); const r = el.getBoundingClientRect(); placeTip(r.left + r.width / 2, r.top); });
+  app.addEventListener("focusout", () => { tipEl.hidden = true; });
+  const tipAttr = (t, r) => `data-tip="${esc(JSON.stringify({ t, r }))}"`;
+
+  function bind() {
+    app.querySelectorAll("[data-go]").forEach(el => {
+      el.addEventListener("click", () => go(JSON.parse(el.dataset.go)));
+      if (el.tagName !== "BUTTON") el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(JSON.parse(el.dataset.go)); } });
+    });
+    const jump = app.querySelector("#st-jump");
+    if (jump) jump.addEventListener("change", () => go({ name: "station", st: Number(jump.value) }));
+    const tt = app.querySelector("#tbltoggle");
+    if (tt) tt.addEventListener("click", () => { const t = app.querySelector("#numtbl"); t.hidden = !t.hidden; tt.textContent = t.hidden ? "숫자 표로 보기" : "숫자 표 닫기"; });
+    if (app.querySelector("#sim")) setupSim();
+    const f = app.querySelector("#recform");
+    if (f) setupForm(f);
+  }
+  const goAttr = v => `data-go='${JSON.stringify(v)}'`;
+  const legend = `<div class="legend">${pill("빨강")}<span class="muted">6개월 이하(지난 경우 포함)</span>${pill("노랑")}<span class="muted">1년 이하</span>${pill("확인_필요")}<span class="muted">기록 없이 예정일 지남</span>${pill("초록")}<span class="muted">그 외</span></div>`;
+
+  // ---------- 노선 ----------
+  async function vRoute() {
+    const data = await api("/api/stations");
+    const item = s => {
+      const c = s.counts;
+      const b = [c.빨강 ? `<span class="pill s-red">빨강 ${c.빨강}</span>` : "", c.확인_필요 ? `<span class="pill s-check">확인 ${c.확인_필요}</span>` : "", c.노랑 ? `<span class="pill s-amber">노랑 ${c.노랑}</span>` : ""].join("");
+      return `<li><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${openLabel(s)} 개통 · 관측소 ${s.observatory === "159" ? "부산" : "울산"}(추정)</span></span><span class="badges">${b || '<span class="pill s-green">경고 없음</span>'}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
+    };
+    return `<section class="view">
+      <div class="stats">
+        <div class="stat red"><span class="small muted">빨강</span><b>${data.totals.빨강.toLocaleString()}</b><span class="small muted">6개월 안에 교체</span></div>
+        <div class="stat check"><span class="small muted">확인 필요</span><b>${data.totals.확인_필요.toLocaleString()}</b><span class="small muted">기록 없이 예정일 지남</span></div>
+        <div class="stat amber"><span class="small muted">노랑</span><b>${data.totals.노랑.toLocaleString()}</b><span class="small muted">1년 안에 교체</span></div>
+      </div>
+      ${legend}
+      <ul class="route">${data.stations.map(item).join("")}</ul>
+      <p class="note">부전–일광 구간은 2016-12-30 개통이라 기록이 없는 부품이 2026-12-30에 10년이 됩니다. 그래서 이 구간에 빨강·확인 필요가 많습니다.</p>
+    </section>`;
+  }
+
+  // ---------- 역 ----------
+  const SIDE_LABEL = { U: "부전 방면", D: "북울산 방면" };
+  async function vStation() {
+    const st = view.st;
+    const [detail, list] = await Promise.all([api(`/api/stations/${st}`), api("/api/stations")]);
+    const sid = view.side || "U";
+    const sideDoors = detail.sides[sid].doors;
+    const doorId = sideDoors.find(d => d.id === view.door) ? view.door : worstDoor(sideDoors).id;
+    const doorDetail = await api(`/api/doors/${doorId}`);
+    const door = doorDetail.door;
+
+    const at = (d, keep) => ({ name: "station", st, side: sid, door: d, keep });
+    const dirTabs = `<div class="dirtabs" role="group" aria-label="방향 선택">${Object.entries(SIDE_LABEL).map(([k, v]) => `<button class="dirtab" aria-pressed="${k === sid}" ${goAttr({ name: "station", st, side: k, keep: true })}>${v}</button>`).join("")}</div>`;
+    const strip = `<div class="strip-wrap"><div class="strip">${[1, 2, 3, 4].map(car => `<div class="car"><div class="carlabel">${car}호차</div><div class="cardoors">${sideDoors.filter(d => d.car === car).map(d =>
+      `<button class="psd c-${d.worst_status}" aria-pressed="${d.id === doorId}" aria-label="${esc(d.no + " · " + STATE[d.worst_status][0])}" ${goAttr(at(d.id, true))}><span class="psd-head"></span><span class="psd-glass"><i></i><i></i></span><span class="psd-no">${d.no}</span></button>`
+    ).join("")}</div></div>`).join("")}</div></div>`;
+
+    const u = code => doorDetail.units.find(x => x.part_type_code === code);
+    const chip = (code, label, x, y, w) => { const x0 = u(code); return `<g class="chip c-${x0.status}" tabindex="0" role="link" aria-label="${esc(x0.part_name + " " + STATE[x0.status][0])}" ${goAttr({ name: "part", partId: x0.part_id })}><rect x="${x}" y="${y}" width="${w}" height="24" rx="5"/><text x="${x + w / 2}" y="${y + 16}" text-anchor="middle">${label}</text></g>`; };
+    const doorSvg = `<svg class="doorsvg" viewBox="0 0 360 250" role="img" aria-label="안전문 ${door.no} 구조와 부품 상태">
+        <rect class="hdr" x="16" y="8" width="328" height="62" rx="6"/>
+        <text class="hdrcap" x="24" y="22">기계함</text>
+        ${chip("MOTOR", "모터", 24, 32, 56)}${chip("BELT", "벨트", 86, 32, 56)}${chip("PULLEY", "풀리", 148, 32, 56)}${chip("DCM", "DCM", 210, 32, 60)}${chip("IFM", "IFM", 276, 32, 60)}
+        <rect class="rail" x="16" y="76" width="328" height="4" rx="2"/>
+        ${chip("HANGER", "행거", 148, 84, 64)}
+        <rect class="fixed" x="16" y="112" width="72" height="122"/>
+        <rect class="leaf" x="90" y="112" width="89" height="122"/>
+        <rect class="leaf" x="181" y="112" width="89" height="122"/>
+        <rect class="fixed" x="272" y="112" width="72" height="122"/>
+        <line class="stripe" x1="96" x2="173" y1="168" y2="168"/><line class="stripe" x1="187" x2="264" y1="168" y2="168"/>
+        <line class="floor" x1="8" x2="352" y1="238" y2="238"/>
+      </svg>`;
+    const order = [...doorDetail.units].sort((a, b) => RANK[a.status] - RANK[b.status] || a.days_left - b.days_left);
+    const partRows = order.map(x => `<tr class="prow" tabindex="0" ${goAttr({ name: "part", partId: x.part_id })}><td><b>${x.part_name}</b></td><td>${pill(x.status)}</td><td class="num">${yr(x.cycle.base_years)}</td><td class="num">${x.due}</td><td class="num">${dur(x.days_left)}</td></tr>`).join("");
+
+    const prev = list.stations.find(s => s.id === st - 1), next = list.stations.find(s => s.id === st + 1);
+    const switcher = `<div class="switcher">
+        <button class="swbtn" ${prev ? goAttr({ name: "station", st: prev.id }) : "disabled"}>‹ ${prev ? prev.name : "이전 역 없음"}</button>
+        <select id="st-jump" aria-label="다른 역으로 이동">${list.stations.map(x => `<option value="${x.id}" ${x.id === st ? "selected" : ""}>${x.id}. ${x.name}</option>`).join("")}</select>
+        <button class="swbtn" ${next ? goAttr({ name: "station", st: next.id }) : "disabled"}>${next ? next.name : "다음 역 없음"} ›</button>
+      </div>`;
+    const psc = detail.psc, s = detail.station, c = detail.counts;
+    return `<section class="view">
+      <nav class="crumbs"><button ${goAttr({ name: "route" })}>노선</button><span>›</span><span>${s.name}</span></nav>
+      ${switcher}
+      <div class="panel">
+        <h2>${s.name}</h2>
+        <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)} (스크린도어 설치일로 가정)</dd><dt>관측소</dt><dd>${s.observatory === "159" ? "부산" : "울산"} ASOS (추정)</dd><dt>문 수</dt><dd>방향마다 4량 × 4개 = 16개 (임시값)</dd></dl>
+        <div class="legend">${pill("빨강")} ${c.빨강} ${pill("확인_필요")} ${c.확인_필요} ${pill("노랑")} ${c.노랑} ${pill("초록")} ${c.초록}</div>
+      </div>
+      <div class="panel">
+        <div class="psdhead"><h3>승강장 안전문</h3>${dirTabs}</div>
+        <p class="small muted">문 위 색은 그 문 부품 중 가장 급한 상태입니다. 문을 누르면 아래에 부품이 나옵니다.</p>
+        ${strip}
+        <div class="legend">${pill("빨강")}<span class="muted">6개월 이하</span>${pill("확인_필요")}<span class="muted">기록 없이 지남</span>${pill("노랑")}<span class="muted">1년 이하</span>${pill("초록")}<span class="muted">여유</span></div>
+      </div>
+      <div class="panel doorpanel">
+        <div class="psdhead"><h2>안전문 ${door.no}</h2><span class="muted small">${door.side_label}</span></div>
+        <div class="doorgrid">
+          <figure class="doorfig">${doorSvg}<figcaption class="small muted">기계함과 행거의 부품을 누르면 상세로 갑니다.</figcaption></figure>
+          <div class="doorparts">
+            <div class="scroll"><table class="ptable"><tr><th>부품</th><th>상태</th><th>권장 주기</th><th>다음 교체</th><th>남은 기간</th></tr>${partRows}</table></div>
+            <button class="btn" ${goAttr({ name: "form", st, door: door.id })}>안전문 ${door.no} 교체 기록 입력</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>역 공통 설비</h3>
+        <button class="row" ${goAttr({ name: "part", partId: psc.part_id })}>${pill(psc.status)}<span class="what"><b>종합제어반 릴레이</b><br><span class="small muted">예정일 ${psc.due} · 실내 설비라 날씨 보정 없음</span></span><span class="small num">${dur(psc.days_left)}</span></button>
+      </div>
+    </section>`;
+  }
+
+  // ---------- 부품 상세 ----------
+  async function vPart() {
+    const p = await api(`/api/parts/${view.partId}`);
+    const { part, cycle, due, days_left, status, weather_basis, history } = p;
+    const lo = 7, hi = 13, pos = x => ((Math.min(Math.max(x, lo), hi) - lo) / (hi - lo) * 100).toFixed(2) + "%";
+    const range = cycle.judgment === "날씨무관" ? "" : `
+      <div class="rangebar" aria-hidden="true"><div class="track"></div><div class="band" style="left:${pos(cycle.lo_years)};width:calc(${pos(cycle.hi_years)} - ${pos(cycle.lo_years)})"></div><div class="tick" style="left:${pos(10)}"></div><div class="base" style="left:${pos(cycle.base_years)}"></div></div>
+      <div class="rangeaxis"><span>7년</span><span>10년</span><span>13년</span></div>
+      <p class="small muted">점: 기본 비중 결과 · 띠: 원인 비중을 바꿨을 때의 범위 ${yr(cycle.lo_years)}–${yr(cycle.hi_years)} · 세로선: 제조사 권장 10년</p>`;
+
+    let basis;
+    if (!weather_basis) {
+      basis = `<p>${JUDGE.날씨무관[2]}${part.part_type_code === "PSC" ? " 종합제어반은 실내 설비입니다." : ""}</p>
+        ${part.part_type_code === "HANGER" || part.part_type_code === "PULLEY" ? `<p class="small muted">참고 지표(다음 단계에서 표시): 결빙일 수, 습윤 시간(습도 80% 초과이면서 0°C 초과인 시간)</p>` : ""}
+        <ol class="src"><li>NSWC-98 기계부품 신뢰성 핸드북: 벨트 장 없음, 베어링 계수에 날씨 입력 없음 — <a href="https://everyspec.com/USN/NSWC/NSWC-98_RELIABILITY_HDBK_SEP1998_55321/" target="_blank" rel="noopener">EverySpec</a></li></ol>`;
+    } else {
+      const wb = weather_basis, src = SRC[part.part_type_code] || [];
+      basis = `<div class="scroll"><table><tr><th></th><th>이 역(${wb.observatory})</th><th>24개 역 평균</th></tr>
+          <tr><td>연평균 기온</td><td class="num">${wb.station_climate.T.toFixed(1)}°C</td><td class="num">${wb.reference_climate.T.toFixed(1)}°C</td></tr>
+          <tr><td>평균 습도</td><td class="num">${wb.station_climate.RH.toFixed(1)}%</td><td class="num">${wb.reference_climate.RH.toFixed(1)}%</td></tr>
+          <tr><td>평균 일교차</td><td class="num">${wb.station_climate.DT.toFixed(1)}°C</td><td class="num">${wb.reference_climate.DT.toFixed(1)}°C</td></tr></table></div>
+        <div class="scroll"><table><tr><th>고장 원인</th><th>날씨 변수</th><th>열화 속도(평균 대비)</th><th>비중 기본값(범위)</th></tr>
+          ${wb.causes.map(r => `<tr><td>${r.name}</td><td>${r.variable}</td><td class="num">${r.af.toFixed(2)}배</td><td class="num">${r.weight_default}</td></tr>`).join("")}</table></div>
+        <p class="small muted">권장 주기 = 10년 ÷ (원인별 열화 속도 × 비중의 합). 기상청 10년치(${wb.weather_period.start}~${wb.weather_period.end}) 일자료로 계산.</p>
+        <button class="linkbtn" ${goAttr({ name: "weather", simSt: part.station_id })}>이 역 날씨를 바꿔 보기 ›</button>
+        <ol class="src">${src.map(x => `<li><a href="${x[1]}" target="_blank" rel="noopener">${x[0]}</a></li>`).join("")}</ol>`;
+    }
+    const hist = history.length ? `<div class="list">${history.map(r => `<div class="row" style="cursor:default"><span class="pill s-check">${REASONS[r.reason]}</span><span class="what">${r.replaced_on}</span><span class="small muted">입력한 기록</span></div>`).join("")}</div>` : `<p class="muted">교체 기록이 없습니다. 역 개통일을 설치일로 봅니다.</p>`;
+    return `<section class="view">
+      <nav class="crumbs"><button ${goAttr({ name: "route" })}>노선</button><span>›</span><button ${goAttr({ name: "station", st: part.station_id })}>${part.station_name}</button><span>›</span><span>${part.door_label} ${part.part_name}</span></nav>
+      <div class="panel">
+        <h2>${part.station_name} · ${part.door_label} · ${part.part_name}</h2>
+        <div class="legend">${pill(status)} <span class="num">${dur(days_left)}</span></div>
+        <dl class="kv"><dt>다음 교체 예정일</dt><dd class="num">${due}</dd></dl>
+        ${status === "확인_필요" ? `<p class="small">교체 기록이 없는데 예정일이 지났습니다. 이미 교체했다면 기록을 입력해 주세요. 교체하지 않았다면 교체 대상입니다.</p>` : ""}
+        <button class="btn" ${goAttr({ name: "form", st: part.station_id, door: part.door_id, code: part.part_type_code })}>교체 기록 입력</button>
+      </div>
+      <div class="panel">
+        <h3>이 역의 권장 주기</h3>
+        <div class="cycle"><span class="big">${yr(cycle.base_years)}</span>${jpill(cycle.judgment)}</div>
+        <p class="small">${JUDGE[cycle.judgment][2]}</p>
+        ${range}
+      </div>
+      <div class="panel"><h3>근거</h3>${basis}</div>
+      <div class="panel"><h3>교체 이력</h3>${hist}</div>
+    </section>`;
+  }
+
+  // ---------- 교체 기록 입력 ----------
+  async function vForm() {
+    const detail = await api(`/api/stations/${view.st}`);
+    const doors = [...detail.sides.U.doors, ...detail.sides.D.doors];
+    const doorOpts = `<option value="">위치를 고르세요</option><option value="PSC" ${view.door == null && view.code === "PSC" ? "selected" : ""}>역 공통(종합제어반)</option>` +
+      doors.map(d => `<option value="${d.id}" ${view.door === d.id ? "selected" : ""}>${SIDE_LABEL[detail.sides.U.doors.includes(d) ? "U" : "D"]} ${d.no}</option>`).join("");
+    return `<section class="view">
+      <nav class="crumbs"><button ${goAttr({ name: "route" })}>노선</button><span>›</span><button ${goAttr({ name: "station", st: view.st })}>${detail.station.name}</button><span>›</span><span>교체 기록 입력</span></nav>
+      <form class="panel form" id="recform" novalidate data-st="${view.st}">
+        <h2>${detail.station.name} 교체 기록 입력</h2>
+        <div class="field"><label for="f-date">교체일</label><input type="date" id="f-date" value="${new Date().toISOString().slice(0, 10)}" max="${new Date().toISOString().slice(0, 10)}"></div>
+        <div class="field"><label for="f-door">위치</label><select id="f-door">${doorOpts}</select></div>
+        <fieldset class="field"><legend>교체한 부품 (여러 개 선택)</legend><div class="checks" id="f-parts"></div></fieldset>
+        <fieldset class="field"><legend>교체 사유</legend><div class="checks">
+          ${Object.entries(REASONS).map(([k, v], n) => `<label><input type="radio" name="reason" id="f-r-${k}" value="${k}" ${n === 0 ? "checked" : ""}> ${v}</label>`).join("")}
+        </div></fieldset>
+        <p class="err" id="f-err" hidden></p>
+        <button class="btn" type="submit">저장</button>
+      </form>
+    </section>`;
+  }
+  function setupForm(f) {
+    const st = Number(f.dataset.st);
+    const door = f.querySelector("#f-door"), box = f.querySelector("#f-parts"), err = f.querySelector("#f-err");
+    const fill = () => {
+      const list = door.value === "PSC" ? STATION_PART_CODES : door.value ? DOOR_PART_CODES : [];
+      box.innerHTML = list.length ? list.map(code => `<label><input type="checkbox" id="f-p-${code}" value="${code}" ${code === view.code ? "checked" : ""}> ${PART[code].name}</label>`).join("") : `<span class="small muted">위치를 먼저 고르세요.</span>`;
+    };
+    door.addEventListener("change", fill); fill();
+    f.addEventListener("submit", async e => {
+      e.preventDefault();
+      const d = f.querySelector("#f-date").value, parts = [...box.querySelectorAll("input:checked")].map(x => x.value);
+      const msg = !d ? "교체일을 입력하세요." : !door.value ? "위치를 고르세요." : !parts.length ? "교체한 부품을 하나 이상 고르세요." : "";
+      if (msg) { err.textContent = msg; err.hidden = false; return; }
+      const doorId = door.value === "PSC" ? null : Number(door.value);
+      try {
+        const result = await apiPost("/api/replacement-records", {
+          station_id: st, door_id: doorId, replaced_on: d,
+          reason: f.querySelector("input[name=reason]:checked").value, part_type_codes: parts
+        });
+        toast("저장했습니다. 다음 예정일을 다시 계산했습니다.");
+        go({ name: "part", partId: result.updated_parts[0].part_id });
+      } catch (ex) {
+        err.textContent = ex.message; err.hidden = false;
+      }
+    });
+  }
+
+  // ---------- 날씨 영향 ----------
+  const WPARTS = ["DCM", "IFM", "MOTOR"];
+  function niceTicks(lo, hi, n) {
+    const span = hi - lo, mag = Math.pow(10, Math.floor(Math.log10(span / n)));
+    const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => span / x <= n) || mag * 10;
+    const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6));
+    return out;
+  }
+  function dotCell(v, lo, hi, ref, tipT, tipR, label) {
+    const W = 120, H = 22, x = t => (6 + (t - lo) / (hi - lo) * (W - 12)).toFixed(1);
+    return `<svg class="mk" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" tabindex="0" role="img" aria-label="${esc(label)}" ${tipAttr(tipT, tipR)}><line class="axisl" x1="0" x2="${W}" y1="11" y2="11"/><line class="refl" x1="${x(ref)}" x2="${x(ref)}" y1="3" y2="19"/><circle class="dot" cx="${x(v)}" cy="11" r="4.5"/></svg>`;
+  }
+  function rangeCell(c, lo, hi, tipT, tipR, label) {
+    const W = 120, H = 22, x = t => 6 + (t - lo) / (hi - lo) * (W - 12);
+    return `<svg class="mk" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" tabindex="0" role="img" aria-label="${esc(label)}" ${tipAttr(tipT, tipR)}><line class="axisl" x1="0" x2="${W}" y1="11" y2="11"/><rect class="band" x="${x(c.lo).toFixed(1)}" y="8" width="${Math.max(2, x(c.hi) - x(c.lo)).toFixed(1)}" height="6" rx="3"/><line class="refl" x1="${x(10).toFixed(1)}" x2="${x(10).toFixed(1)}" y1="3" y2="19"/><circle class="dot" cx="${x(c.base).toFixed(1)}" cy="11" r="4.5"/></svg>`;
+  }
+  function cc(cyc) { return { base: cyc.base_years, lo: cyc.lo_years, hi: cyc.hi_years, j: cyc.judgment }; }
+  function scatter(title, stations, key, xLabel, code, fmtX) {
+    const W = 440, H = 280, m = { l: 44, r: 16, t: 26, b: 44 };
+    const pts = stations.map(s => ({ s, x: s.weather[key], c: cc(s.cycles[code]) }));
+    const xs = pts.map(p => p.x), pad = (Math.max(...xs) - Math.min(...xs)) * 0.08 || 1;
+    const xlo = Math.min(...xs) - pad, xhi = Math.max(...xs) + pad;
+    const ylo = Math.min(9.5, Math.floor(Math.min(...pts.map(p => p.c.lo)) * 2) / 2), yhi = Math.max(10.5, Math.ceil(Math.max(...pts.map(p => p.c.hi)) * 2) / 2);
+    const X = v => m.l + (v - xlo) / (xhi - xlo) * (W - m.l - m.r), Y = v => H - m.b - (v - ylo) / (yhi - ylo) * (H - m.t - m.b);
+    const f = v => v.toFixed(1);
+    const minP = pts.reduce((a, b) => b.c.base < a.c.base ? b : a), maxP = pts.reduce((a, b) => b.c.base > a.c.base ? b : a);
+    const lab = p => { const x = X(p.x), right = x > W / 2; return `<text class="lab" x="${f(right ? x - 9 : x + 9)}" y="${f(Y(p.c.base) - 7)}" text-anchor="${right ? "end" : "start"}">${esc(p.s.name)}</text>`; };
+    return `<figure><figcaption>${title}</figcaption>
+      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">
+        ${niceTicks(ylo, yhi, 5).map(v => `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${f(Y(v))}" y2="${f(Y(v))}"/><text x="${m.l - 6}" y="${f(Y(v) + 4)}" text-anchor="end">${v}</text>`).join("")}
+        ${niceTicks(xlo, xhi, 5).map(v => `<text x="${f(X(v))}" y="${H - m.b + 16}" text-anchor="middle">${v}</text>`).join("")}
+        <text x="${(m.l + W - m.r) / 2}" y="${H - 8}" text-anchor="middle">${xLabel}</text>
+        <text x="${m.l - 6}" y="14" text-anchor="end">년</text>
+        <line class="refl" x1="${m.l}" x2="${W - m.r}" y1="${f(Y(10))}" y2="${f(Y(10))}"/><text x="${W - m.r}" y="${f(Y(10) - 5)}" text-anchor="end">10년</text>
+        ${pts.map(p => `<line class="whisker" x1="${f(X(p.x))}" x2="${f(X(p.x))}" y1="${f(Y(p.c.lo))}" y2="${f(Y(p.c.hi))}"/>`).join("")}
+        ${pts.map(p => `<circle class="dot" cx="${f(X(p.x))}" cy="${f(Y(p.c.base))}" r="4.5"/>`).join("")}
+        ${lab(minP)}${minP !== maxP ? lab(maxP) : ""}
+        ${pts.map(p => `<circle class="hit" cx="${f(X(p.x))}" cy="${f(Y(p.c.base))}" r="12" tabindex="0" ${tipAttr(p.s.name, [[xLabel, fmtX(p.x)], ["기본 비중 주기", yr(p.c.base)], ["범위", f(p.c.lo) + "–" + f(p.c.hi) + "년"], ["판정", JUDGE[p.c.j][0]]])}/>`).join("")}
+      </svg></figure>`;
+  }
+  let weatherCache = null;
+  async function vWeather() {
+    const data = await api("/api/weather-impact");
+    weatherCache = data;
+    const ST = data.stations, REF = data.reference;
+    const rh = ST.map(s => s.weather.RH), dt = ST.map(s => s.weather.DT);
+    const rhLo = Math.min(...rh) - 1, rhHi = Math.max(...rh) + 1, dtLo = Math.min(...dt) - 0.5, dtHi = Math.max(...dt) + 0.5;
+    const all = ST.flatMap(s => WPARTS.map(k => cc(s.cycles[k])));
+    const cyLo = Math.min(9.5, Math.floor(Math.min(...all.map(c => c.lo)) * 2) / 2), cyHi = Math.max(10.5, Math.ceil(Math.max(...all.map(c => c.hi)) * 2) / 2);
+    const rows = ST.map(s => `<tr><td class="nm">${s.name}</td>
+        <td>${dotCell(s.weather.RH, rhLo, rhHi, REF.RH, s.name, [["습도", s.weather.RH.toFixed(1) + "%"], ["24개 역 평균", REF.RH.toFixed(1) + "%"]], s.name + " 습도 " + s.weather.RH.toFixed(1) + "%")}</td>
+        <td>${dotCell(s.weather.DT, dtLo, dtHi, REF.DT, s.name, [["일교차", s.weather.DT.toFixed(1) + "°C"], ["24개 역 평균", REF.DT.toFixed(1) + "°C"]], s.name + " 일교차 " + s.weather.DT.toFixed(1) + "°C")}</td>
+        ${WPARTS.map(k => { const c = cc(s.cycles[k]); return `<td>${rangeCell(c, cyLo, cyHi, s.name + " · " + PART[k].name, [["기본 비중", yr(c.base)], ["범위", c.lo.toFixed(1) + "–" + c.hi.toFixed(1) + "년"], ["판정", JUDGE[c.j][0]]], s.name + " " + PART[k].name + " " + yr(c.base))}</td>`; }).join("")}</tr>`).join("");
+    const numRows = ST.map(s => `<tr><td>${s.name}</td><td class="num">${s.weather.T.toFixed(1)}</td><td class="num">${s.weather.RH.toFixed(1)}</td><td class="num">${s.weather.DT.toFixed(1)}</td>${WPARTS.map(k => { const c = cc(s.cycles[k]); return `<td class="num">${c.base.toFixed(1)} (${c.lo.toFixed(1)}–${c.hi.toFixed(1)})</td>`; }).join("")}</tr>`).join("");
+    return `<section class="view">
+      <div class="panel">
+        <h2>노선을 따라 본 날씨와 교체주기</h2>
+        <p class="small muted">왼쪽 두 칸은 역의 날씨(세로선 = 24개 역 평균), 오른쪽 세 칸은 그 날씨로 계산한 권장 주기입니다(점 = 기본 비중, 띠 = 원인 비중을 바꿨을 때의 범위, 세로선 = 10년). 점이나 띠에 마우스를 올리면 값이 나옵니다.</p>
+        <div class="scroll"><table class="rowchart">
+          <tr><th>역</th><th>습도<span class="cap">${rhLo.toFixed(0)}–${rhHi.toFixed(0)}%</span></th><th>일교차<span class="cap">${dtLo.toFixed(1)}–${dtHi.toFixed(1)}°C</span></th>${WPARTS.map(k => `<th>${PART[k].name} 주기<span class="cap">${cyLo}–${cyHi}년</span></th>`).join("")}</tr>
+          ${rows}
+        </table></div>
+        <button class="linkbtn" id="tbltoggle">숫자 표로 보기</button>
+        <div class="scroll" id="numtbl" hidden><table><tr><th>역</th><th>기온 °C</th><th>습도 %</th><th>일교차 °C</th>${WPARTS.map(k => `<th>${PART[k].name} 주기(년)</th>`).join("")}</tr>${numRows}</table></div>
+      </div>
+      <div class="panel">
+        <h2>날씨와 주기의 관계</h2>
+        <p class="small muted">점 하나가 역 하나입니다. 세로 막대는 원인 비중을 바꿨을 때의 범위입니다.</p>
+        <div class="charts2">
+          ${scatter("습도와 IFM 릴레이 주기", ST, "RH", "평균 습도(%)", "IFM", v => v.toFixed(1) + "%")}
+          ${scatter("일교차와 DCM 주기", ST, "DT", "평균 일교차(°C)", "DCM", v => v.toFixed(1) + "°C")}
+        </div>
+        <p class="note">IFM 릴레이는 원인이 습도 하나라 점들이 두 묶음(부산·울산 관측소)으로만 나뉩니다. DCM은 기온·일교차·습도가 함께 작용합니다. 역별 실제 관측소(AWS)가 연결되면 묶음이 24개 역으로 퍼집니다.</p>
+      </div>
+      ${simPanel(view.simSt ?? ST[0].id)}
+    </section>`;
+  }
+  function simPanel(stId) {
+    return `<div class="panel" id="sim">
+      <h2>날씨가 바뀌면</h2>
+      <p class="small muted">한 역의 날씨를 바꿨을 때 권장 주기가 어떻게 달라지는지 API로 다시 계산합니다. 비교 기준(24개 역 평균)은 그대로 둡니다.</p>
+      <div class="field"><label for="sim-st">역</label><select id="sim-st">${weatherCache.stations.map(x => `<option value="${x.id}" ${x.id === stId ? "selected" : ""}>${x.id}. ${x.name}</option>`).join("")}</select></div>
+      <div class="sliders">
+        <div class="field"><label for="sim-rh">습도 변화 <b class="num" id="sim-rh-v">0%p</b></label><input type="range" id="sim-rh" min="-10" max="10" step="1" value="0"></div>
+        <div class="field"><label for="sim-dt">일교차 변화 <b class="num" id="sim-dt-v">0.0°C</b></label><input type="range" id="sim-dt" min="-3" max="3" step="0.5" value="0"></div>
+        <div class="field"><label for="sim-t">기온 변화 <b class="num" id="sim-t-v">0.0°C</b></label><input type="range" id="sim-t" min="-2" max="2" step="0.5" value="0"></div>
+      </div>
+      <div id="sim-out"><p class="muted small">계산 중…</p></div>
+      <button class="linkbtn" id="sim-reset">변화 없음으로 되돌리기</button>
+    </div>`;
+  }
+  function setupSim() {
+    const g = id => app.querySelector("#" + id);
+    const sign = (v, d) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(d);
+    let timer = null;
+    const upd = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const s = weatherCache.stations.find(x => x.id === Number(g("sim-st").value));
+        const dRH = Number(g("sim-rh").value), dDT = Number(g("sim-dt").value), dT = Number(g("sim-t").value);
+        g("sim-rh-v").textContent = sign(dRH, 0) + "%p";
+        g("sim-dt-v").textContent = sign(dDT, 1) + "°C";
+        g("sim-t-v").textContent = sign(dT, 1) + "°C";
+        const sim = await api(`/api/weather-impact/simulate?station_id=${s.id}&d_temp=${dT}&d_rh=${dRH}&d_dt=${dDT}`);
+        const rows = WPARTS.map(k => {
+          const a = cc(s.cycles[k]), b = cc(sim.cycles[k]), d = b.base - a.base;
+          const cls = Math.abs(d) < 0.05 ? "muted" : d > 0 ? "delta-up" : "delta-down";
+          return `<tr><td>${PART[k].name}</td><td class="num">${yr(a.base)} <span class="muted small">(${a.lo.toFixed(1)}–${a.hi.toFixed(1)})</span></td><td class="num">${yr(b.base)} <span class="muted small">(${b.lo.toFixed(1)}–${b.hi.toFixed(1)})</span></td><td class="num ${cls}">${sign(d, 1)}년</td><td>${jpill(b.j)}</td></tr>`;
+        }).join("");
+        const t = s.weather.T + dT, rh = Math.min(100, s.weather.RH + dRH), dt = Math.max(0.5, s.weather.DT + dDT);
+        g("sim-out").innerHTML = `<div class="scroll"><table><tr><th>부품</th><th>지금 날씨</th><th>바꾼 날씨</th><th>차이</th><th>바꾼 날씨 판정</th></tr>${rows}</table></div>
+          <p class="small muted">바꾼 날씨(10년 전체를 이 만큼 옮겨서 다시 계산): 기온 ${t.toFixed(1)}°C, 습도 ${rh.toFixed(0)}%, 일교차 ${dt.toFixed(1)}°C. 타이밍벨트·풀리·도어 행거·종합제어반 릴레이는 날씨와 상관없이 10년입니다.</p>`;
+      }, 150);
+    };
+    ["sim-st", "sim-rh", "sim-dt", "sim-t"].forEach(id => g(id).addEventListener("input", upd));
+    g("sim-reset").addEventListener("click", () => { g("sim-rh").value = 0; g("sim-dt").value = 0; g("sim-t").value = 0; upd(); });
+    upd();
+  }
+
+  // ---------- 교체 물량 ----------
+  async function vVolume() {
+    const vol = await api("/api/replacement-volume");
+    const tot = q => PART_TYPES.reduce((a, p) => a + (q.counts[p.code] || 0), 0);
+    const max = Math.max(...vol.quarters.map(tot), 1);
+    const checkTot = PART_TYPES.reduce((a, p) => a + (vol.check.counts[p.code] || 0), 0);
+    return `<section class="view">
+      <div class="panel">
+        <h2>기간별 교체 물량</h2>
+        <p class="small muted">24개 역 전체, 분기별로 교체 예정일이 오는 부품 수입니다. 예정일이 이미 지났지만 기록이 있는 부품은 이번 분기(${vol.current_quarter})에 넣었습니다.</p>
+        <div class="scroll"><table class="vol">
+          <tr><th>분기</th>${PART_TYPES.map(p => `<th>${p.name}</th>`).join("")}<th>합계</th><th></th></tr>
+          <tr class="checkrow"><td>확인 필요</td>${PART_TYPES.map(p => `<td class="n">${vol.check.counts[p.code] || ""}</td>`).join("")}<td class="n">${checkTot}</td><td class="small muted">교체 여부부터 확인</td></tr>
+          ${vol.quarters.map(q => `<tr><td>${q.label}</td>${PART_TYPES.map(p => `<td class="n">${q.counts[p.code] || ""}</td>`).join("")}<td class="n"><b>${q.total.toLocaleString()}</b></td><td class="barcell"><div class="vbar" style="width:${(tot(q) / max * 100).toFixed(1)}%"></div></td></tr>`).join("")}
+        </table></div>
+        <p class="note">문 수가 임시값(역당 32개)이라 절대 개수는 의미가 없고, 언제 몰리는지를 보는 용도입니다. 같은 날 개통한 역들은 같은 분기에 몰립니다.</p>
+      </div>
+    </section>`;
+  }
+
+  render();
+})();
+</script>

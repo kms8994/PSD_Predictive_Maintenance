@@ -6,9 +6,11 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from functools import lru_cache
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -17,18 +19,16 @@ from psd.cycle import (
     IFM_WEIGHT_RANGE,
     MOTOR_WEIGHT_RANGE,
     OBS_CODE,
-    af_capacitor,
-    af_corrosion,
-    af_motor_winding,
-    af_solder,
+    daily_af,
     dcm_cycle,
     load_weather,
     observatory_climate,
+    period_average_af,
     reference_climate,
     single_cause_cycle,
 )
 from psd.db import get_session
-from psd.models import CycleResult, Door, Observatory, Part, ReplacementPart, ReplacementRecord, Station
+from psd.models import CycleResult, Door, Part, ReplacementPart, ReplacementRecord, Station
 from psd.schemas import ReplacementRecordIn
 from psd.status import UnitStatus, counts, judge_status, next_due_date, station_unit_statuses, to_unit_status, worst
 
@@ -37,6 +37,13 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 NAME_BY_CODE = {p["code"]: p["name"] for p in PART_TYPES}
 WEATHER_PART_CODES = ["DCM", "IFM", "MOTOR"]
+
+# 고장 원인별 열화 속도·비중 기본값(4단계_계산공식_근거조사.md 1·3장). 부품 상세의 "근거" 표에 쓴다.
+CAUSES = {
+    "DCM": [("콘덴서 노화", "기온", "cap", "25% (10–50%)"), ("납땜 열피로", "일교차", "sol", "25% (10–50%)"), ("습도 부식", "습도·기온", "hum", "25% (10–50%)"), ("날씨 무관", "—", None, "25% (10–50%)")],
+    "IFM": [("접점 부식", "습도·기온", "hum", "50% (20–80%)"), ("날씨 무관", "—", None, "50%")],
+    "MOTOR": [("권선 절연 노화", "기온", "mot", "30% (10–50%)"), ("날씨 무관(베어링 등)", "—", None, "70%")],
+}
 
 
 def get_db():
@@ -48,14 +55,49 @@ def get_db():
 
 
 @lru_cache
+def _weather_df():
+    return load_weather()
+
+
+@lru_cache
 def _climate() -> dict:
-    weather = load_weather()
+    """기후 요약(표시용 장기 평균). 계산은 _af_by_obs()의 기간 평균 가속 계수를 쓴다."""
+    weather = _weather_df()
     return {
         "ref": reference_climate(weather),
         "obs": observatory_climate(weather),
         "start": weather["date"].min().date(),
         "end": weather["date"].max().date(),
     }
+
+
+@lru_cache
+def _af_by_obs() -> dict:
+    """관측소별 기간 평균 가속 계수(psd/cycle.py의 compute_all과 같은 방식).
+
+    부품 상세의 "근거" 표는 이 값을 써야 "이 역의 권장 주기"(DB에 저장된 값)와 맞는다.
+    station_climate의 장기 평균 T/RH/DT를 AF 공식에 한 번만 넣는 것과는 다른 결과가 나온다
+    (가속 계수는 비선형이라 날마다 계산해 평균 내는 것과 평균 날씨로 한 번 계산하는 것이 다름).
+    """
+    weather = _weather_df()
+    ref = reference_climate(weather)
+    return period_average_af(daily_af(weather, ref))
+
+
+def _shifted_period_af(obs_code: str, d_temp: float, d_rh: float, d_dt: float) -> dict[str, float]:
+    """한 관측소의 10년 날씨를 통째로 (기온·습도·일교차) 바꿔서 다시 기간 평균 가속 계수를 낸다.
+
+    시뮬레이터용. 실제 ta_max가 없는 가상 날씨라 Tmax는 기온 + 일교차/2로 근사한다.
+    """
+    ref = reference_climate(_weather_df())
+    g = _weather_df()
+    g = g[g["stn"] == obs_code].copy()
+    g["ta_avg"] = g["ta_avg"] + d_temp
+    g["hm_avg"] = (g["hm_avg"] + d_rh).clip(lower=0.0, upper=100.0)
+    g["dtr"] = (g["dtr"] + d_dt).clip(lower=0.5)
+    g["ta_max"] = g["ta_avg"] + g["dtr"] / 2
+    obs_name = next(name for name, code in OBS_CODE.items() if code == obs_code)
+    return period_average_af(daily_af(g, ref))[obs_name]
 
 
 def _unit_dict(u: UnitStatus) -> dict:
@@ -75,6 +117,12 @@ def _unit_dict(u: UnitStatus) -> dict:
         "days_left": u.days_left,
         "status": u.status,
     }
+
+
+@app.get("/api/part-types")
+def list_part_types():
+    """부품 종류 목록(코드·이름·단위·날씨 계산 여부). 화면의 고정 표시용 — 계산값은 아님."""
+    return {"part_types": PART_TYPES}
 
 
 def _part_cycle(part: Part, db: Session) -> CycleResult:
@@ -194,11 +242,17 @@ def get_part(part_id: int, db: Session = Depends(get_db)):
         climate = _climate()
         obs = part.station.observatory_id
         obs_name = next(name for name, code in OBS_CODE.items() if code == obs)
+        sc, ref = climate["obs"][obs_name], climate["ref"]
+        af = _af_by_obs()[obs_name]  # 기간 평균 가속 계수 — "이 역의 권장 주기"와 같은 계산
         weather_basis = {
             "observatory": obs_name,
-            "station_climate": climate["obs"][obs_name],
-            "reference_climate": climate["ref"],
+            "station_climate": sc,
+            "reference_climate": ref,
             "weather_period": {"start": climate["start"], "end": climate["end"]},
+            "causes": [
+                {"name": name, "variable": var, "af": round(af[key], 2) if key else 1.0, "weight_default": weight}
+                for name, var, key, weight in CAUSES[part.part_type_code]
+            ],
         }
 
     history = (
@@ -261,21 +315,24 @@ def weather_impact(db: Session = Depends(get_db)):
 
 
 @app.get("/api/weather-impact/simulate")
-def simulate_weather(t: float, rh: float, dt: float):
-    """역의 날씨를 t(기온)·rh(습도)·dt(일교차)로 바꿔 보면 DCM·IFM·모터 주기가 어떻게 되는지."""
-    ref = _climate()["ref"]
-    tmax = t + dt / 2
-    af = {
-        "cap": af_capacitor(t, ref["T"]),
-        "sol": af_solder(dt, tmax, ref["DT"], ref["Tmax"]),
-        "hum": af_corrosion(rh, t, ref["RH"], ref["T"]),
-        "mot": af_motor_winding(t, ref["T"]),
-    }
+def simulate_weather(station_id: int, d_temp: float = 0.0, d_rh: float = 0.0, d_dt: float = 0.0, db: Session = Depends(get_db)):
+    """한 역의 10년 날씨를 기온 d_temp·습도 d_rh·일교차 d_dt만큼 통째로 바꿔서 다시 계산한다.
+
+    실제 저장된 계산(기간 평균 가속 계수)과 같은 방식을 써야 "지금 날씨" 결과와 비교할 수 있다.
+    """
+    station = db.get(Station, station_id)
+    if station is None:
+        raise HTTPException(404, "역 없음")
+    af = _shifted_period_af(station.observatory_id, d_temp, d_rh, d_dt)
     dcm = dcm_cycle(af)
     ifm = single_cause_cycle(af["hum"], IFM_WEIGHT_RANGE)
     motor = single_cause_cycle(af["mot"], MOTOR_WEIGHT_RANGE)
     to_dict = lambda c: {"base_years": round(c.base_years, 2), "lo_years": round(c.lo_years, 2), "hi_years": round(c.hi_years, 2), "judgment": c.judgment}
-    return {"weather": {"T": t, "RH": rh, "DT": dt}, "reference": ref, "cycles": {"DCM": to_dict(dcm), "IFM": to_dict(ifm), "MOTOR": to_dict(motor)}}
+    return {
+        "station_id": station_id,
+        "change": {"d_temp": d_temp, "d_rh": d_rh, "d_dt": d_dt},
+        "cycles": {"DCM": to_dict(dcm), "IFM": to_dict(ifm), "MOTOR": to_dict(motor)},
+    }
 
 
 # ---------- 4-6. 교체 물량 ----------
@@ -392,3 +449,10 @@ def create_replacement_record(payload: ReplacementRecordIn, db: Session = Depend
             for code in payload.part_type_codes
         ],
     }
+
+
+# ---------- 화면 (설계_v2.md 6-3, MVP_계획.md 5단계) ----------
+# 목업(목업/동해선_PSD_교체주기_목업.html)은 그대로 두고, 실제 API로 연결한 화면만 여기서 띄운다.
+
+WEB_DIR = Path(__file__).resolve().parent / "web"
+app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

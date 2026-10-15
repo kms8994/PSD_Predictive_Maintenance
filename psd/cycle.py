@@ -103,7 +103,12 @@ def observatory_climate(weather: pd.DataFrame) -> dict[str, dict[str, float]]:
     result = {}
     for obs, code in OBS_CODE.items():
         g = weather[weather["stn"] == code]
-        result[obs] = {"T": g["ta_avg"].mean(), "RH": g["hm_avg"].mean(), "DT": g["dtr"].mean()}
+        result[obs] = {
+            "T": g["ta_avg"].mean(),
+            "RH": g["hm_avg"].mean(),
+            "DT": g["dtr"].mean(),
+            "Tmax": g["ta_max"].mean(),
+        }
     return result
 
 
