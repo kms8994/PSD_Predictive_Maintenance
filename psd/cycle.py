@@ -11,7 +11,7 @@ from __future__ import annotations
 import itertools
 import math
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -190,7 +190,9 @@ def period_average_af(daily: pd.DataFrame) -> dict[str, dict[str, float]]:
 
 
 @dataclass(frozen=True)
-class CycleResult:
+class Cycle:
+    """권장 주기 계산 결과. DB 모델 `psd.models.CycleResult`와는 다른, 이름 겹침을 피한 순수 계산값."""
+
     base_years: float
     lo_years: float
     hi_years: float
@@ -212,7 +214,7 @@ def _years(weighted_af: float) -> float:
     return REPLACEMENT_YEARS / weighted_af
 
 
-def dcm_cycle(af: dict[str, float]) -> CycleResult:
+def dcm_cycle(af: dict[str, float]) -> Cycle:
     """DCM: 콘덴서/납땜/부식/날씨무관 4원인, 10%~50% 격자 전체를 범위로 계산."""
     values = []
     for a, b, c in itertools.product(DCM_STEPS, repeat=3):
@@ -222,24 +224,24 @@ def dcm_cycle(af: dict[str, float]) -> CycleResult:
     a0, b0, c0, o0 = DCM_DEFAULT
     base = _years(a0 * af["cap"] + b0 * af["sol"] + c0 * af["hum"] + o0)
     lo, hi = min(values), max(values)
-    return CycleResult(base, lo, hi, judge(lo, hi))
+    return Cycle(base, lo, hi, judge(lo, hi))
 
 
-def single_cause_cycle(af_value: float, weight_range: tuple[float, float, float]) -> CycleResult:
+def single_cause_cycle(af_value: float, weight_range: tuple[float, float, float]) -> Cycle:
     """원인이 하나뿐인 부품(IFM 릴레이, 모터): 비중 구간의 양끝과 기본값만 계산하면 된다."""
     lo_w, hi_w, default_w = weight_range
     years_at = lambda w: _years(w * af_value + (1 - w))
     lo, hi = sorted((years_at(lo_w), years_at(hi_w)))
     base = years_at(default_w)
-    return CycleResult(base, lo, hi, judge(lo, hi))
+    return Cycle(base, lo, hi, judge(lo, hi))
 
 
-def fixed_cycle() -> CycleResult:
+def fixed_cycle() -> Cycle:
     """날씨와 무관한 부품(타이밍벨트·풀리·도어 행거·종합제어반 릴레이): 10년 유지."""
-    return CycleResult(REPLACEMENT_YEARS, REPLACEMENT_YEARS, REPLACEMENT_YEARS, "날씨무관")
+    return Cycle(REPLACEMENT_YEARS, REPLACEMENT_YEARS, REPLACEMENT_YEARS, "날씨무관")
 
 
-def part_cycle(part: str, af: dict[str, float]) -> CycleResult:
+def part_cycle(part: str, af: dict[str, float]) -> Cycle:
     if part == "DCM":
         return dcm_cycle(af)
     if part == "IFM 릴레이":
@@ -249,54 +251,26 @@ def part_cycle(part: str, af: dict[str, float]) -> CycleResult:
     return fixed_cycle()
 
 
-# ---------- 2-5. 다음 교체 예정일과 경고 상태 ----------
-
-
-def next_due_date(install_date: date, base_years: float) -> date:
-    return install_date + timedelta(days=round(base_years * 365.25))
-
-
-def warning_status(due: date, today: date, judgment: str) -> str:
-    """불확실 판정은 날짜와 무관하게 "확인 필요"로 둔다. 그 외는 남은 기간으로 본다."""
-    if judgment == "불확실":
-        return "확인_필요"
-    days_left = (due - today).days
-    if days_left <= 90:
-        return "빨강"
-    if days_left <= 365:
-        return "노랑"
-    return "초록"
+# ---------- 전체 계산 ----------
+#
+# "다음 교체 예정일"과 경고 상태(빨강·노랑·초록·확인 필요)는 교체 기록(DB)이 있어야 계산할 수 있어
+# 여기(순수 계산, DB 없음)가 아니라 psd/status.py에 있다. 여긴 날씨로 구한 권장 주기만 낸다.
 
 
 @dataclass(frozen=True)
-class PartStatus:
+class StationPartCycle:
     station: str
     part: str
-    cycle: CycleResult
-    next_due: date
-    days_left: int
-    warning: str
+    cycle: Cycle
 
 
-def station_part_status(
-    station: Station, part: str, af_by_obs: dict[str, dict[str, float]], today: date
-) -> PartStatus:
-    cycle = part_cycle(part, af_by_obs[station.obs])
-    due = next_due_date(station.open_date, cycle.base_years)
-    return PartStatus(station.name, part, cycle, due, (due - today).days, warning_status(due, today, cycle.judgment))
-
-
-# ---------- 전체 계산 ----------
-
-
-def compute_all(today: date | None = None) -> list[PartStatus]:
-    """24개 역 x 부품 7종의 권장 주기·판정·경고 상태 (2-8)."""
-    today = today or date.today()
+def compute_all() -> list[StationPartCycle]:
+    """24개 역 x 부품 7종의 권장 주기(2-8). scripts/compute_cycles.py가 이 결과를 DB에 저장한다."""
     weather = load_weather()
     ref = reference_climate(weather)
     af_by_obs = period_average_af(daily_af(weather, ref))
     return [
-        station_part_status(station, part, af_by_obs, today)
+        StationPartCycle(station.name, part, part_cycle(part, af_by_obs[station.obs]))
         for station in STATIONS
         for part in PARTS
     ]
@@ -310,8 +284,6 @@ def _print_table() -> None:
             "주기(년)": round(r.cycle.base_years, 2),
             "범위": f"{r.cycle.lo_years:.1f}-{r.cycle.hi_years:.1f}",
             "판정": r.cycle.judgment,
-            "다음 교체": r.next_due,
-            "경고": r.warning,
         }
         for r in compute_all()
     ]

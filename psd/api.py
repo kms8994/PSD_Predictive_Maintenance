@@ -30,7 +30,16 @@ from psd.cycle import (
 from psd.db import get_session
 from psd.models import CycleResult, Door, Part, ReplacementPart, ReplacementRecord, Station
 from psd.schemas import ReplacementRecordIn
-from psd.status import UnitStatus, counts, judge_status, next_due_date, station_unit_statuses, to_unit_status, worst
+from psd.status import (
+    UnitStatus,
+    all_unit_statuses,
+    counts,
+    judge_status,
+    next_due_date,
+    station_unit_statuses,
+    to_unit_status,
+    worst,
+)
 
 app = FastAPI(title="동해선 PSD 교체주기 API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -89,7 +98,7 @@ def _shifted_period_af(obs_code: str, d_temp: float, d_rh: float, d_dt: float) -
 
     시뮬레이터용. 실제 ta_max가 없는 가상 날씨라 Tmax는 기온 + 일교차/2로 근사한다.
     """
-    ref = reference_climate(_weather_df())
+    ref = _climate()["ref"]  # 이미 캐시된 기준 기후를 그대로 씀(슬라이더 드래그마다 다시 구하지 않음)
     g = _weather_df()
     g = g[g["stn"] == obs_code].copy()
     g["ta_avg"] = g["ta_avg"] + d_temp
@@ -125,6 +134,23 @@ def list_part_types():
     return {"part_types": PART_TYPES}
 
 
+def _cycle_map(db: Session) -> dict[tuple[int, str], CycleResult]:
+    """역 x 부품 종류의 계산 결과를 한 번에 읽어 온다(24 x 7 = 168건, 요청마다 한 번만).
+
+    이걸 안 쓰고 부품마다 db.get(CycleResult, ...)을 부르면(교체 물량처럼 수천 건을
+    도는 곳에서) 역-부품종류 조합 수만큼 DB를 오간다.
+    """
+    return {(cr.station_id, cr.part_type_code): cr for cr in db.execute(select(CycleResult)).scalars()}
+
+
+def _require_cycle(cycle_map: dict[tuple[int, str], CycleResult], station_id: int, code: str) -> CycleResult:
+    cycle = cycle_map.get((station_id, code))
+    if cycle is None:
+        raise HTTPException(500, f"계산 결과 없음: station={station_id} part={code}. "
+                                  f"python scripts/compute_cycles.py 를 먼저 실행해야 함")
+    return cycle
+
+
 def _part_cycle(part: Part, db: Session) -> CycleResult:
     cycle = db.get(CycleResult, (part.station_id, part.part_type_code))
     if cycle is None:
@@ -138,10 +164,14 @@ def _part_cycle(part: Part, db: Session) -> CycleResult:
 
 @app.get("/api/stations")
 def list_stations(db: Session = Depends(get_db)):
+    by_station: dict[int, list[UnitStatus]] = {}
+    for u in all_unit_statuses(db):  # 역마다 따로 조회하지 않고 한 번에 가져와 나눔(N+1 방지)
+        by_station.setdefault(u.station_id, []).append(u)
+
     rows = []
     totals = {"빨강": 0, "노랑": 0, "확인_필요": 0}
     for s in db.execute(select(Station).order_by(Station.id)).scalars():
-        c = counts(station_unit_statuses(db, s.id))
+        c = counts(by_station.get(s.id, []))
         for k in totals:
             totals[k] += c[k]
         rows.append(
@@ -177,7 +207,12 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
     doors = db.execute(select(Door).where(Door.station_id == station_id).order_by(Door.side, Door.car, Door.position)).scalars().all()
     sides: dict[str, list[dict]] = {side: [] for side in SIDES}
     for d in doors:
-        w = worst(by_door[d.id])
+        door_units = by_door.get(d.id)
+        if not door_units:
+            raise HTTPException(
+                500, f"문 {d.id}의 계산 결과 없음. python scripts/compute_cycles.py 를 먼저 실행해야 함"
+            )
+        w = worst(door_units)
         sides[d.side].append(
             {
                 "id": d.id,
@@ -302,13 +337,14 @@ def get_part(part_id: int, db: Session = Depends(get_db)):
 @app.get("/api/weather-impact")
 def weather_impact(db: Session = Depends(get_db)):
     climate = _climate()
+    cycle_map = _cycle_map(db)
     stations = []
     for s in db.execute(select(Station).order_by(Station.id)).scalars():
         obs_name = next(name for name, code in OBS_CODE.items() if code == s.observatory_id)
         obs_climate = climate["obs"][obs_name]
         cycles = {}
         for code in WEATHER_PART_CODES:
-            cr = db.get(CycleResult, (s.id, code))
+            cr = _require_cycle(cycle_map, s.id, code)
             cycles[code] = {"base_years": round(cr.base_years, 2), "lo_years": round(cr.lo_years, 2), "hi_years": round(cr.hi_years, 2), "judgment": cr.judgment}
         stations.append({"id": s.id, "name": s.name, "observatory": obs_name, "weather": obs_climate, "cycles": cycles})
     return {"stations": stations, "reference": climate["ref"]}
@@ -360,9 +396,10 @@ def replacement_volume(years_ahead: int = 5, db: Session = Depends(get_db)):
     table: dict[tuple[int, int], dict[str, int]] = {q: {p["code"]: 0 for p in PART_TYPES} for q in window}
     check: dict[str, int] = {p["code"]: 0 for p in PART_TYPES}
 
+    cycle_map = _cycle_map(db)  # 부품마다 DB를 오가지 않도록 역 x 부품종류 계산 결과를 한 번만 읽음
     parts = db.execute(select(Part)).scalars().all()
     for part in parts:
-        cycle = _part_cycle(part, db)
+        cycle = _require_cycle(cycle_map, part.station_id, part.part_type_code)
         due = next_due_date(part.install_date, cycle.base_years)
         days_left = (due - today).days
         status = judge_status(days_left, part.has_record)
@@ -370,7 +407,7 @@ def replacement_volume(years_ahead: int = 5, db: Session = Depends(get_db)):
             check[part.part_type_code] += 1
             continue
         d = today if days_left < 0 else due
-        cycle_days = round(cycle.base_years * 365.25)
+        cycle_days = max(1, round(cycle.base_years * 365.25))  # 0 이하면 무한 루프라 최소 1일
         while True:
             q = _quarter(d)
             if q not in table:

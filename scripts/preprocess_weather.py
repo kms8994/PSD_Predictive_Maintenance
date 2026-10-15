@@ -1,6 +1,6 @@
 """ASOS 일자료 원본에서 교체주기 계산에 쓸 항목만 뽑아 전처리한다.
 
-- 기상청 결측 표시(-9, -99 등 음의 큰 값)는 빈값으로 바꾼다.
+- 기상청 결측 표시(필드 자리수만큼 9를 채운 -9, -99, -999)는 빈값으로 바꾼다.
 - 기온·습도의 3일 이하 짧은 공백만 앞뒤 값으로 선형 보간하고, 보간한 날은 표시한다.
 - 일교차(최고 − 최저), 결빙일(최저기온 < 0°C)을 계산한다.
 
@@ -17,11 +17,14 @@ STATION_NAMES = {"152": "울산", "159": "부산"}  # 지점정보 API 미승인
 KEEP = {"TA_AVG": "ta_avg", "TA_MAX": "ta_max", "TA_MIN": "ta_min", "HM_AVG": "hm_avg", "RN_DAY": "rn_day"}
 CORE = ["ta_avg", "ta_max", "ta_min", "hm_avg"]
 MAX_GAP_DAYS = 3
+# 기상청 결측 표시값(정확히 이 값일 때만 결측). 부산·울산 겨울 최저기온은 -13°C대까지도
+# 실제로 나와서 "-9 이하는 전부 결측"으로 보면 진짜 한파 관측치까지 지워진다.
+MISSING_CODES = (-9.0, -99.0, -999.0)
 
 
 def missing_to_nan(s: pd.Series) -> pd.Series:
     s = pd.to_numeric(s, errors="coerce")
-    return s.mask(s <= -9)
+    return s.mask(s.isin(MISSING_CODES))
 
 
 def main() -> None:

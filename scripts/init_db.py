@@ -83,10 +83,9 @@ def main() -> None:
 
     session = get_session()
     try:
-        existing = session.query(Station).count()
-        if existing and not args.reset:
-            print(f"역이 이미 {existing}개 있음. 다시 넣으려면 --reset")
-            return
+        # seed()는 session.merge()로 역·관측소·부품 종류·문·부품만 올리거나 갱신한다(교체
+        # 기록 표는 건드리지 않음). 이미 있어도 다시 실행해 안전하다 — STATIONS나
+        # PART_TYPES에 새 항목을 추가했을 때 조용히 건너뛰지 않도록 항상 seed한다.
         seed(session)
         session.commit()
         print(

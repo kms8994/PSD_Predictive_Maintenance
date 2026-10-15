@@ -10,7 +10,7 @@ import pytest
 from psd.cycle import (
     IFM_WEIGHT_RANGE,
     MOTOR_WEIGHT_RANGE,
-    CycleResult,
+    Cycle,
     af_capacitor,
     af_corrosion,
     af_motor_winding,
@@ -165,4 +165,4 @@ def test_judge_boundaries():
 
 def test_fixed_cycle_is_always_ten_years():
     result = fixed_cycle()
-    assert result == CycleResult(10.0, 10.0, 10.0, "날씨무관")
+    assert result == Cycle(10.0, 10.0, 10.0, "날씨무관")
