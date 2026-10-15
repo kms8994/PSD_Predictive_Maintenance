@@ -98,6 +98,15 @@ def station_counts() -> dict[str, int]:
     return counts
 
 
+def observatory_climate(weather: pd.DataFrame) -> dict[str, dict[str, float]]:
+    """관측소별 10년 평균 기후. 부품 상세 화면의 "날씨 근거"에 쓴다."""
+    result = {}
+    for obs, code in OBS_CODE.items():
+        g = weather[weather["stn"] == code]
+        result[obs] = {"T": g["ta_avg"].mean(), "RH": g["hm_avg"].mean(), "DT": g["dtr"].mean()}
+    return result
+
+
 def reference_climate(weather: pd.DataFrame) -> dict[str, float]:
     """기준 날씨(T_ref, RH_ref, DT_ref, Tmax_ref) = 24개 역 평균 기후.
 

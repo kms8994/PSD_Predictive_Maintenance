@@ -81,6 +81,7 @@ class Part(Base):
     station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"))
     door_id: Mapped[int | None] = mapped_column(ForeignKey("doors.id"), nullable=True)  # 역 단위 부품은 비움
     install_date: Mapped[dt.date] = mapped_column(Date)  # 마지막 교체일, 기록 없으면 역 개통일
+    has_record: Mapped[bool] = mapped_column(default=False)  # 교체 기록이 한 번이라도 있는지(확인 필요 판정용)
 
     part_type: Mapped[PartType] = relationship(back_populates="parts")
     station: Mapped[Station] = relationship(back_populates="parts")
