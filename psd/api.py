@@ -30,6 +30,7 @@ from psd.cycle import (
     load_aws_weather,
     observatory_climate,
     period_average_af,
+    period_average_af_for,
     reference_climate,
     single_cause_cycle,
 )
@@ -115,7 +116,7 @@ def _shifted_period_af(aws_stn: str, d_temp: float, d_rh: float, d_dt: float) ->
     g["hm_avg"] = (g["hm_avg"] + d_rh).clip(lower=0.0, upper=100.0)
     g["dtr"] = (g["dtr"] + d_dt).clip(lower=0.5)
     g["ta_max"] = g["ta_avg"] + g["dtr"] / 2
-    return period_average_af(daily_af(g, ref))[aws_stn]
+    return period_average_af_for(daily_af(g, ref), aws_stn)
 
 
 def _unit_dict(u: UnitStatus) -> dict:

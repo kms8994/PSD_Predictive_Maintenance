@@ -277,20 +277,27 @@ def daily_af(weather: pd.DataFrame, ref: dict[str, float]) -> pd.DataFrame:
     return out
 
 
+def period_average_af_for(daily: pd.DataFrame, stn: str) -> dict[str, float]:
+    """한 AWS 지점의 기간 평균 가속 계수.
+
+    `daily`가 이미 그 지점 하나로 걸러진 경우(시뮬레이터처럼 지점 하나만 날씨를
+    바꿔 다시 계산할 때)에도 다른 지점 데이터 없이 바로 쓸 수 있도록 지점 하나만
+    따로 계산한다. 7개 지점을 한 번에 계산하는 `period_average_af`가 이 함수를 쓴다.
+    """
+    g = daily[daily["stn"] == stn]
+    if g.empty:  # observatory_climate()와 같은 이유 — 빈 그룹을 그냥 두면 NaN이 조용히 퍼진다
+        raise ValueError(f"AWS 지점 {stn}({AWS_STATION_NAMES.get(stn, '?')})의 날씨 데이터가 없습니다.")
+    return {
+        "cap": g["af_cap"].mean(),
+        "sol": g["af_sol"].mean(),
+        "hum": g["af_hum"].mean(),
+        "mot": g["af_mot"].mean(),
+    }
+
+
 def period_average_af(daily: pd.DataFrame) -> dict[str, dict[str, float]]:
     """AWS 지점별 기간 평균 가속 계수 (AF_m(s) = 일별 AF_m(s, d)의 평균)."""
-    result = {}
-    for stn in station_counts():
-        g = daily[daily["stn"] == stn]
-        if g.empty:  # observatory_climate()와 같은 이유 — 빈 그룹을 그냥 두면 NaN이 조용히 퍼진다
-            raise ValueError(f"AWS 지점 {stn}({AWS_STATION_NAMES.get(stn, '?')})의 날씨 데이터가 없습니다.")
-        result[stn] = {
-            "cap": g["af_cap"].mean(),
-            "sol": g["af_sol"].mean(),
-            "hum": g["af_hum"].mean(),
-            "mot": g["af_mot"].mean(),
-        }
-    return result
+    return {stn: period_average_af_for(daily, stn) for stn in station_counts()}
 
 
 # ---------- 2-3, 2-4. 비중 합성·범위, 판정 ----------
