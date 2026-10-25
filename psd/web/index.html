@@ -227,7 +227,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     </div>
   </div>
 </div>
-<div class="mockbar"><div class="mockbar-inner"><b>실제 연결</b> · 기상청 10년치 날씨와 MySQL로 계산한 실제 값입니다. 문 수(역당 32개)·설치일(개통일)은 멘토 확인 전까지 임시값입니다.</div></div>
+<div class="mockbar"><div class="mockbar-inner"><b>실제 연결</b> · 기상청 AWS 4년치(2022~2025) 날씨와 MySQL로 계산한 실제 값입니다. 문 수(역당 32개)는 멘토 확인 전까지 임시값입니다.</div></div>
 <main class="wrap" id="app"></main>
 <div class="toast" id="toast" hidden></div>
 <div class="tip" id="tip" hidden></div>
@@ -355,7 +355,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     const item = s => {
       const c = s.counts;
       const b = [c.빨강 ? `<span class="pill s-red">빨강 ${c.빨강}</span>` : "", c.확인_필요 ? `<span class="pill s-check">확인 ${c.확인_필요}</span>` : "", c.노랑 ? `<span class="pill s-amber">노랑 ${c.노랑}</span>` : ""].join("");
-      return `<li><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${openLabel(s)} 개통 · 관측소 ${s.observatory === "159" ? "부산" : "울산"}(추정)</span></span><span class="badges">${b || '<span class="pill s-green">경고 없음</span>'}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
+      return `<li><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${openLabel(s)} 개통 · AWS ${s.aws_station}(추정)</span></span><span class="badges">${b || '<span class="pill s-green">경고 없음</span>'}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
     };
     return `<section class="view">
       <div class="stats">
@@ -416,7 +416,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       ${switcher}
       <div class="panel">
         <h2>${s.name}</h2>
-        <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)} (스크린도어 설치일로 가정)</dd><dt>관측소</dt><dd>${s.observatory === "159" ? "부산" : "울산"} ASOS (추정)</dd><dt>문 수</dt><dd>방향마다 4량 × 4개 = 16개 (임시값)</dd></dl>
+        <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)} (스크린도어 설치일로 가정)</dd><dt>날씨 지점</dt><dd>AWS ${s.aws_station} (추정)</dd><dt>문 수</dt><dd>방향마다 4량 × 4개 = 16개 (임시값)</dd></dl>
         <div class="legend">${pill("빨강")} ${c.빨강} ${pill("확인_필요")} ${c.확인_필요} ${pill("노랑")} ${c.노랑} ${pill("초록")} ${c.초록}</div>
       </div>
       <div class="panel">
@@ -465,7 +465,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
           <tr><td>평균 일교차</td><td class="num">${wb.station_climate.DT.toFixed(1)}°C</td><td class="num">${wb.reference_climate.DT.toFixed(1)}°C</td></tr></table></div>
         <div class="scroll"><table><tr><th>고장 원인</th><th>날씨 변수</th><th>열화 속도(평균 대비)</th><th>비중 기본값(범위)</th></tr>
           ${wb.causes.map(r => `<tr><td>${r.name}</td><td>${r.variable}</td><td class="num">${r.af.toFixed(2)}배</td><td class="num">${r.weight_default}</td></tr>`).join("")}</table></div>
-        <p class="small muted">권장 주기 = 10년 ÷ (원인별 열화 속도 × 비중의 합). 기상청 10년치(${wb.weather_period.start}~${wb.weather_period.end}) 일자료로 계산.</p>
+        <p class="small muted">권장 주기 = 10년 ÷ (원인별 열화 속도 × 비중의 합). 기상청 AWS(${wb.weather_period.start}~${wb.weather_period.end}) 일자료로 계산.</p>
         <button class="linkbtn" ${goAttr({ name: "weather", simSt: part.station_id })}>이 역 날씨를 바꿔 보기 ›</button>
         <ol class="src">${src.map(x => `<li><a href="${x[1]}" target="_blank" rel="noopener">${x[0]}</a></li>`).join("")}</ol>`;
     }
@@ -610,7 +610,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
           ${scatter("습도와 IFM 릴레이 주기", ST, "RH", "평균 습도(%)", "IFM", v => v.toFixed(1) + "%")}
           ${scatter("일교차와 DCM 주기", ST, "DT", "평균 일교차(°C)", "DCM", v => v.toFixed(1) + "°C")}
         </div>
-        <p class="note">IFM 릴레이는 원인이 습도 하나라 점들이 두 묶음(부산·울산 관측소)으로만 나뉩니다. DCM은 기온·일교차·습도가 함께 작용합니다. 역별 실제 관측소(AWS)가 연결되면 묶음이 24개 역으로 퍼집니다.</p>
+        <p class="note">IFM 릴레이는 원인이 습도 하나라 점들이 역이 연결된 AWS 지점(동래·해운대·기장·간절곶·온산·장생포·매곡 7곳)으로 묶여 나뉩니다. DCM은 기온·일교차·습도가 함께 작용합니다. 지점 코드를 역 좌표로 정확히 맞추면(지금은 행정구역 기준 추정) 묶음이 24개 역으로 더 퍼질 수 있습니다.</p>
       </div>
       ${simPanel(view.simSt ?? ST[0].id)}
     </section>`;

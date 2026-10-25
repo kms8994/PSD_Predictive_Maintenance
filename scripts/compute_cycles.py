@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from psd.catalog import NAME_TO_CODE  # noqa: E402
-from psd.cycle import STATIONS, compute_all, load_weather  # noqa: E402
+from psd.cycle import STATIONS, compute_all, load_aws_weather  # noqa: E402
 from psd.db import get_session  # noqa: E402
 from psd.models import CycleResult  # noqa: E402
 
@@ -19,7 +19,7 @@ NAME_TO_STATION_ID = {s.name: s.order for s in STATIONS}
 
 
 def main() -> None:
-    weather = load_weather()
+    weather = load_aws_weather()
     start, end = weather["date"].min().date(), weather["date"].max().date()
 
     session = get_session()

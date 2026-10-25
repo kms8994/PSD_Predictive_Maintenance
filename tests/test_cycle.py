@@ -5,10 +5,13 @@
 """
 from datetime import date
 
+import pandas as pd
 import pytest
 
 from psd.cycle import (
     IFM_WEIGHT_RANGE,
+    IFM_WEIGHT_RANGE_COASTAL,
+    IFM_WEIGHT_RANGE_INLAND,
     MOTOR_WEIGHT_RANGE,
     Cycle,
     af_capacitor,
@@ -16,10 +19,17 @@ from psd.cycle import (
     af_motor_winding,
     af_solder,
     dcm_cycle,
+    daily_af,
     fixed_cycle,
     judge,
+    observatory_climate,
+    part_cycle,
+    period_average_af,
+    reference_climate,
     single_cause_cycle,
+    station_counts,
 )
+from psd.cycle import STATIONS as CYCLE_STATIONS
 
 REF = {"T": 15.0, "RH": 68.0, "DT": 7.5}
 REF["Tmax"] = REF["T"] + REF["DT"] / 2
@@ -166,3 +176,113 @@ def test_judge_boundaries():
 def test_fixed_cycle_is_always_ten_years():
     result = fixed_cycle()
     assert result == Cycle(10.0, 10.0, 10.0, "날씨무관")
+
+
+# ---------- near_water: 2026-10-24 미팅 답변(Q5) 반영 ----------
+#
+# 바다·하천 인접 역은 습도(부식) 쪽 영향이 뚜렷하다는 담당자 답변에 따라, DCM·IFM 릴레이의
+# "기본값(점추정)"만 습도 비중을 높게 잡는다. 범위(최소~최대)는 비중 자체의 근거가 없다는
+# 한계가 그대로라 역 구분과 무관하게 같아야 한다.
+
+
+def test_coastal_default_shifts_toward_humidity_without_changing_range():
+    t, rh, dt, _ = STATIONS["C 습하고 일교차 큼"]
+    af = _af(t, rh, dt)
+
+    inland = dcm_cycle(af, near_water=False)
+    coastal = dcm_cycle(af, near_water=True)
+
+    assert inland.lo_years == pytest.approx(coastal.lo_years)
+    assert inland.hi_years == pytest.approx(coastal.hi_years)
+    assert coastal.base_years != pytest.approx(inland.base_years)
+    assert inland.lo_years <= coastal.base_years <= inland.hi_years
+
+
+def test_coastal_ifm_default_is_higher_weight_but_same_range():
+    assert IFM_WEIGHT_RANGE_COASTAL[:2] == IFM_WEIGHT_RANGE_INLAND[:2]
+    assert IFM_WEIGHT_RANGE_COASTAL[2] > IFM_WEIGHT_RANGE_INLAND[2]
+
+
+def test_part_cycle_near_water_only_affects_humidity_sensitive_parts():
+    t, rh, dt, _ = STATIONS["A 해안"]
+    af = _af(t, rh, dt)
+
+    for part in ("DCM", "IFM 릴레이"):
+        inland = part_cycle(part, af, near_water=False)
+        coastal = part_cycle(part, af, near_water=True)
+        assert coastal.base_years != pytest.approx(inland.base_years)
+        assert inland.lo_years == pytest.approx(coastal.lo_years)
+        assert inland.hi_years == pytest.approx(coastal.hi_years)
+
+    # 모터는 기온(NSWC-98) 근거라 near_water와 무관해야 한다
+    motor_inland = part_cycle("모터", af, near_water=False)
+    motor_coastal = part_cycle("모터", af, near_water=True)
+    assert motor_inland == motor_coastal
+
+    # 날씨 무관 부품도 near_water와 무관해야 한다
+    assert part_cycle("타이밍벨트", af, near_water=False) == part_cycle("타이밍벨트", af, near_water=True)
+
+
+# ---------- psd_install_date: 2026-10-24 미팅 답변(Q3) 반영 ----------
+#
+# 좌천~태화강 구간(16~23번, 8개 역)은 "22년 사용개시"가 확실하다. 부전~일광 구간(1~15번)은 실제로는
+# 6개 역 22년·9개 역 23년이 섞여 있지만 역 이름이 없어(보안사규) 역 단위로 못 나누는데, 2026-10-24
+# 사용자 지시로 정확한 구분이 나올 때까지 이 15개 역도 일단 22년으로 통일해 둔다. 북울산(24번)만
+# 아직 개통 전이라 제외(None → open_date로 대신).
+
+
+def test_all_opened_stations_default_to_2022_psd_install_date_except_bukulsan():
+    by_order = {s.order: s for s in CYCLE_STATIONS}
+    for order in range(1, 24):
+        assert by_order[order].psd_install_date == date(2022, 1, 1), by_order[order].name
+    assert by_order[24].psd_install_date is None  # 북울산: 아직 개통 전
+
+
+# ---------- AWS 지점 기반 날씨 계산: 2026-10-25 반영 ----------
+#
+# 부산/울산 ASOS 2버킷 대신 역마다 가장 가까운 AWS 지점(Station.aws_stn)으로 날씨를 계산한다.
+# 실제 CSV 없이도 함수가 올바르게 지점별로 묶는지 합성 데이터로 확인한다.
+
+
+def _synthetic_weather() -> pd.DataFrame:
+    """실제 두 AWS 지점(해안 기장 923, 내륙 동래 940) 코드로 흉내 낸 작은 날씨 데이터프레임.
+
+    observatory_climate·period_average_af는 station_counts()(= STATIONS의 실제 aws_stn)를
+    기준으로 묶으므로, 임의의 코드(예: "A"/"B")가 아니라 실제 STATIONS에 쓰이는 코드를 써야 한다.
+    """
+    rows = []
+    for day in range(1, 11):
+        rows.append({"date": pd.Timestamp("2022-01-01") + pd.Timedelta(days=day), "stn": "923",
+                      "ta_avg": 15.0, "ta_max": 19.0, "ta_min": 11.0, "hm_avg": 80.0, "dtr": 8.0})
+        rows.append({"date": pd.Timestamp("2022-01-01") + pd.Timedelta(days=day), "stn": "940",
+                      "ta_avg": 15.0, "ta_max": 19.0, "ta_min": 11.0, "hm_avg": 60.0, "dtr": 8.0})
+    return pd.DataFrame(rows)
+
+
+def test_station_counts_groups_by_aws_stn_not_obs():
+    counts = station_counts()
+    # 역 24개가 obs(부산/울산) 2개가 아니라 aws_stn 여러 개로 나뉘어야 한다
+    assert set(counts) == {s.aws_stn for s in CYCLE_STATIONS}
+    assert len(counts) > 2
+    assert sum(counts.values()) == len(CYCLE_STATIONS)
+
+
+def test_observatory_climate_and_reference_climate_use_aws_groups():
+    weather = _synthetic_weather()
+    # station_counts()가 실제 CYCLE_STATIONS를 쓰므로, 합성 데이터의 지점 "A"/"B"가 그 안에
+    # 없으면 reference_climate이 0으로 나눈다 — 여기서는 observatory_climate 자체만 검증한다
+    climate = observatory_climate(weather)
+    assert climate["923"]["RH"] == pytest.approx(80.0)
+    assert climate["940"]["RH"] == pytest.approx(60.0)
+    assert climate["923"]["T"] == pytest.approx(15.0)
+
+
+def test_period_average_af_differs_between_aws_stations():
+    weather = _synthetic_weather()
+    ref = {"T": 15.0, "RH": 70.0, "DT": 8.0, "Tmax": 19.0}  # 두 지점 평균값 정도로 가정
+    daily = daily_af(weather, ref)
+    af = period_average_af(daily)
+    # 습도가 더 높은 지점(923 기장)의 부식 가속 계수가 더 커야 한다
+    assert af["923"]["hum"] > af["940"]["hum"]
+    # 기온·일교차가 같으므로 콘덴서·납땜 가속 계수는 같아야 한다
+    assert af["923"]["cap"] == pytest.approx(af["940"]["cap"])

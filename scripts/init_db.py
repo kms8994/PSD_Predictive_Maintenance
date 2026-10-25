@@ -34,7 +34,13 @@ def seed(session) -> None:
 
     for s in STATIONS:
         session.merge(
-            Station(id=s.order, name=s.name, open_date=s.open_date, observatory_id=OBS_CODE[s.obs])
+            Station(
+                id=s.order,
+                name=s.name,
+                open_date=s.open_date,
+                observatory_id=OBS_CODE[s.obs],
+                near_water=s.near_water,
+            )
         )
 
     for row in PART_TYPES:
@@ -45,6 +51,9 @@ def seed(session) -> None:
     door_id = 1
     part_id = 1
     for s in STATIONS:
+        # 부품 설치일 = 역의 실제 PSD 사용개시일(psd_install_date, 2026-10-24 미팅 답변 Q3로
+        # 확인된 역만 있음)이 있으면 그걸 쓰고, 없으면 기존처럼 철도 개통일(open_date)로 대신한다.
+        install_date = s.psd_install_date or s.open_date
         station_doors = []
         for side in SIDES:
             for n in range(1, DOORS_PER_SIDE + 1):
@@ -64,11 +73,11 @@ def seed(session) -> None:
 
         for door in station_doors:
             for code in DOOR_PART_CODES:
-                session.merge(Part(id=part_id, part_type_code=code, station_id=s.order, door_id=door.id, install_date=s.open_date))
+                session.merge(Part(id=part_id, part_type_code=code, station_id=s.order, door_id=door.id, install_date=install_date))
                 part_id += 1
 
         for code in STATION_PART_CODES:
-            session.merge(Part(id=part_id, part_type_code=code, station_id=s.order, door_id=None, install_date=s.open_date))
+            session.merge(Part(id=part_id, part_type_code=code, station_id=s.order, door_id=None, install_date=install_date))
             part_id += 1
 
 

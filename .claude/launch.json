@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "psd-api",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "psd.api:app", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}

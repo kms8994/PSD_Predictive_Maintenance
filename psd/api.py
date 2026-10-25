@@ -18,10 +18,11 @@ from psd.catalog import PART_TYPES, SIDES
 from psd.cycle import (
     IFM_WEIGHT_RANGE,
     MOTOR_WEIGHT_RANGE,
-    OBS_CODE,
+    STATIONS,
+    AWS_STATION_NAMES,
     daily_af,
     dcm_cycle,
-    load_weather,
+    load_aws_weather,
     observatory_climate,
     period_average_af,
     reference_climate,
@@ -46,12 +47,20 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 NAME_BY_CODE = {p["code"]: p["name"] for p in PART_TYPES}
 WEATHER_PART_CODES = ["DCM", "IFM", "MOTOR"]
+AWS_STN_BY_STATION = {s.name: s.aws_stn for s in STATIONS}  # 역 이름 -> 가장 가까운 AWS 지점 코드
 
-# 고장 원인별 열화 속도·비중 기본값(4단계_계산공식_근거조사.md 1·3장). 부품 상세의 "근거" 표에 쓴다.
-CAUSES = {
+# 고장 원인별 열화 속도·비중 기본값(4단계_계산공식_근거조사.md 1·3장, 3-1). 부품 상세의
+# "근거" 표에 쓴다. DCM·IFM은 역이 바다·하천에 인접한지(near_water)에 따라 습도(부식) 비중의
+# 기본값이 다르다(2026-10-24 미팅 답변 Q5, 범위는 동일) — 역 단위로 둘을 나눠 둔다.
+CAUSES_INLAND = {
     "DCM": [("콘덴서 노화", "기온", "cap", "25% (10–50%)"), ("납땜 열피로", "일교차", "sol", "25% (10–50%)"), ("습도 부식", "습도·기온", "hum", "25% (10–50%)"), ("날씨 무관", "—", None, "25% (10–50%)")],
     "IFM": [("접점 부식", "습도·기온", "hum", "50% (20–80%)"), ("날씨 무관", "—", None, "50%")],
     "MOTOR": [("권선 절연 노화", "기온", "mot", "30% (10–50%)"), ("날씨 무관(베어링 등)", "—", None, "70%")],
+}
+CAUSES_COASTAL = {
+    "DCM": [("콘덴서 노화", "기온", "cap", "15% (10–50%)"), ("납땜 열피로", "일교차", "sol", "20% (10–50%)"), ("습도 부식", "습도·기온", "hum", "40% (10–50%)"), ("날씨 무관", "—", None, "25% (10–50%)")],
+    "IFM": [("접점 부식", "습도·기온", "hum", "65% (20–80%)"), ("날씨 무관", "—", None, "35%")],
+    "MOTOR": CAUSES_INLAND["MOTOR"],  # 모터는 기온(NSWC-98) 근거라 역 구분 없음
 }
 
 
@@ -65,12 +74,12 @@ def get_db():
 
 @lru_cache
 def _weather_df():
-    return load_weather()
+    return load_aws_weather()
 
 
 @lru_cache
 def _climate() -> dict:
-    """기후 요약(표시용 장기 평균). 계산은 _af_by_obs()의 기간 평균 가속 계수를 쓴다."""
+    """기후 요약(표시용 장기 평균). 계산은 _af_by_stn()의 기간 평균 가속 계수를 쓴다."""
     weather = _weather_df()
     return {
         "ref": reference_climate(weather),
@@ -81,8 +90,8 @@ def _climate() -> dict:
 
 
 @lru_cache
-def _af_by_obs() -> dict:
-    """관측소별 기간 평균 가속 계수(psd/cycle.py의 compute_all과 같은 방식).
+def _af_by_stn() -> dict:
+    """AWS 지점별 기간 평균 가속 계수(psd/cycle.py의 compute_all과 같은 방식).
 
     부품 상세의 "근거" 표는 이 값을 써야 "이 역의 권장 주기"(DB에 저장된 값)와 맞는다.
     station_climate의 장기 평균 T/RH/DT를 AF 공식에 한 번만 넣는 것과는 다른 결과가 나온다
@@ -93,20 +102,19 @@ def _af_by_obs() -> dict:
     return period_average_af(daily_af(weather, ref))
 
 
-def _shifted_period_af(obs_code: str, d_temp: float, d_rh: float, d_dt: float) -> dict[str, float]:
-    """한 관측소의 10년 날씨를 통째로 (기온·습도·일교차) 바꿔서 다시 기간 평균 가속 계수를 낸다.
+def _shifted_period_af(aws_stn: str, d_temp: float, d_rh: float, d_dt: float) -> dict[str, float]:
+    """한 AWS 지점의 날씨를 통째로 (기온·습도·일교차) 바꿔서 다시 기간 평균 가속 계수를 낸다.
 
     시뮬레이터용. 실제 ta_max가 없는 가상 날씨라 Tmax는 기온 + 일교차/2로 근사한다.
     """
     ref = _climate()["ref"]  # 이미 캐시된 기준 기후를 그대로 씀(슬라이더 드래그마다 다시 구하지 않음)
     g = _weather_df()
-    g = g[g["stn"] == obs_code].copy()
+    g = g[g["stn"] == aws_stn].copy()
     g["ta_avg"] = g["ta_avg"] + d_temp
     g["hm_avg"] = (g["hm_avg"] + d_rh).clip(lower=0.0, upper=100.0)
     g["dtr"] = (g["dtr"] + d_dt).clip(lower=0.5)
     g["ta_max"] = g["ta_avg"] + g["dtr"] / 2
-    obs_name = next(name for name, code in OBS_CODE.items() if code == obs_code)
-    return period_average_af(daily_af(g, ref))[obs_name]
+    return period_average_af(daily_af(g, ref))[aws_stn]
 
 
 def _unit_dict(u: UnitStatus) -> dict:
@@ -180,6 +188,8 @@ def list_stations(db: Session = Depends(get_db)):
                 "name": s.name,
                 "open_date": s.open_date,
                 "observatory": s.observatory_id,
+                "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[s.name]],
+                "near_water": s.near_water,
                 "counts": c,
             }
         )
@@ -226,7 +236,14 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
         )
 
     return {
-        "station": {"id": station.id, "name": station.name, "open_date": station.open_date, "observatory": station.observatory_id},
+        "station": {
+            "id": station.id,
+            "name": station.name,
+            "open_date": station.open_date,
+            "observatory": station.observatory_id,
+            "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[station.name]],
+            "near_water": station.near_water,
+        },
         "psc": _unit_dict(psc) if psc else None,
         "sides": {sid: {"label": label, "doors": sides[sid]} for sid, label in SIDES.items()},
         "counts": counts(statuses),
@@ -275,18 +292,17 @@ def get_part(part_id: int, db: Session = Depends(get_db)):
     weather_basis = None
     if part.part_type.weather_sensitive:
         climate = _climate()
-        obs = part.station.observatory_id
-        obs_name = next(name for name, code in OBS_CODE.items() if code == obs)
-        sc, ref = climate["obs"][obs_name], climate["ref"]
-        af = _af_by_obs()[obs_name]  # 기간 평균 가속 계수 — "이 역의 권장 주기"와 같은 계산
+        aws_stn = AWS_STN_BY_STATION[part.station.name]
+        sc, ref = climate["obs"][aws_stn], climate["ref"]
+        af = _af_by_stn()[aws_stn]  # 기간 평균 가속 계수 — "이 역의 권장 주기"와 같은 계산
         weather_basis = {
-            "observatory": obs_name,
+            "observatory": AWS_STATION_NAMES[aws_stn],
             "station_climate": sc,
             "reference_climate": ref,
             "weather_period": {"start": climate["start"], "end": climate["end"]},
             "causes": [
                 {"name": name, "variable": var, "af": round(af[key], 2) if key else 1.0, "weight_default": weight}
-                for name, var, key, weight in CAUSES[part.part_type_code]
+                for name, var, key, weight in (CAUSES_COASTAL if part.station.near_water else CAUSES_INLAND)[part.part_type_code]
             ],
         }
 
@@ -340,13 +356,13 @@ def weather_impact(db: Session = Depends(get_db)):
     cycle_map = _cycle_map(db)
     stations = []
     for s in db.execute(select(Station).order_by(Station.id)).scalars():
-        obs_name = next(name for name, code in OBS_CODE.items() if code == s.observatory_id)
-        obs_climate = climate["obs"][obs_name]
+        aws_stn = AWS_STN_BY_STATION[s.name]
+        obs_climate = climate["obs"][aws_stn]
         cycles = {}
         for code in WEATHER_PART_CODES:
             cr = _require_cycle(cycle_map, s.id, code)
             cycles[code] = {"base_years": round(cr.base_years, 2), "lo_years": round(cr.lo_years, 2), "hi_years": round(cr.hi_years, 2), "judgment": cr.judgment}
-        stations.append({"id": s.id, "name": s.name, "observatory": obs_name, "weather": obs_climate, "cycles": cycles})
+        stations.append({"id": s.id, "name": s.name, "observatory": AWS_STATION_NAMES[aws_stn], "weather": obs_climate, "cycles": cycles})
     return {"stations": stations, "reference": climate["ref"]}
 
 
@@ -359,7 +375,7 @@ def simulate_weather(station_id: int, d_temp: float = 0.0, d_rh: float = 0.0, d_
     station = db.get(Station, station_id)
     if station is None:
         raise HTTPException(404, "역 없음")
-    af = _shifted_period_af(station.observatory_id, d_temp, d_rh, d_dt)
+    af = _shifted_period_af(AWS_STN_BY_STATION[station.name], d_temp, d_rh, d_dt)
     dcm = dcm_cycle(af)
     ifm = single_cause_cycle(af["hum"], IFM_WEIGHT_RANGE)
     motor = single_cause_cycle(af["mot"], MOTOR_WEIGHT_RANGE)
