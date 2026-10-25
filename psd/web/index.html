@@ -23,6 +23,7 @@
   --gray-soft: #eceff3;
   --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --font-data: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+  --scroll-edge: rgba(0, 0, 0, .18);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -30,6 +31,7 @@
     --rail: #4d76a6; --accent: #7fb0f0; --accent-soft: #1d2b3c;
     --red: #f0705c; --red-soft: #3a211d; --amber: #eeb54a; --amber-soft: #3a2f18;
     --green: #4cc27e; --green-soft: #183224; --gray: #8a94a3; --gray-soft: #252e39;
+    --scroll-edge: rgba(255, 255, 255, .16);
     color-scheme: dark;
   }
 }
@@ -38,6 +40,7 @@
   --rail: #4d76a6; --accent: #7fb0f0; --accent-soft: #1d2b3c;
   --red: #f0705c; --red-soft: #3a211d; --amber: #eeb54a; --amber-soft: #3a2f18;
   --green: #4cc27e; --green-soft: #183224; --gray: #8a94a3; --gray-soft: #252e39;
+  --scroll-edge: rgba(255, 255, 255, .16);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -100,7 +103,23 @@ a { color: var(--accent); }
 .st .badges { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .st .chev { color: var(--muted); }
 
-.scroll { overflow-x: auto; }
+.scroll {
+  overflow-x: auto;
+  background:
+    linear-gradient(to right, var(--surface) 30%, rgba(255, 255, 255, 0)),
+    linear-gradient(to right, rgba(255, 255, 255, 0), var(--surface) 70%) 100% 0,
+    linear-gradient(to right, var(--scroll-edge), rgba(0, 0, 0, 0)),
+    linear-gradient(to left, var(--scroll-edge), rgba(0, 0, 0, 0)) 100% 0;
+  background-repeat: no-repeat;
+  background-color: var(--surface);
+  background-size: 28px 100%, 28px 100%, 10px 100%, 10px 100%;
+  background-attachment: local, local, scroll, scroll;
+  scrollbar-color: var(--muted) transparent;
+}
+.scroll::-webkit-scrollbar, .strip-wrap::-webkit-scrollbar { height: 8px; }
+.scroll::-webkit-scrollbar-track, .strip-wrap::-webkit-scrollbar-track { background: transparent; }
+.scroll::-webkit-scrollbar-thumb, .strip-wrap::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+.scroll::-webkit-scrollbar-thumb:hover, .strip-wrap::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 table { border-collapse: collapse; font-size: 0.88rem; width: 100%; }
 th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { font-weight: 600; color: var(--muted); font-size: 0.8rem; }
@@ -127,13 +146,19 @@ th { font-weight: 600; color: var(--muted); font-size: 0.8rem; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label, .field legend { font-weight: 600; font-size: 0.9rem; }
 fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-input[type="date"], select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); max-width: 260px; }
+input[type="date"], input[type="search"], select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); max-width: 260px; }
+.stfilter-wrap { position: relative; }
+input.stfilter { width: 100%; max-width: none; padding-left: 34px; }
+.stfilter-wrap::before { content: "⌕"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 1.1rem; pointer-events: none; }
+.route li.hide { display: none; }
+.route-empty { padding: 20px 14px; color: var(--muted); font-size: 0.9rem; }
 .checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .checks label { font-weight: 400; display: flex; gap: 6px; align-items: center; }
 .err { color: var(--red); font-size: 0.88rem; }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 0.9rem; z-index: 20; }
 
-.vol td.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.vol td.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; min-width: 52px; }
+.vol td.n:empty::before { content: "–"; color: var(--line); }
 .vol td.barcell { width: 30%; min-width: 120px; }
 .vbar { height: 10px; background: var(--accent); border-radius: 3px; }
 .vol tr.checkrow td { background: var(--gray-soft); }
@@ -145,7 +170,20 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
 .dirtab { appearance: none; border: 0; background: var(--surface); color: var(--muted); font: inherit; font-size: 0.88rem; font-weight: 600; padding: 7px 14px; cursor: pointer; }
 .dirtab + .dirtab { border-left: 1px solid var(--line); }
 .dirtab[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
-.strip-wrap { overflow-x: auto; padding-bottom: 4px; }
+.strip-wrap {
+  overflow-x: auto;
+  padding-bottom: 4px;
+  background:
+    linear-gradient(to right, var(--surface) 30%, rgba(255, 255, 255, 0)),
+    linear-gradient(to right, rgba(255, 255, 255, 0), var(--surface) 70%) 100% 0,
+    linear-gradient(to right, var(--scroll-edge), rgba(0, 0, 0, 0)),
+    linear-gradient(to left, var(--scroll-edge), rgba(0, 0, 0, 0)) 100% 0;
+  background-repeat: no-repeat;
+  background-color: var(--surface);
+  background-size: 28px 100%, 28px 100%, 10px 100%, 10px 100%;
+  background-attachment: local, local, scroll, scroll;
+  scrollbar-color: var(--muted) transparent;
+}
 .strip { display: flex; gap: 10px; min-width: max-content; }
 .car { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .carlabel { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-align: center; letter-spacing: 0.04em; }
@@ -351,6 +389,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     });
     const jump = app.querySelector("#st-jump");
     if (jump) jump.addEventListener("change", () => go({ name: "station", st: Number(jump.value) }));
+    const filter = app.querySelector("#st-filter");
+    if (filter) filter.addEventListener("input", () => {
+      const q = filter.value.trim();
+      const items = [...app.querySelectorAll("#route-list > li")];
+      let shown = 0;
+      items.forEach(li => { const hit = !q || li.dataset.name.includes(q); li.classList.toggle("hide", !hit); if (hit) shown++; });
+      app.querySelector("#route-empty").hidden = shown > 0;
+      app.querySelector("#route-empty-q").textContent = q;
+    });
     const tt = app.querySelector("#tbltoggle");
     if (tt) tt.addEventListener("click", () => { const t = app.querySelector("#numtbl"); t.hidden = !t.hidden; tt.textContent = t.hidden ? "숫자 표로 보기" : "숫자 표 닫기"; });
     if (app.querySelector("#sim")) setupSim();
@@ -368,7 +415,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     const item = s => {
       const c = s.counts;
       const b = [c.빨강 ? `<span class="pill s-red">빨강 ${c.빨강}</span>` : "", c.확인_필요 ? `<span class="pill s-check">확인 ${c.확인_필요}</span>` : "", c.노랑 ? `<span class="pill s-amber">노랑 ${c.노랑}</span>` : ""].join("");
-      return `<li><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${openLabel(s)} 개통 · AWS ${s.aws_station}(추정)</span></span><span class="badges">${b || '<span class="pill s-green">경고 없음</span>'}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
+      return `<li data-name="${esc(s.name)}"><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${openLabel(s)} 개통 · AWS ${s.aws_station}(추정)</span></span><span class="badges">${b || '<span class="pill s-green">경고 없음</span>'}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
     };
     return `<section class="view">
       <div class="stats">
@@ -377,7 +424,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         <div class="stat amber"><span class="small muted">노랑</span><b>${data.totals.노랑.toLocaleString()}</b><span class="small muted">1년 안에 교체</span></div>
       </div>
       ${legend}
-      <ul class="route">${data.stations.map(item).join("")}</ul>
+      <div class="stfilter-wrap"><input type="search" id="st-filter" class="stfilter" placeholder="역 이름으로 찾기 (예: 태화강)" aria-label="역 이름으로 찾기"></div>
+      <ul class="route" id="route-list">${data.stations.map(item).join("")}</ul>
+      <p class="route-empty" id="route-empty" hidden>"<span id="route-empty-q"></span>" 역이 없습니다.</p>
       <p class="note">부품 설치일을 PSD 실제 사용개시일(2022년 전후, 역별 상세는 설계_v2.md 참고)로 다시 맞춘 뒤라, 10년 안팎인 권장 주기 기준으로는 당장 경고가 거의 없습니다. 더미 교체 기록(고장으로 가정한 부품)이 있는 곳만 상태가 다르게 보입니다.</p>
       <a class="linkbtn" href="/api/report" download>전체 역 보고서 내려받기(엑셀) ›</a>
       <form class="panel form" id="xlsxform" novalidate>
