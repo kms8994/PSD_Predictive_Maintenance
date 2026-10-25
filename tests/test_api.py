@@ -46,3 +46,69 @@ def test_part_detail_observatory_is_a_real_aws_station_name():
     part_id = _first_weather_sensitive_part_id()
     data = client.get(f"/api/parts/{part_id}").json()
     assert data["weather_basis"]["observatory"] in AWS_STATION_NAMES.values()
+
+
+# ---------- 2026-10-25: 엑셀 업로드 + 보고서 출력 ----------
+
+
+def test_report_download_for_all_stations_is_a_readable_excel():
+    import io
+
+    import pandas as pd
+
+    r = client.get("/api/report")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/vnd.openxmlformats")
+    df = pd.read_excel(io.BytesIO(r.content))
+    assert list(df.columns) == [
+        "역", "문", "부품", "설치일", "권장 주기(년)", "주기 범위(년)",
+        "판정", "다음 교체 예정일", "남은 기간(일)", "상태", "교체 기록 있음",
+    ]
+    assert len(df) > 1000  # 역 24개 x 문마다 여러 부품이라 수천 행이 나온다 — "비어 있지 않다"가 핵심
+    assert df["역"].nunique() == 24
+
+
+def test_report_download_for_one_station_is_scoped_to_that_station():
+    import io
+
+    import pandas as pd
+
+    r = client.get("/api/report?station_id=1")
+    assert r.status_code == 200
+    df = pd.read_excel(io.BytesIO(r.content))
+    assert set(df["역"]) == {"부전"}
+
+
+def test_report_download_for_unknown_station_is_404():
+    r = client.get("/api/report?station_id=999999")
+    assert r.status_code == 404
+
+
+def test_upload_unknown_station_name_is_rejected_without_saving_anything():
+    from psd.excel_io import rows_to_excel_bytes
+
+    content = rows_to_excel_bytes([{
+        "역": "존재하지않는역", "방향": "", "문번호": "", "교체일": "2026-01-01",
+        "사유": "고장", "부품": "종합제어반 릴레이", "입력자": "",
+    }])
+    r = client.post(
+        "/api/replacement-records/upload",
+        files={"file": ("t.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert r.status_code == 400
+    body = r.json()["detail"]
+    assert "존재하지않는역" in str(body)
+
+
+def test_upload_rejects_excel_missing_required_columns():
+    import pandas as pd
+    from io import BytesIO
+
+    buf = BytesIO()
+    pd.DataFrame([{"역": "부전"}]).to_excel(buf, index=False)
+    r = client.post(
+        "/api/replacement-records/upload",
+        files={"file": ("t.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert r.status_code == 400
+    assert "필요한 열" in r.json()["detail"]

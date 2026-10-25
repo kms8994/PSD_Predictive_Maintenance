@@ -4,20 +4,25 @@
 """
 from __future__ import annotations
 
+import io
 from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, HTTPException
+import pandas as pd
+from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from psd.catalog import PART_TYPES, SIDES
+from psd.catalog import NAME_TO_CODE, PART_TYPES, SIDES
 from psd.cycle import (
     IFM_WEIGHT_RANGE,
     MOTOR_WEIGHT_RANGE,
+    SERVICE_INTERVAL_MIN,
     STATIONS,
     AWS_STATION_NAMES,
     daily_af,
@@ -29,6 +34,7 @@ from psd.cycle import (
     single_cause_cycle,
 )
 from psd.db import get_session
+from psd.excel_io import SIDE_LABEL_TO_CODE, ExcelFormatError, parse_upload
 from psd.models import CycleResult, Door, Part, ReplacementPart, ReplacementRecord, Station
 from psd.schemas import ReplacementRecordIn
 from psd.status import (
@@ -238,6 +244,7 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
             "observatory": station.observatory_id,
             "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[station.name]],
             "near_water": station.near_water,
+            "service_interval_min": SERVICE_INTERVAL_MIN,  # 참고용, 계산에는 안 씀 — psd/cycle.py 주석 참고
         },
         "psc": _unit_dict(psc) if psc else None,
         "sides": {sid: {"label": label, "doors": sides[sid]} for sid, label in SIDES.items()},
@@ -440,49 +447,72 @@ def replacement_volume(years_ahead: int = 5, db: Session = Depends(get_db)):
 # ---------- 4-7. 교체 기록 입력 ----------
 
 
-@app.post("/api/replacement-records", status_code=201)
-def create_replacement_record(payload: ReplacementRecordIn, db: Session = Depends(get_db)):
-    station = db.get(Station, payload.station_id)
+def _resolve_parts(db: Session, station_id: int, door_id: int | None, part_type_codes: list[str]) -> dict[str, Part]:
+    """역·문·부품이 실제 있는지 확인하고 코드→Part 매핑을 돌려준다. 단건 입력과 엑셀 업로드가
+    같이 쓴다 — 역·문 해석(이름→id)은 호출하는 쪽에서 미리 끝내고 와야 한다."""
+    station = db.get(Station, station_id)
     if station is None:
         raise HTTPException(404, "역 없음")
-
-    door = None
-    if payload.door_id is not None:
-        door = db.get(Door, payload.door_id)
-        if door is None or door.station_id != payload.station_id:
+    if door_id is not None:
+        door = db.get(Door, door_id)
+        if door is None or door.station_id != station_id:
             raise HTTPException(404, "그 역에 그 문이 없음")
 
     parts = {
         p.part_type_code: p
         for p in db.execute(
             select(Part).where(
-                Part.station_id == payload.station_id,
-                Part.door_id == payload.door_id,
-                Part.part_type_code.in_(payload.part_type_codes),
+                Part.station_id == station_id,
+                Part.door_id == door_id,
+                Part.part_type_code.in_(part_type_codes),
             )
         ).scalars()
     }
-    missing = set(payload.part_type_codes) - set(parts)
+    missing = set(part_type_codes) - set(parts)
     if missing:
         raise HTTPException(400, f"그 역·문에 없는 부품 종류: {sorted(missing)}")
+    return parts
 
+
+def _insert_replacement_record(
+    db: Session,
+    station_id: int,
+    door_id: int | None,
+    replaced_on: date,
+    reason: str,
+    part_type_codes: list[str],
+    created_by: str | None,
+    parts: dict[str, Part],
+) -> ReplacementRecord:
+    """레코드 1건 + 교체 부품들을 세션에 올린다(커밋은 호출하는 쪽에서 — 엑셀 업로드는
+    여러 건을 한 트랜잭션으로 묶어야 해서)."""
     record = ReplacementRecord(
-        replaced_on=payload.replaced_on,
-        station_id=payload.station_id,
-        door_id=payload.door_id,
-        reason=payload.reason,
-        created_by=payload.created_by,
+        replaced_on=replaced_on,
+        station_id=station_id,
+        door_id=door_id,
+        reason=reason,
+        created_by=created_by,
     )
     db.add(record)
     db.flush()
 
-    for code in payload.part_type_codes:
+    for code in part_type_codes:
         db.add(ReplacementPart(record_id=record.id, part_type_code=code))
         part = parts[code]
-        if not part.has_record or payload.replaced_on > part.install_date:
-            part.install_date = payload.replaced_on
+        if not part.has_record or replaced_on > part.install_date:
+            part.install_date = replaced_on
         part.has_record = True
 
+    return record
+
+
+@app.post("/api/replacement-records", status_code=201)
+def create_replacement_record(payload: ReplacementRecordIn, db: Session = Depends(get_db)):
+    parts = _resolve_parts(db, payload.station_id, payload.door_id, payload.part_type_codes)
+    record = _insert_replacement_record(
+        db, payload.station_id, payload.door_id, payload.replaced_on, payload.reason,
+        payload.part_type_codes, payload.created_by, parts,
+    )
     db.commit()
 
     return {
@@ -497,6 +527,121 @@ def create_replacement_record(payload: ReplacementRecordIn, db: Session = Depend
             for code in payload.part_type_codes
         ],
     }
+
+
+@app.post("/api/replacement-records/upload", status_code=201)
+async def upload_replacement_records(file: UploadFile, db: Session = Depends(get_db)):
+    """교체(고장) 기록을 엑셀로 한 번에 여러 건 올린다(열 형식은 psd/excel_io.py).
+
+    한 행이라도 틀리면 아무것도 저장하지 않는다(all-or-nothing) — 절반만 들어가면 어디까지
+    들어갔는지 헷갈리고, 엑셀을 고쳐서 다시 올리기도 더 어려워진다. 그래서 전체 행을 먼저
+    검사(역·문·부품이 실제 있는지)하고, 문제 있는 행을 전부 모아 한 번에 알려준다.
+    """
+    content = await file.read()
+    try:
+        parsed = parse_upload(content)
+    except ExcelFormatError as e:
+        raise HTTPException(400, str(e))
+
+    station_by_name = {s.name: s for s in db.execute(select(Station)).scalars()}
+    errors: list[str] = []
+    resolved = []
+    for row in parsed:
+        station = station_by_name.get(row.station_name)
+        if station is None:
+            errors.append(f"{row.row_no}행: 역 이름을 못 찾음: {row.station_name!r}")
+            continue
+
+        door_id = None
+        if row.side_label:
+            side_code = SIDE_LABEL_TO_CODE[row.side_label]
+            try:
+                car_s, position_s = row.door_no.split("-")
+                car, position = int(car_s), int(position_s)
+            except Exception:
+                errors.append(f"{row.row_no}행: 문번호 형식이 잘못됨(예: '1-1'): {row.door_no!r}")
+                continue
+            door = db.execute(
+                select(Door).where(
+                    Door.station_id == station.id, Door.side == side_code,
+                    Door.car == car, Door.position == position,
+                )
+            ).scalar_one_or_none()
+            if door is None:
+                errors.append(f"{row.row_no}행: {row.station_name} {row.side_label} {row.door_no} 문을 못 찾음")
+                continue
+            door_id = door.id
+
+        part_codes = [NAME_TO_CODE[name] for name in row.part_names]
+        try:
+            parts = _resolve_parts(db, station.id, door_id, part_codes)
+        except HTTPException as e:
+            errors.append(f"{row.row_no}행: {e.detail}")
+            continue
+
+        resolved.append((row, station.id, door_id, part_codes, parts))
+
+    if errors:
+        raise HTTPException(400, {"message": f"{len(errors)}건 오류 — 아무것도 저장하지 않았습니다", "errors": errors})
+
+    records = [
+        _insert_replacement_record(db, station_id, door_id, row.replaced_on, row.reason_code, part_codes, row.created_by, parts)
+        for row, station_id, door_id, part_codes, parts in resolved
+    ]
+    db.commit()
+
+    return {"inserted": len(records), "record_ids": [r.id for r in records]}
+
+
+# ---------- 4-8. 보고서 출력 (2026-10-25 사용자 지시) ----------
+
+
+@app.get("/api/report")
+def download_report(station_id: int | None = None, db: Session = Depends(get_db)):
+    """지금 화면에 보이는 상태를 엑셀로 내려받는다. station_id 없으면 24개 역 전체."""
+    if station_id is not None:
+        station = db.get(Station, station_id)
+        if station is None:
+            raise HTTPException(404, "역 없음")
+        statuses = station_unit_statuses(db, station_id)
+        filename = f"PSD_보고서_{station.name}_{date.today():%Y%m%d}.xlsx"
+    else:
+        statuses = all_unit_statuses(db)
+        filename = f"PSD_보고서_전체_{date.today():%Y%m%d}.xlsx"
+
+    station_names = {s.id: s.name for s in db.execute(select(Station)).scalars()}
+    door_labels = {d.id: d.label for d in db.execute(select(Door)).scalars()}
+
+    rows = [
+        {
+            "역": station_names[u.station_id],
+            "문": door_labels.get(u.door_id, "역 공통(종합제어반)"),
+            "부품": NAME_BY_CODE[u.part_type_code],
+            "설치일": u.install_date.isoformat(),
+            "권장 주기(년)": round(u.cycle.base_years, 2),
+            "주기 범위(년)": f"{u.cycle.lo_years:.1f}-{u.cycle.hi_years:.1f}",
+            "판정": u.cycle.judgment,
+            "다음 교체 예정일": u.due.isoformat(),
+            "남은 기간(일)": u.days_left,
+            "상태": u.status,
+            "교체 기록 있음": "예" if u.has_record else "아니오",
+        }
+        for u in sorted(statuses, key=lambda u: (station_names[u.station_id], u.door_id or 0, u.part_type_code))
+    ]
+
+    buf = io.BytesIO()
+    pd.DataFrame(rows).to_excel(buf, index=False)
+    buf.seek(0)
+    # 코드 리뷰로 찾은 버그: HTTP 헤더는 latin-1만 되는데 파일명에 한글이 들어가면
+    # StreamingResponse 생성 자체가 UnicodeEncodeError로 죽는다. RFC 5987대로
+    # filename*=UTF-8''(퍼센트 인코딩)을 같이 주고, 예전 클라이언트용 filename=은
+    # ASCII만 남긴 이름으로 둔다.
+    ascii_name = "PSD_report.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 # ---------- 화면 (설계_v2.md 6-3, MVP_계획.md 5단계) ----------
