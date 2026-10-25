@@ -49,18 +49,13 @@ NAME_BY_CODE = {p["code"]: p["name"] for p in PART_TYPES}
 WEATHER_PART_CODES = ["DCM", "IFM", "MOTOR"]
 AWS_STN_BY_STATION = {s.name: s.aws_stn for s in STATIONS}  # 역 이름 -> 가장 가까운 AWS 지점 코드
 
-# 고장 원인별 열화 속도·비중 기본값(4단계_계산공식_근거조사.md 1·3장, 3-1). 부품 상세의
-# "근거" 표에 쓴다. DCM·IFM은 역이 바다·하천에 인접한지(near_water)에 따라 습도(부식) 비중의
-# 기본값이 다르다(2026-10-24 미팅 답변 Q5, 범위는 동일) — 역 단위로 둘을 나눠 둔다.
-CAUSES_INLAND = {
+# 고장 원인별 열화 속도·비중 기본값(4단계_계산공식_근거조사.md 1·3장). 부품 상세의 "근거"
+# 표에 쓴다. 근거가 없어 균등 기본값 + 범위로 두며, 역 구분은 없다 — AWS 실측 습도가 이미
+# 역(정확히는 aws_stn)마다 다르게 들어가므로(2-1) 비중까지 역별로 나눌 근거는 더 없다.
+CAUSES = {
     "DCM": [("콘덴서 노화", "기온", "cap", "25% (10–50%)"), ("납땜 열피로", "일교차", "sol", "25% (10–50%)"), ("습도 부식", "습도·기온", "hum", "25% (10–50%)"), ("날씨 무관", "—", None, "25% (10–50%)")],
     "IFM": [("접점 부식", "습도·기온", "hum", "50% (20–80%)"), ("날씨 무관", "—", None, "50%")],
     "MOTOR": [("권선 절연 노화", "기온", "mot", "30% (10–50%)"), ("날씨 무관(베어링 등)", "—", None, "70%")],
-}
-CAUSES_COASTAL = {
-    "DCM": [("콘덴서 노화", "기온", "cap", "15% (10–50%)"), ("납땜 열피로", "일교차", "sol", "20% (10–50%)"), ("습도 부식", "습도·기온", "hum", "40% (10–50%)"), ("날씨 무관", "—", None, "25% (10–50%)")],
-    "IFM": [("접점 부식", "습도·기온", "hum", "65% (20–80%)"), ("날씨 무관", "—", None, "35%")],
-    "MOTOR": CAUSES_INLAND["MOTOR"],  # 모터는 기온(NSWC-98) 근거라 역 구분 없음
 }
 
 
@@ -302,7 +297,7 @@ def get_part(part_id: int, db: Session = Depends(get_db)):
             "weather_period": {"start": climate["start"], "end": climate["end"]},
             "causes": [
                 {"name": name, "variable": var, "af": round(af[key], 2) if key else 1.0, "weight_default": weight}
-                for name, var, key, weight in (CAUSES_COASTAL if part.station.near_water else CAUSES_INLAND)[part.part_type_code]
+                for name, var, key, weight in CAUSES[part.part_type_code]
             ],
         }
 

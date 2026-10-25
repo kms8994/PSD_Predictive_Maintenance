@@ -11,10 +11,11 @@ PSD 실제 사용 기간에 맞춰 2022~2025년으로 바뀌었다(scripts/prepr
 차이가 나, 2026-10-24 미팅 답변(Q5) "역사별 환경(바다 인접)에 따라 장애건수가 구분됨"이
 실측으로도 확인됐다.
 
-2026-10-24 미팅 답변(Q5)으로 역별 바다·하천 인접 여부(near_water)가 DCM·IFM 릴레이 비중의
-기본값에도 반영돼 있다(아래 near_water 주석). 이제 AWS 실측 습도가 지점별로 이미 다르게
-들어가므로, near_water 비중 가중은 같은 방향 효과를 한 번 더 얹는 중복일 수 있다 — 아직
-걷어내지는 않았고, 한계로 남겨 둔다.
+2026-10-24 미팅 답변(Q5) "역사별 환경(바다 인접)에 따라 장애건수가 구분됨"은 처음엔 역별
+near_water(바다·하천 인접) 플래그로 DCM·IFM 릴레이 비중의 기본값을 옮기는 식으로 반영했었다.
+2026-10-25: AWS 실측 습도가 이제 지점별로 직접 다르게 들어가 같은 효과를 중복으로 내고
+있었던 걸 확인하고 비중 가중은 걷어냈다 — near_water는 역 화면 표시용으로만 남아 있다(아래
+near_water 주석).
 
     python -m psd.cycle          # 24개 역 x 7종 결과 표 출력
 """
@@ -119,26 +120,26 @@ AWS_STATION_NAMES: dict[str, str] = {
 # 질문 5). 위 STATIONS의 near_water는 역 이름·위치로 추정한 임시값이며, 코레일/멘토 확인 전까지는
 # 가정으로 다룬다. 확실한 역: 센텀·벡스코(수영강 하구), 신해운대·송정·오시리아·일광(해수욕장
 # 인접), 월내(포구), 서생(해안 면), 개운포(온산만 하구), 태화강(태화강 바로 옆). 그 외는 내륙으로
-# 보고 false. 2026-10-24에 확인한 기상청 AWS(방재기상관측) 지점명(부산: 기장·해운대 등, 울산:
-# 간절곶·장생포 등)이 이 분류와 대체로 맞아떨어지지만, 역 단위 확정 근거로 쓰기엔 아직 부족하다.
+# 보고 false.
+#
+# **2026-10-25: 비중 기본값 계산에는 더 이상 안 쓴다.** near_water는 원래 "역별 실측 습도가
+# 없으니 바다 인접 여부로 비중을 대신 옮기자"는 임시방편이었다. 이제 AWS 실측 습도가
+# aws_stn별로 이미 다르게 들어가(위 AWS_STATION_NAMES, 4단계_계산공식_근거조사.md 2-1) 같은
+# 효과를 가속 계수(af_hum) 쪽에서 직접 낸다 — 비중까지 또 옮기면 같은 "해안=습함" 효과를 두 번
+# 적용하는 중복이 된다. near_water 필드 자체는 역 화면 표시·참고용으로만 남겨 둔다.
 
 OBS_CODE = {"부산": "159", "울산": "152"}  # ASOS 코드. 이제 날씨 계산에는 안 쓰고 DB 적재(scripts/load_weather.py)·역 화면 표시용으로만 남음
 
 PARTS = ["모터", "타이밍벨트", "풀리", "도어 행거", "DCM", "IFM 릴레이", "종합제어반 릴레이"]
 WEATHER_PARTS = {"DCM", "IFM 릴레이", "모터"}
 
-# 비중 범위 (4단계_계산공식_근거조사.md 3장). 범위(최소~최대)는 근거가 없어 그대로 두고,
-# "기본값"만 2026-10-24 미팅 답변(바다·하천 인접 역은 습도 쪽 영향이 뚜렷함)에 맞춰 역 성격별로
-# 둘로 나눈다. DCM_DEFAULT·IFM_WEIGHT_RANGE 이름은 기존 코드·테스트와 호환되도록 "내륙(근거
-# 없음→균등)" 기본값을 그대로 가리킨다.
+# 비중 범위 (4단계_계산공식_근거조사.md 3장). 근거가 없으므로 기본값은 균등, 범위는 전체
+# 격자/구간으로 계산한다 — 역 성격과 무관하게 전부 같다(위 near_water 주석 참고: AWS 실측
+# 습도가 이미 역별로 다르게 들어가므로 비중까지 역별로 나눌 근거가 더 없어졌다).
 DCM_STEPS = (0.1, 0.2, 0.3, 0.4, 0.5)
-DCM_DEFAULT_INLAND = (0.25, 0.25, 0.25, 0.25)  # (콘덴서/기온, 납땜/일교차, 부식/습도, 날씨무관)
-DCM_DEFAULT_COASTAL = (0.15, 0.20, 0.40, 0.25)  # 습도(부식) 비중을 올리고 기온(콘덴서) 비중을 내림
-DCM_DEFAULT = DCM_DEFAULT_INLAND
+DCM_DEFAULT = (0.25, 0.25, 0.25, 0.25)  # (콘덴서/기온, 납땜/일교차, 부식/습도, 날씨무관)
 
-IFM_WEIGHT_RANGE_INLAND = (0.2, 0.8, 0.5)  # (최소, 최대, 기본값)
-IFM_WEIGHT_RANGE_COASTAL = (0.2, 0.8, 0.65)  # 범위는 같고 기본값만 습도 쪽으로 올림
-IFM_WEIGHT_RANGE = IFM_WEIGHT_RANGE_INLAND
+IFM_WEIGHT_RANGE = (0.2, 0.8, 0.5)  # (최소, 최대, 기본값)
 
 MOTOR_WEIGHT_RANGE = (0.1, 0.5, 0.3)  # 모터 권선은 기온(NSWC-98 식) 근거라 역 구분 없이 유지
 
@@ -280,18 +281,14 @@ def _years(weighted_af: float) -> float:
     return REPLACEMENT_YEARS / weighted_af
 
 
-def dcm_cycle(af: dict[str, float], near_water: bool = False) -> Cycle:
-    """DCM: 콘덴서/납땜/부식/날씨무관 4원인, 10%~50% 격자 전체를 범위로 계산.
-
-    범위(lo, hi)는 비중 근거가 없다는 가정을 그대로 반영해 역 성격과 무관하게 전체 격자로 낸다.
-    기본값(base)만 near_water 역에서 습도(부식) 비중이 높은 DCM_DEFAULT_COASTAL을 쓴다.
-    """
+def dcm_cycle(af: dict[str, float]) -> Cycle:
+    """DCM: 콘덴서/납땜/부식/날씨무관 4원인, 10%~50% 격자 전체를 범위로 계산."""
     values = []
     for a, b, c in itertools.product(DCM_STEPS, repeat=3):
         o = 1 - a - b - c
         if 0.1 - 1e-9 <= o <= 0.5 + 1e-9:
             values.append(_years(a * af["cap"] + b * af["sol"] + c * af["hum"] + o))
-    a0, b0, c0, o0 = DCM_DEFAULT_COASTAL if near_water else DCM_DEFAULT_INLAND
+    a0, b0, c0, o0 = DCM_DEFAULT
     base = _years(a0 * af["cap"] + b0 * af["sol"] + c0 * af["hum"] + o0)
     lo, hi = min(values), max(values)
     return Cycle(base, lo, hi, judge(lo, hi))
@@ -311,12 +308,11 @@ def fixed_cycle() -> Cycle:
     return Cycle(REPLACEMENT_YEARS, REPLACEMENT_YEARS, REPLACEMENT_YEARS, "날씨무관")
 
 
-def part_cycle(part: str, af: dict[str, float], near_water: bool = False) -> Cycle:
+def part_cycle(part: str, af: dict[str, float]) -> Cycle:
     if part == "DCM":
-        return dcm_cycle(af, near_water)
+        return dcm_cycle(af)
     if part == "IFM 릴레이":
-        weight_range = IFM_WEIGHT_RANGE_COASTAL if near_water else IFM_WEIGHT_RANGE_INLAND
-        return single_cause_cycle(af["hum"], weight_range)
+        return single_cause_cycle(af["hum"], IFM_WEIGHT_RANGE)
     if part == "모터":
         return single_cause_cycle(af["mot"], MOTOR_WEIGHT_RANGE)
     return fixed_cycle()
@@ -341,7 +337,7 @@ def compute_all() -> list[StationPartCycle]:
     ref = reference_climate(weather)
     af_by_stn = period_average_af(daily_af(weather, ref))
     return [
-        StationPartCycle(station.name, part, part_cycle(part, af_by_stn[station.aws_stn], station.near_water))
+        StationPartCycle(station.name, part, part_cycle(part, af_by_stn[station.aws_stn]))
         for station in STATIONS
         for part in PARTS
     ]

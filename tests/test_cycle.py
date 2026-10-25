@@ -10,8 +10,6 @@ import pytest
 
 from psd.cycle import (
     IFM_WEIGHT_RANGE,
-    IFM_WEIGHT_RANGE_COASTAL,
-    IFM_WEIGHT_RANGE_INLAND,
     MOTOR_WEIGHT_RANGE,
     Cycle,
     af_capacitor,
@@ -178,49 +176,26 @@ def test_fixed_cycle_is_always_ten_years():
     assert result == Cycle(10.0, 10.0, 10.0, "날씨무관")
 
 
-# ---------- near_water: 2026-10-24 미팅 답변(Q5) 반영 ----------
+# ---------- 비중 기본값: near_water 가중 제거 (2026-10-25) ----------
 #
-# 바다·하천 인접 역은 습도(부식) 쪽 영향이 뚜렷하다는 담당자 답변에 따라, DCM·IFM 릴레이의
-# "기본값(점추정)"만 습도 비중을 높게 잡는다. 범위(최소~최대)는 비중 자체의 근거가 없다는
-# 한계가 그대로라 역 구분과 무관하게 같아야 한다.
+# AWS 실측 습도가 이제 역(aws_stn)마다 직접 다르게 들어가므로, 비중까지 역별로 나누면
+# 같은 "해안=습함" 효과를 중복 적용하게 된다. dcm_cycle·part_cycle은 역 구분 없이
+# 똑같은 기본값·범위를 써야 한다 — near_water 인자를 받지 않는다.
 
 
-def test_coastal_default_shifts_toward_humidity_without_changing_range():
-    t, rh, dt, _ = STATIONS["C 습하고 일교차 큼"]
-    af = _af(t, rh, dt)
+def test_dcm_cycle_does_not_take_near_water_argument():
+    import inspect
 
-    inland = dcm_cycle(af, near_water=False)
-    coastal = dcm_cycle(af, near_water=True)
-
-    assert inland.lo_years == pytest.approx(coastal.lo_years)
-    assert inland.hi_years == pytest.approx(coastal.hi_years)
-    assert coastal.base_years != pytest.approx(inland.base_years)
-    assert inland.lo_years <= coastal.base_years <= inland.hi_years
+    assert "near_water" not in inspect.signature(dcm_cycle).parameters
+    assert "near_water" not in inspect.signature(part_cycle).parameters
 
 
-def test_coastal_ifm_default_is_higher_weight_but_same_range():
-    assert IFM_WEIGHT_RANGE_COASTAL[:2] == IFM_WEIGHT_RANGE_INLAND[:2]
-    assert IFM_WEIGHT_RANGE_COASTAL[2] > IFM_WEIGHT_RANGE_INLAND[2]
-
-
-def test_part_cycle_near_water_only_affects_humidity_sensitive_parts():
+def test_part_cycle_is_deterministic_regardless_of_station():
+    """같은 날씨(af)라면 역이 달라도 결과가 같아야 한다 — 비중에 역별 가중이 없다는 뜻."""
     t, rh, dt, _ = STATIONS["A 해안"]
     af = _af(t, rh, dt)
-
-    for part in ("DCM", "IFM 릴레이"):
-        inland = part_cycle(part, af, near_water=False)
-        coastal = part_cycle(part, af, near_water=True)
-        assert coastal.base_years != pytest.approx(inland.base_years)
-        assert inland.lo_years == pytest.approx(coastal.lo_years)
-        assert inland.hi_years == pytest.approx(coastal.hi_years)
-
-    # 모터는 기온(NSWC-98) 근거라 near_water와 무관해야 한다
-    motor_inland = part_cycle("모터", af, near_water=False)
-    motor_coastal = part_cycle("모터", af, near_water=True)
-    assert motor_inland == motor_coastal
-
-    # 날씨 무관 부품도 near_water와 무관해야 한다
-    assert part_cycle("타이밍벨트", af, near_water=False) == part_cycle("타이밍벨트", af, near_water=True)
+    for part in ("DCM", "IFM 릴레이", "모터", "타이밍벨트"):
+        assert part_cycle(part, af) == part_cycle(part, af)
 
 
 # ---------- psd_install_date: 2026-10-24 미팅 답변(Q3) 반영 ----------
