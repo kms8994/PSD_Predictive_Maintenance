@@ -220,18 +220,29 @@ def test_all_opened_stations_default_to_2022_psd_install_date_except_bukulsan():
 
 
 def _synthetic_weather() -> pd.DataFrame:
-    """실제 두 AWS 지점(해안 기장 923, 내륙 동래 940) 코드로 흉내 낸 작은 날씨 데이터프레임.
+    """실제 AWS 지점 코드로 흉내 낸 작은 날씨 데이터프레임.
 
     observatory_climate·period_average_af는 station_counts()(= STATIONS의 실제 aws_stn)를
-    기준으로 묶으므로, 임의의 코드(예: "A"/"B")가 아니라 실제 STATIONS에 쓰이는 코드를 써야 한다.
+    기준으로 묶고, 한 지점이라도 날씨 데이터가 하나도 없으면 ValueError를 낸다(코드 리뷰로
+    찾은 버그 — 빈 그룹을 조용히 두면 NaN이 전체로 퍼졌었다). 그래서 임의의 코드(예: "A"/"B")
+    둘만 만들면 안 되고, STATIONS에 실제로 쓰이는 aws_stn 전부에 데이터를 채워야 한다.
+    해안(기장 923)만 습도를 80%로 높게, 나머지는 전부 60%로 둔다.
     """
     rows = []
-    for day in range(1, 11):
-        rows.append({"date": pd.Timestamp("2022-01-01") + pd.Timedelta(days=day), "stn": "923",
-                      "ta_avg": 15.0, "ta_max": 19.0, "ta_min": 11.0, "hm_avg": 80.0, "dtr": 8.0})
-        rows.append({"date": pd.Timestamp("2022-01-01") + pd.Timedelta(days=day), "stn": "940",
-                      "ta_avg": 15.0, "ta_max": 19.0, "ta_min": 11.0, "hm_avg": 60.0, "dtr": 8.0})
+    for stn in {s.aws_stn for s in CYCLE_STATIONS}:
+        hm = 80.0 if stn == "923" else 60.0
+        for day in range(1, 11):
+            rows.append({"date": pd.Timestamp("2022-01-01") + pd.Timedelta(days=day), "stn": stn,
+                         "ta_avg": 15.0, "ta_max": 19.0, "ta_min": 11.0, "hm_avg": hm, "dtr": 8.0})
     return pd.DataFrame(rows)
+
+
+def test_observatory_climate_raises_on_aws_station_with_no_weather_rows():
+    """빈 그룹을 조용히 NaN으로 넘기면 reference_climate 전체가 오염된다 — 바로 에러를 내야 한다."""
+    weather = _synthetic_weather()
+    weather = weather[weather["stn"] != "937"]  # 해운대 데이터를 통째로 빼서 빈 그룹을 만든다
+    with pytest.raises(ValueError, match="937"):
+        observatory_climate(weather)
 
 
 def test_station_counts_groups_by_aws_stn_not_obs():
@@ -244,12 +255,16 @@ def test_station_counts_groups_by_aws_stn_not_obs():
 
 def test_observatory_climate_and_reference_climate_use_aws_groups():
     weather = _synthetic_weather()
-    # station_counts()가 실제 CYCLE_STATIONS를 쓰므로, 합성 데이터의 지점 "A"/"B"가 그 안에
-    # 없으면 reference_climate이 0으로 나눈다 — 여기서는 observatory_climate 자체만 검증한다
     climate = observatory_climate(weather)
     assert climate["923"]["RH"] == pytest.approx(80.0)
     assert climate["940"]["RH"] == pytest.approx(60.0)
     assert climate["923"]["T"] == pytest.approx(15.0)
+
+    # 전부 같은 기온(15.0)이므로 가중 평균을 내도 기준 기온은 그대로 15.0이어야 한다
+    ref = reference_climate(weather)
+    assert ref["T"] == pytest.approx(15.0)
+    # 습도는 기장(923, 80%)만 높고 나머지는 60%라 기준 습도가 60%보다는 커야 한다
+    assert ref["RH"] > 60.0
 
 
 def test_period_average_af_differs_between_aws_stations():

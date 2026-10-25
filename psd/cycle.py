@@ -114,6 +114,17 @@ AWS_STATION_NAMES: dict[str, str] = {
     "943": "매곡", "949": "정자", "954": "온산",
 }
 
+# 코드 리뷰로 찾은 버그: STATIONS의 aws_stn과 AWS_STATION_NAMES는 둘 다 손으로 관리하는
+# 별개 블록이라, 둘이 어긋나도(새 역 추가 시 aws_stn 오타, aws_stn 기본값 ""을 안 채움 등)
+# 아무도 바로 알아채지 못했다 — psd/api.py 여러 곳에서 AWS_STATION_NAMES[aws_stn]을 쓸 때마다
+# KeyError로 흩어져서 터지게 된다. 모듈을 불러오는 시점에 한 번에 검사해 바로 에러를 낸다.
+_unknown_aws_stn = {s.aws_stn for s in STATIONS} - set(AWS_STATION_NAMES)
+if _unknown_aws_stn:
+    raise ValueError(
+        f"STATIONS에 AWS_STATION_NAMES에 없는 aws_stn 코드가 있습니다: {_unknown_aws_stn} "
+        f"(역 목록에 aws_stn을 안 채웠거나 오타일 수 있습니다)"
+    )
+
 # near_water: 공개 지리 정보(역 주변 해변·포구·하천 유무)로 추정한 값이다. 2026-10-24 미팅에서
 # 코레일 담당자가 "역사별 환경(바다 인접)에 따라 특정 부품의 장애건수는 명확히 구분됨"이라고
 # 답변했지만, 정확한 역별 목록은 받지 못했다(보안사규상 상세 데이터 제공 불가, 미팅/[답변]...hwp
@@ -177,6 +188,14 @@ def observatory_climate(weather: pd.DataFrame) -> dict[str, dict[str, float]]:
     result = {}
     for stn in station_counts():
         g = weather[weather["stn"] == stn]
+        if g.empty:
+            # 코드 리뷰로 찾은 버그: 여기서 조용히 넘어가면 g["ta_avg"].mean() 등이 NaN을
+            # 돌려주고, 그 NaN이 reference_climate()의 가중 평균(합산)을 전부 오염시켜
+            # compute_all()이 24개 역 x 7개 부품 전부를 아무 에러 없이 NaN으로 계산해 버린다.
+            raise ValueError(
+                f"AWS 지점 {stn}({AWS_STATION_NAMES.get(stn, '?')})의 날씨 데이터가 없습니다 — "
+                f"{AWS_WEATHER_CSV.name}에 해당 지점이 빠졌거나 STATIONS의 aws_stn이 잘못됐을 수 있습니다."
+            )
         result[stn] = {
             "T": g["ta_avg"].mean(),
             "RH": g["hm_avg"].mean(),
@@ -244,6 +263,8 @@ def period_average_af(daily: pd.DataFrame) -> dict[str, dict[str, float]]:
     result = {}
     for stn in station_counts():
         g = daily[daily["stn"] == stn]
+        if g.empty:  # observatory_climate()와 같은 이유 — 빈 그룹을 그냥 두면 NaN이 조용히 퍼진다
+            raise ValueError(f"AWS 지점 {stn}({AWS_STATION_NAMES.get(stn, '?')})의 날씨 데이터가 없습니다.")
         result[stn] = {
             "cap": g["af_cap"].mean(),
             "sol": g["af_sol"].mean(),

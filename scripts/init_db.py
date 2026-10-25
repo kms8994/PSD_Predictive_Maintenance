@@ -11,6 +11,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from sqlalchemy import inspect, text
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -26,6 +28,29 @@ from psd.catalog import (  # noqa: E402
 from psd.cycle import OBS_CODE, STATIONS  # noqa: E402
 from psd.db import Base, engine, get_session  # noqa: E402
 from psd.models import Door, Observatory, Part, PartType, Station  # noqa: E402
+
+# Alembic 같은 마이그레이션 도구가 없는 프로젝트다. Base.metadata.create_all()은 없는 표만
+# 새로 만들고, 이미 있는 표에 컬럼을 추가해 주지는 않는다(SQLAlchemy 자체 제약) — 그래서
+# near_water처럼 모델에 나중에 추가된 컬럼은 기존 DB에서 빠진 채로 남는다. 코드 리뷰로 찾은
+# 버그: 실제로 이 세션에서 "Unknown column 'near_water'"로 한 번 재현됐고, 그때는 수동
+# ALTER TABLE로 넘어갔다(스크립트엔 안 남음). 여기서 같은 걸 멱등적으로(이미 있으면 건너뜀)
+# 자동으로 해, 다음에 또 같은 종류의 컬럼이 늘어도 수동 개입 없이 넘어가게 한다.
+_NEW_COLUMNS = [
+    ("stations", "near_water", "BOOLEAN NOT NULL DEFAULT FALSE"),
+]
+
+
+def sync_schema(engine) -> None:
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for table, column, ddl in _NEW_COLUMNS:
+            if table not in existing_tables:
+                continue  # 표 자체가 없으면 create_all()이 컬럼까지 포함해 새로 만들어 줌
+            existing_columns = {c["name"] for c in inspector.get_columns(table)}
+            if column not in existing_columns:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+                print(f"스키마 동기화: {table}.{column} 컬럼 추가")
 
 
 def seed(session) -> None:
@@ -89,6 +114,7 @@ def main() -> None:
     if args.reset:
         Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
+    sync_schema(engine)
 
     session = get_session()
     try:
