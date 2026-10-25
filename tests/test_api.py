@@ -61,11 +61,13 @@ def test_report_download_for_all_stations_is_a_readable_excel():
     assert r.headers["content-type"].startswith("application/vnd.openxmlformats")
     df = pd.read_excel(io.BytesIO(r.content))
     assert list(df.columns) == [
-        "역", "문", "부품", "설치일", "권장 주기(년)", "주기 범위(년)",
-        "판정", "다음 교체 예정일", "남은 기간(일)", "상태", "교체 기록 있음",
+        "역", "문", "부품", "상태", "다음 교체 예정일", "남은 기간(일)",
+        "권장 주기(년)", "주기 범위(년)", "판정", "설치일", "교체 기록 있음",
     ]
     assert len(df) > 1000  # 역 24개 x 문마다 여러 부품이라 수천 행이 나온다 — "비어 있지 않다"가 핵심
     assert df["역"].nunique() == 24
+    assert set(df["상태"]) <= {"빨강", "노랑", "초록", "확인 필요"}  # 코드값(확인_필요)이 아니라 사람이 읽는 표시값
+    assert pd.api.types.is_datetime64_any_dtype(df["다음 교체 예정일"])  # 문자열이 아니라 엑셀 날짜형
 
 
 def test_report_download_for_one_station_is_scoped_to_that_station():

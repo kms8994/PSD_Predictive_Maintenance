@@ -10,7 +10,6 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
 
-import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -597,6 +596,58 @@ async def upload_replacement_records(file: UploadFile, db: Session = Depends(get
 # ---------- 4-8. 보고서 출력 (2026-10-25 사용자 지시) ----------
 
 
+# 보고서 색상·표시 이름은 psd/web/index.html의 .pill 색(--red/--amber/--green/--gray)과 맞췄다.
+_REPORT_COLUMNS = ["역", "문", "부품", "상태", "다음 교체 예정일", "남은 기간(일)", "권장 주기(년)", "주기 범위(년)", "판정", "설치일", "교체 기록 있음"]
+_REPORT_STATUS_LABEL = {"빨강": "빨강", "노랑": "노랑", "초록": "초록", "확인_필요": "확인 필요"}
+_REPORT_STATUS_FILL = {"빨강": "FBE8E4", "노랑": "FBF1DC", "초록": "E2F3E9", "확인_필요": "ECEFF3"}
+_REPORT_STATUS_FONT = {"빨강": "CF4430", "노랑": "C98A12", "초록": "2B9457", "확인_필요": "7D8796"}
+# 화면(psd/web/index.html의 JUDGE 객체)과 같은 표시 문구로 맞춘다
+_REPORT_JUDGMENT_LABEL = {"같음": "10년과 같음", "짧음_확실": "짧음 확실", "김_확실": "김 확실", "불확실": "불확실", "날씨무관": "날씨 보정 없음"}
+
+
+def _report_workbook(statuses: list[UnitStatus], station_names: dict[int, str], door_labels: dict[int, str]):
+    """보기 쉬운 엑셀 보고서를 만든다: 상태별 색칠, 날짜는 진짜 날짜형, 머리글 고정, 자동 필터."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "PSD 보고서"
+    ws.append(_REPORT_COLUMNS)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1D5EA8")
+        cell.alignment = Alignment(horizontal="center")
+    ws.freeze_panes = "A2"
+
+    for u in sorted(statuses, key=lambda u: (station_names[u.station_id], u.door_id or 0, u.part_type_code)):
+        ws.append([
+            station_names[u.station_id],
+            door_labels.get(u.door_id, "역 공통(종합제어반)"),
+            NAME_BY_CODE[u.part_type_code],
+            _REPORT_STATUS_LABEL[u.status],
+            u.due,
+            u.days_left,
+            round(u.cycle.base_years, 2),
+            f"{u.cycle.lo_years:.1f}-{u.cycle.hi_years:.1f}",
+            _REPORT_JUDGMENT_LABEL[u.cycle.judgment],
+            u.install_date,
+            "예" if u.has_record else "아니오",
+        ])
+        r = ws.max_row
+        status_cell = ws.cell(row=r, column=4)
+        status_cell.fill = PatternFill("solid", fgColor=_REPORT_STATUS_FILL[u.status])
+        status_cell.font = Font(bold=True, color=_REPORT_STATUS_FONT[u.status])
+        for col in (5, 10):  # 다음 교체 예정일, 설치일
+            ws.cell(row=r, column=col).number_format = "yyyy-mm-dd"
+
+    ws.auto_filter.ref = ws.dimensions
+    for i, width in enumerate([10, 16, 12, 10, 14, 11, 12, 12, 10, 12, 12], start=1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+    return wb
+
+
 @app.get("/api/report")
 def download_report(station_id: int | None = None, db: Session = Depends(get_db)):
     """지금 화면에 보이는 상태를 엑셀로 내려받는다. station_id 없으면 24개 역 전체."""
@@ -613,25 +664,8 @@ def download_report(station_id: int | None = None, db: Session = Depends(get_db)
     station_names = {s.id: s.name for s in db.execute(select(Station)).scalars()}
     door_labels = {d.id: d.label for d in db.execute(select(Door)).scalars()}
 
-    rows = [
-        {
-            "역": station_names[u.station_id],
-            "문": door_labels.get(u.door_id, "역 공통(종합제어반)"),
-            "부품": NAME_BY_CODE[u.part_type_code],
-            "설치일": u.install_date.isoformat(),
-            "권장 주기(년)": round(u.cycle.base_years, 2),
-            "주기 범위(년)": f"{u.cycle.lo_years:.1f}-{u.cycle.hi_years:.1f}",
-            "판정": u.cycle.judgment,
-            "다음 교체 예정일": u.due.isoformat(),
-            "남은 기간(일)": u.days_left,
-            "상태": u.status,
-            "교체 기록 있음": "예" if u.has_record else "아니오",
-        }
-        for u in sorted(statuses, key=lambda u: (station_names[u.station_id], u.door_id or 0, u.part_type_code))
-    ]
-
     buf = io.BytesIO()
-    pd.DataFrame(rows).to_excel(buf, index=False)
+    _report_workbook(statuses, station_names, door_labels).save(buf)
     buf.seek(0)
     # 코드 리뷰로 찾은 버그: HTTP 헤더는 latin-1만 되는데 파일명에 한글이 들어가면
     # StreamingResponse 생성 자체가 UnicodeEncodeError로 죽는다. RFC 5987대로
