@@ -23,6 +23,7 @@
   --gray-soft: #eceff3;
   --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --font-data: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+  --scroll-edge: rgba(0, 0, 0, .18);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -30,6 +31,7 @@
     --rail: #4d76a6; --accent: #7fb0f0; --accent-soft: #1d2b3c;
     --red: #f0705c; --red-soft: #3a211d; --amber: #eeb54a; --amber-soft: #3a2f18;
     --green: #4cc27e; --green-soft: #183224; --gray: #8a94a3; --gray-soft: #252e39;
+    --scroll-edge: rgba(255, 255, 255, .16);
     color-scheme: dark;
   }
 }
@@ -38,6 +40,7 @@
   --rail: #4d76a6; --accent: #7fb0f0; --accent-soft: #1d2b3c;
   --red: #f0705c; --red-soft: #3a211d; --amber: #eeb54a; --amber-soft: #3a2f18;
   --green: #4cc27e; --green-soft: #183224; --gray: #8a94a3; --gray-soft: #252e39;
+  --scroll-edge: rgba(255, 255, 255, .16);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -106,7 +109,23 @@ a { color: var(--accent); }
 .seg { font-size: 0.75rem; font-weight: 600; color: var(--muted); padding: 10px 14px 6px 52px; letter-spacing: 0.04em; }
 
 /* 문 × 부품 표 */
-.scroll { overflow-x: auto; }
+.scroll {
+  overflow-x: auto;
+  background:
+    linear-gradient(to right, var(--surface) 30%, rgba(255, 255, 255, 0)),
+    linear-gradient(to right, rgba(255, 255, 255, 0), var(--surface) 70%) 100% 0,
+    linear-gradient(to right, var(--scroll-edge), rgba(0, 0, 0, 0)),
+    linear-gradient(to left, var(--scroll-edge), rgba(0, 0, 0, 0)) 100% 0;
+  background-repeat: no-repeat;
+  background-color: var(--surface);
+  background-size: 28px 100%, 28px 100%, 10px 100%, 10px 100%;
+  background-attachment: local, local, scroll, scroll;
+  scrollbar-color: var(--muted) transparent;
+}
+.scroll::-webkit-scrollbar, .strip-wrap::-webkit-scrollbar { height: 8px; }
+.scroll::-webkit-scrollbar-track, .strip-wrap::-webkit-scrollbar-track { background: transparent; }
+.scroll::-webkit-scrollbar-thumb, .strip-wrap::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+.scroll::-webkit-scrollbar-thumb:hover, .strip-wrap::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 table { border-collapse: collapse; font-size: 0.88rem; width: 100%; }
 th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { font-weight: 600; color: var(--muted); font-size: 0.8rem; }
@@ -141,14 +160,20 @@ th { font-weight: 600; color: var(--muted); font-size: 0.8rem; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label, .field legend { font-weight: 600; font-size: 0.9rem; }
 fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-input[type="date"], select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); max-width: 260px; }
+input[type="date"], input[type="search"], select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); max-width: 260px; }
+.stfilter-wrap { position: relative; }
+input.stfilter { width: 100%; max-width: none; padding-left: 34px; }
+.stfilter-wrap::before { content: "⌕"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 1.1rem; pointer-events: none; }
+.route li.hide { display: none; }
+.route-empty { padding: 20px 14px; color: var(--muted); font-size: 0.9rem; }
 .checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .checks label { font-weight: 400; display: flex; gap: 6px; align-items: center; }
 .err { color: var(--red); font-size: 0.88rem; }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 0.9rem; z-index: 20; }
 
 /* 물량 */
-.vol td.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.vol td.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; min-width: 52px; }
+.vol td.n:empty::before { content: "–"; color: var(--line); }
 .vol td.barcell { width: 30%; min-width: 120px; }
 .vbar { height: 10px; background: var(--accent); border-radius: 3px; }
 .vol tr.checkrow td { background: var(--gray-soft); }
@@ -160,7 +185,20 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
 .dirtab { appearance: none; border: 0; background: var(--surface); color: var(--muted); font: inherit; font-size: 0.88rem; font-weight: 600; padding: 7px 14px; cursor: pointer; }
 .dirtab + .dirtab { border-left: 1px solid var(--line); }
 .dirtab[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
-.strip-wrap { overflow-x: auto; padding-bottom: 4px; }
+.strip-wrap {
+  overflow-x: auto;
+  padding-bottom: 4px;
+  background:
+    linear-gradient(to right, var(--surface) 30%, rgba(255, 255, 255, 0)),
+    linear-gradient(to right, rgba(255, 255, 255, 0), var(--surface) 70%) 100% 0,
+    linear-gradient(to right, var(--scroll-edge), rgba(0, 0, 0, 0)),
+    linear-gradient(to left, var(--scroll-edge), rgba(0, 0, 0, 0)) 100% 0;
+  background-repeat: no-repeat;
+  background-color: var(--surface);
+  background-size: 28px 100%, 28px 100%, 10px 100%, 10px 100%;
+  background-attachment: local, local, scroll, scroll;
+  scrollbar-color: var(--muted) transparent;
+}
 .strip { display: flex; gap: 10px; min-width: max-content; }
 .car { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .carlabel { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-align: center; letter-spacing: 0.04em; }
@@ -244,7 +282,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     </div>
   </div>
 </div>
-<div class="mockbar"><div class="mockbar-inner"><b>목업</b> · 날씨, 문 수(역당 32개), 교체 기록은 모두 가정값입니다. 기준일 2026-10-14. 계산 공식은 설계 4단계를 그대로 씁니다.</div></div>
+<div class="mockbar"><div class="mockbar-inner"><b>목업</b> · 날씨, 문 수(역당 32개), 교체 기록은 모두 가정값입니다. 기준일 2026-10-14. 계산 공식은 설계 4단계를 그대로 씁니다. 엑셀 업로드·보고서 버튼은 화면 방향성만 보여 주며 실제로 동작하지 않습니다(실제 화면은 psd/web/index.html).</div></div>
 <main class="wrap" id="app"></main>
 <div class="toast" id="toast" hidden></div>
 <div class="tip" id="tip" hidden></div>
@@ -436,6 +474,20 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     if (f) setupForm(f);
     const more = app.querySelector("#more");
     if (more) more.addEventListener("click", () => { app.querySelectorAll(".row[hidden]").forEach(r => { r.hidden = false; }); more.hidden = true; });
+    const filter = app.querySelector("#st-filter");
+    if (filter) filter.addEventListener("input", () => {
+      const q = filter.value.trim();
+      const items = [...app.querySelectorAll("#route-list > li")];
+      let shown = 0;
+      items.forEach(li => { const hit = !q || li.querySelector(".name").textContent.includes(q); li.classList.toggle("hide", !hit); if (hit) shown++; });
+      app.querySelector("#route-empty").hidden = shown > 0;
+      app.querySelector("#route-empty-q").textContent = q;
+    });
+    const repAll = app.querySelector("#rep-all"), repSt = app.querySelector("#rep-station");
+    if (repAll) repAll.addEventListener("click", () => toast("목업이라 실제 다운로드는 안 됩니다 — 실제 화면(psd/web/index.html)에서 받을 수 있습니다."));
+    if (repSt) repSt.addEventListener("click", () => toast("목업이라 실제 다운로드는 안 됩니다 — 실제 화면(psd/web/index.html)에서 받을 수 있습니다."));
+    const xf = app.querySelector("#xlsxform");
+    if (xf) xf.addEventListener("submit", e => { e.preventDefault(); toast("목업이라 실제로 업로드하지는 않습니다."); });
   }
   const goAttr = v => `data-go='${JSON.stringify(v)}'`;
   const legend = `<div class="legend">${pill("red")}<span class="muted">6개월 이하(지난 경우 포함)</span>${pill("amber")}<span class="muted">1년 이하</span>${pill("check")}<span class="muted">기록 없이 예정일 지남</span>${pill("green")}<span class="muted">그 외</span></div>`;
@@ -455,8 +507,18 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         <div class="stat amber"><span class="small muted">노랑</span><b>${tot.amber.toLocaleString()}</b><span class="small muted">1년 안에 교체</span></div>
       </div>
       ${legend}
-      <ul class="route">${ST.map(item).join("")}</ul>
+      <div class="stfilter-wrap"><input type="search" id="st-filter" class="stfilter" placeholder="역 이름으로 찾기 (예: 태화강)" aria-label="역 이름으로 찾기"></div>
+      <ul class="route" id="route-list">${ST.map(item).join("")}</ul>
+      <p class="route-empty" id="route-empty" hidden>"<span id="route-empty-q"></span>" 역이 없습니다.</p>
       <p class="note">부전–일광 구간은 2016-12-30 개통이라 기록이 없는 부품이 2026-12-30에 10년이 됩니다. 그래서 이 구간에 빨강이 많습니다.</p>
+      <button class="linkbtn" id="rep-all">전체 역 보고서 내려받기(엑셀) ›</button>
+      <form class="panel form" id="xlsxform" novalidate>
+        <h3>고장(교체) 기록 엑셀 일괄 업로드</h3>
+        <p class="small muted">열: 역, 방향, 문번호, 교체일, 사유, 부품, 입력자. 한 행이라도 틀리면 전체를 저장하지 않습니다.</p>
+        <div class="field"><input type="file" id="xf-file" accept=".xlsx"></div>
+        <button class="btn" type="submit">업로드</button>
+        <p class="small muted">목업이라 실제로 파일을 읽지는 않습니다 — 화면 방향성만 보여 줍니다.</p>
+      </form>
     </section>`;
   }
 
@@ -504,8 +566,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       ${switcher}
       <div class="panel">
         <h2>${s.name}</h2>
-        <dl class="kv"><dt>개통일</dt><dd>${s.openLabel} (스크린도어 설치일로 가정)</dd><dt>관측소</dt><dd>${s.obs} ASOS (가정)</dd><dt>문 수</dt><dd>방향마다 4량 × 4개 = 16개 (임시값)</dd></dl>
+        <dl class="kv"><dt>개통일</dt><dd>${s.openLabel} (스크린도어 설치일로 가정)</dd><dt>관측소</dt><dd>${s.obs} ASOS (가정)</dd><dt>문 수</dt><dd>방향마다 4량 × 4개 = 16개 (임시값)</dd><dt>배차간격</dt><dd>출퇴근 15분 · 평시 25분 (노선 전체 공통, 참고용 — 계산에는 안 씀)</dd></dl>
         <div class="legend">${pill("red")} ${c.red} ${pill("check")} ${c.check} ${pill("amber")} ${c.amber} ${pill("green")} ${c.green}</div>
+        <button class="linkbtn" id="rep-station">이 역 보고서 내려받기(엑셀) ›</button>
       </div>
       <div class="panel">
         <div class="psdhead"><h3>승강장 안전문</h3>${dirTabs}</div>
