@@ -60,6 +60,9 @@ a { color: var(--accent); }
 .top-inner { max-width: 980px; margin: 0 auto; padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .brand .line-chip { font-size: 0.75rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; letter-spacing: 0.02em; }
+.navbtns { display: flex; gap: 6px; margin-left: auto; }
+.navbtn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 0.82rem; font-weight: 600; padding: 5px 10px; border-radius: 999px; cursor: pointer; }
+.navbtn:hover { border-color: var(--accent); color: var(--accent); }
 .tabs { display: flex; gap: 4px; }
 .tab { appearance: none; border: 0; background: none; font: inherit; font-weight: 600; color: var(--muted); padding: 8px 12px 10px; border-bottom: 3px solid transparent; cursor: pointer; }
 .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
@@ -257,7 +260,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 <div class="top">
   <div class="top-inner">
-    <div class="brand"><h1>동해선 PSD 교체주기</h1><span class="line-chip">부전 – 북울산 · 24개 역</span></div>
+    <div class="brand"><h1>동해선 PSD 교체주기</h1><span class="line-chip">부전 – 북울산 · 24개 역</span>
+      <div class="navbtns"><button class="navbtn" id="nav-back" aria-label="이전 화면으로">‹ 이전</button><button class="navbtn" id="nav-fwd" aria-label="다음 화면으로">다음 ›</button></div>
+    </div>
     <div class="tabs" role="tablist">
       <button class="tab" id="tab-route" role="tab" aria-selected="true">노선</button>
       <button class="tab" id="tab-weather" role="tab" aria-selected="false">날씨 영향</button>
@@ -310,7 +315,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
 
   const REASONS = { fail: "고장", prev: "예방 교체", with: "함께 교체" };
-  const STATE = { 빨강: ["빨강", "s-red"], 노랑: ["노랑", "s-amber"], 초록: ["초록", "s-green"], 확인_필요: ["확인 필요", "s-check"] };
+  const STATE = { 빨강: ["위험", "s-red"], 노랑: ["주의", "s-amber"], 초록: ["안전", "s-green"], 확인_필요: ["확인 필요", "s-check"] };
   const RANK = { 빨강: 0, 확인_필요: 1, 노랑: 2, 초록: 3 };
   const JUDGE = {
     같음: ["10년과 같음", "s-check", "비중을 어떻게 잡아도 10년과 0.5년 이내로 차이 납니다."],
@@ -327,6 +332,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   // ---------- 유틸 ----------
   function fmtDateKR(s) { const [y, m, d] = s.split("-").map(Number); return `${y}년 ${m}월 ${d}일`; }
+  function dailyTrips(interval) {
+    const SERVICE_SPAN_MIN = 18.5 * 60; // 첫차 05:30~막차 24:00 가정(상세 운행시간표 미확보, 추정)
+    const PEAK_MIN = 4 * 60; // 출퇴근 피크 합 4시간(아침·저녁 2시간씩) 가정
+    const offpeakMin = SERVICE_SPAN_MIN - PEAK_MIN;
+    return Math.round(PEAK_MIN / interval.peak + offpeakMin / interval.offpeak);
+  }
   function openLabel(station) { return station.id === 24 ? "2026년 9월(일자 미정)" : fmtDateKR(station.open_date); }
   function yr(x) { return x.toFixed(1) + "년"; }
   function dur(days) {
@@ -340,13 +351,97 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => { t.hidden = true; }, 2400); }
   function worstDoor(doors) { return doors.reduce((a, d) => (RANK[d.worst_status] < RANK[a.worst_status] || (RANK[d.worst_status] === RANK[a.worst_status] && d.worst_days_left < a.worst_days_left)) ? d : a); }
 
-  // ---------- 화면 ----------
+  // ---------- 화면(해시 라우팅: 뒤로/앞으로 버튼이 각 화면 사이를 오가도록) ----------
   const app = document.getElementById("app");
-  let view = { name: "route" };
-  function go(v) { const keep = v.keep; view = v; render(); if (!keep) window.scrollTo(0, 0); }
+  function encodeView(v) {
+    const q = new URLSearchParams();
+    let path;
+    switch (v.name) {
+      case "station":
+        path = `/station/${v.st}`;
+        if (v.side) q.set("side", v.side);
+        if (v.door != null) q.set("door", v.door);
+        break;
+      case "part":
+        path = `/part/${v.partId}`;
+        break;
+      case "form":
+        path = `/form/${v.st}`;
+        if (v.door != null) q.set("door", v.door);
+        if (v.code) q.set("code", v.code);
+        break;
+      case "weather":
+        path = "/weather";
+        if (v.simSt != null) q.set("sim", v.simSt);
+        break;
+      case "volume":
+        path = "/volume";
+        break;
+      default:
+        path = "/route";
+    }
+    const qs = q.toString();
+    return "#" + path + (qs ? "?" + qs : "");
+  }
+  function decodeHash() {
+    const h = location.hash.slice(1) || "/route";
+    const [path, qs] = h.split("?");
+    const q = new URLSearchParams(qs || "");
+    const parts = path.split("/").filter(Boolean);
+    try {
+      switch (parts[0]) {
+        case "station": {
+          const st = Number(parts[1]);
+          if (!st) break;
+          const v = { name: "station", st };
+          if (q.get("side")) v.side = q.get("side");
+          if (q.get("door")) v.door = Number(q.get("door"));
+          return v;
+        }
+        case "part": {
+          const partId = Number(parts[1]);
+          if (!partId) break;
+          return { name: "part", partId };
+        }
+        case "form": {
+          const st = Number(parts[1]);
+          if (!st) break;
+          const v = { name: "form", st };
+          if (q.get("door")) v.door = Number(q.get("door"));
+          if (q.get("code")) v.code = q.get("code");
+          return v;
+        }
+        case "weather": {
+          const v = { name: "weather" };
+          if (q.get("sim")) v.simSt = Number(q.get("sim"));
+          return v;
+        }
+        case "volume":
+          return { name: "volume" };
+      }
+    } catch (e) { /* 잘못된 주소면 노선 화면으로 */ }
+    return { name: "route" };
+  }
+  let view = { name: "route" }, suppressHash = false;
+  function go(v) {
+    const keep = v.keep;
+    view = v;
+    render();
+    if (!keep) window.scrollTo(0, 0);
+    const newHash = encodeView(v);
+    if (location.hash !== newHash) { suppressHash = true; location.hash = newHash; }
+  }
+  window.addEventListener("hashchange", () => {
+    if (suppressHash) { suppressHash = false; return; }
+    view = decodeHash();
+    render();
+    window.scrollTo(0, 0);
+  });
   document.getElementById("tab-route").onclick = () => go({ name: "route" });
   document.getElementById("tab-volume").onclick = () => go({ name: "volume" });
   document.getElementById("tab-weather").onclick = () => go({ name: "weather" });
+  document.getElementById("nav-back").onclick = () => history.back();
+  document.getElementById("nav-fwd").onclick = () => history.forward();
 
   async function render() {
     const tab = view.name === "volume" ? "volume" : view.name === "weather" ? "weather" : "route";
@@ -414,14 +509,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     const data = await api("/api/stations");
     const item = s => {
       const c = s.counts;
-      const b = [c.빨강 ? `<span class="pill s-red">빨강 ${c.빨강}</span>` : "", c.확인_필요 ? `<span class="pill s-check">확인 ${c.확인_필요}</span>` : "", c.노랑 ? `<span class="pill s-amber">노랑 ${c.노랑}</span>` : ""].join("");
-      return `<li data-name="${esc(s.name)}"><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${openLabel(s)} 개통 · AWS ${s.aws_station}(추정)</span></span><span class="badges">${b || '<span class="pill s-green">경고 없음</span>'}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
+      const b = [c.빨강 ? `<span class="pill s-red">위험 ${c.빨강}</span>` : "", c.확인_필요 ? `<span class="pill s-check">확인 ${c.확인_필요}</span>` : "", c.노랑 ? `<span class="pill s-amber">주의 ${c.노랑}</span>` : ""].join("");
+      return `<li data-name="${esc(s.name)}"><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${openLabel(s)} 개통 · AWS ${s.aws_station}(추정)</span></span><span class="badges">${b || '<span class="pill s-green">안전</span>'}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
     };
     return `<section class="view">
       <div class="stats">
-        <div class="stat red"><span class="small muted">빨강</span><b>${data.totals.빨강.toLocaleString()}</b><span class="small muted">6개월 안에 교체</span></div>
+        <div class="stat red"><span class="small muted">위험</span><b>${data.totals.빨강.toLocaleString()}</b><span class="small muted">6개월 안에 교체</span></div>
         <div class="stat check"><span class="small muted">확인 필요</span><b>${data.totals.확인_필요.toLocaleString()}</b><span class="small muted">기록 없이 예정일 지남</span></div>
-        <div class="stat amber"><span class="small muted">노랑</span><b>${data.totals.노랑.toLocaleString()}</b><span class="small muted">1년 안에 교체</span></div>
+        <div class="stat amber"><span class="small muted">주의</span><b>${data.totals.노랑.toLocaleString()}</b><span class="small muted">1년 안에 교체</span></div>
       </div>
       ${legend}
       <div class="stfilter-wrap"><input type="search" id="st-filter" class="stfilter" placeholder="역 이름으로 찾기 (예: 태화강)" aria-label="역 이름으로 찾기"></div>
@@ -486,7 +581,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       ${switcher}
       <div class="panel">
         <h2>${s.name}</h2>
-        <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)} (스크린도어 설치일로 가정)</dd><dt>날씨 지점</dt><dd>AWS ${s.aws_station} (추정)</dd><dt>문 수</dt><dd>방향마다 4량 × 4개 = 16개 (임시값)</dd><dt>배차간격</dt><dd>출퇴근 ${s.service_interval_min.peak}분 · 평시 ${s.service_interval_min.offpeak}분 (노선 전체 공통, 참고용 — 계산에는 안 씀)</dd></dl>
+        <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)} (스크린도어 설치일로 가정)</dd><dt>날씨 지점</dt><dd>AWS ${s.aws_station} (추정)</dd><dt>문 수</dt><dd>방향마다 4량 × 4개 = 16개 (임시값)</dd><dt>배차간격</dt><dd>부전 방면 하루 약 ${dailyTrips(s.service_interval_min)}회 · 북울산 방면 하루 약 ${dailyTrips(s.service_interval_min)}회<br><span class="small muted">출퇴근 15분·평시 25분 간격 기준 추정치(노선 전체 공통, 참고용 — 계산에는 안 씀)</span></dd></dl>
         <div class="legend">${pill("빨강")} ${c.빨강} ${pill("확인_필요")} ${c.확인_필요} ${pill("노랑")} ${c.노랑} ${pill("초록")} ${c.초록}</div>
         <a class="linkbtn" href="/api/report?station_id=${s.id}" download>이 역 보고서 내려받기(엑셀) ›</a>
       </div>
@@ -769,6 +864,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     </section>`;
   }
 
+  view = decodeHash();
+  if (!location.hash) { suppressHash = true; location.hash = encodeView(view); }
   render();
 })();
 </script>
