@@ -80,6 +80,11 @@ def parse_upload(content: bytes) -> list[ParsedRow]:
             replaced_on = pd.to_datetime(replaced_on_raw).date()
         except Exception:
             raise ExcelFormatError(row_no, f"교체일을 날짜로 읽을 수 없습니다: {replaced_on_raw!r}")
+        # 코드 리뷰로 찾은 버그: 단건 입력 API(psd/schemas.py ReplacementRecordIn.not_in_future)는
+        # 미래 날짜를 막는데, 엑셀 업로드는 날짜로 읽히기만 하면 통과시키고 있었다. 같은 걸
+        # 여기서도 막는다 — 전체가 한 트랜잭션(all-or-nothing)이라 한 행만 틀려도 전부 막힌다.
+        if replaced_on > date.today():
+            raise ExcelFormatError(row_no, f"교체일은 미래일 수 없습니다: {replaced_on}")
 
         reason_label = _cell(r, "사유")
         if reason_label not in REASON_LABEL_TO_CODE:

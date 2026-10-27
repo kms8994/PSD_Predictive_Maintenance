@@ -19,6 +19,7 @@ psd/excel_io.py와 같은 열 형식으로 써서, 바로 POST /api/replacement-
     python scripts/generate_dummy_records.py --seed 1 --out ... # 재현 가능하게 시드 고정
 """
 import argparse
+import math
 import random
 import sys
 from datetime import date, timedelta
@@ -34,6 +35,17 @@ from psd.models import CycleResult, Door, Part, PartType  # noqa: E402
 
 CODE_TO_NAME = {code: name for name, code in NAME_TO_CODE.items()}
 WEIBULL_SHAPE = 2.0  # 형상모수. 1이면 지수분포(마모 성질 없음), 클수록 "노후화 고장" 성질이 강해짐
+
+
+def weibull_scale_for_mean(mean: float, shape: float = WEIBULL_SHAPE) -> float:
+    """평균이 `mean`이 되는 와이블 척도(scale)를 구한다.
+
+    코드 리뷰로 찾은 버그: `random.weibullvariate(alpha, beta)`의 alpha는 평균이 아니라
+    척도(scale)다. 와이블 분포의 평균은 scale × Γ(1 + 1/shape)이므로, shape=2일 때
+    scale을 그대로 base_years로 쓰면 평균이 Γ(1.5)(≈0.886)배만큼, 즉 약 11% 더 짧게
+    나온다. 여기서 역으로 나눠 평균이 정확히 `mean`이 되는 scale을 구한다.
+    """
+    return mean / math.gamma(1 + 1 / shape)
 
 
 def main() -> None:
@@ -60,7 +72,7 @@ def main() -> None:
         rows = []
         for part in parts:
             base_years = cycle_by_key.get((part.station_id, part.part_type_code), 10.0)
-            years_to_fail = random.weibullvariate(base_years, WEIBULL_SHAPE)
+            years_to_fail = random.weibullvariate(weibull_scale_for_mean(base_years), WEIBULL_SHAPE)
             fail_date = part.install_date + timedelta(days=round(years_to_fail * 365.25))
             if fail_date > today:
                 continue  # 아직 고장 안 났다고 본다 — 기록 안 만듦

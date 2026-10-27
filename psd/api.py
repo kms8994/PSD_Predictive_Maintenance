@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from psd.catalog import NAME_TO_CODE, PART_TYPES, SIDES
@@ -38,6 +38,7 @@ from psd.excel_io import SIDE_LABEL_TO_CODE, ExcelFormatError, parse_upload
 from psd.models import CycleResult, Door, Part, ReplacementPart, ReplacementRecord, Station
 from psd.schemas import ReplacementRecordIn
 from psd.status import (
+    RANK,
     UnitStatus,
     all_unit_statuses,
     counts,
@@ -180,9 +181,11 @@ def list_stations(db: Session = Depends(get_db)):
     rows = []
     totals = {"빨강": 0, "노랑": 0, "확인_필요": 0}
     for s in db.execute(select(Station).order_by(Station.id)).scalars():
-        c = counts(by_station.get(s.id, []))
+        units = by_station.get(s.id, [])
+        c = counts(units)
         for k in totals:
             totals[k] += c[k]
+        soonest = min(units, key=lambda u: u.days_left) if units else None
         rows.append(
             {
                 "id": s.id,
@@ -191,10 +194,113 @@ def list_stations(db: Session = Depends(get_db)):
                 "observatory": s.observatory_id,
                 "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[s.name]],
                 "near_water": s.near_water,
+                "in_service": s.in_service,
                 "counts": c,
+                # 역 목록에서 "다음 교체가 언제인지"를 보여 주려고 — 개통 전 역은 부품이 없어 None
+                "next": {
+                    "due": soonest.due,
+                    "days_left": soonest.days_left,
+                    "part_type_code": soonest.part_type_code,
+                } if soonest else None,
             }
         )
     return {"stations": rows, "totals": totals}
+
+
+# ---------- 4-1b. 관리 현황(교체 예정 목록, 최근 교체 기록) ----------
+
+
+@app.get("/api/work-items")
+def work_items(within_days: int = 730, db: Session = Depends(get_db)):
+    """관리자가 챙길 교체 대상을 역 x 부품 종류 x 예정일로 묶어 급한 순서로 돌려준다.
+
+    같은 날 개통한 역의 같은 부품은 문 32개가 같은 날 예정일을 맞기 때문에, 부품 하나씩
+    늘어놓으면 똑같은 줄이 수백 개 나온다. 실제로도 한 역의 같은 부품은 한 번에 교체하므로
+    묶어서 보여 준다. 초록이 아닌 부품(위험·확인 필요·주의)은 기간과 상관없이 항상 넣는다.
+    """
+    if within_days < 0:
+        raise HTTPException(400, "within_days는 0 이상이어야 함")
+    stations = {s.id: s.name for s in db.execute(select(Station)).scalars()}
+    door_labels = {d.id: d.label for d in db.execute(select(Door)).scalars()}
+
+    groups: dict[tuple[int, str, date, str], list[UnitStatus]] = {}
+    soonest: UnitStatus | None = None
+    for u in all_unit_statuses(db):
+        if soonest is None or u.days_left < soonest.days_left:
+            soonest = u
+        if u.status == "초록" and u.days_left > within_days:
+            continue
+        groups.setdefault((u.station_id, u.part_type_code, u.due, u.status), []).append(u)
+
+    items = []
+    for (station_id, code, due, status), units in groups.items():
+        first = units[0]
+        items.append(
+            {
+                "station_id": station_id,
+                "station_name": stations[station_id],
+                "part_type_code": code,
+                "part_name": NAME_BY_CODE[code],
+                "due": due,
+                "days_left": first.days_left,
+                "status": status,
+                "count": len(units),
+                # 1개뿐이면 화면이 바로 그 부품 상세로 갈 수 있게 id와 위치를 같이 준다
+                "part_id": first.part_id if len(units) == 1 else None,
+                "location": (door_labels[first.door_id] if first.door_id else "역 공통(종합제어반)")
+                if len(units) == 1 else None,
+            }
+        )
+    items.sort(key=lambda x: (RANK[x["status"]], x["days_left"], x["station_id"], x["part_type_code"]))
+
+    return {
+        "today": date.today(),
+        "within_days": within_days,
+        "items": items,
+        "part_count": sum(x["count"] for x in items),
+        "soonest": {
+            "station_name": stations[soonest.station_id],
+            "part_name": NAME_BY_CODE[soonest.part_type_code],
+            "due": soonest.due,
+            "days_left": soonest.days_left,
+        } if soonest else None,
+    }
+
+
+@app.get("/api/replacement-records")
+def recent_replacement_records(limit: int = 20, db: Session = Depends(get_db)):
+    """최근에 입력한 교체 기록(입력 순서 최신부터). 업로드·입력이 제대로 들어갔는지 확인하는 용도."""
+    limit = max(1, min(limit, 200))
+    records = (
+        db.execute(
+            select(ReplacementRecord)
+            .options(joinedload(ReplacementRecord.station), joinedload(ReplacementRecord.door),
+                     joinedload(ReplacementRecord.parts))
+            .order_by(ReplacementRecord.created_at.desc(), ReplacementRecord.id.desc())
+            .limit(limit)
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    total = db.scalar(select(func.count()).select_from(ReplacementRecord))
+    return {
+        "total": total,
+        "records": [
+            {
+                "id": r.id,
+                "replaced_on": r.replaced_on,
+                "station_id": r.station_id,
+                "station_name": r.station.name,
+                "location": r.door.label if r.door else "역 공통(종합제어반)",
+                "reason": r.reason,
+                "parts": [NAME_BY_CODE[p.part_type_code] for p in r.parts],
+                "created_by": r.created_by,
+                "created_at": r.created_at,
+            }
+            for r in records
+        ],
+    }
 
 
 # ---------- 4-2. 역 ----------
@@ -244,6 +350,7 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
             "observatory": station.observatory_id,
             "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[station.name]],
             "near_water": station.near_water,
+            "in_service": station.in_service,
             "service_interval_min": SERVICE_INTERVAL_MIN,  # 참고용, 계산에는 안 씀 — psd/cycle.py 주석 참고
         },
         "psc": _unit_dict(psc) if psc else None,
@@ -496,9 +603,30 @@ def _insert_replacement_record(
     db.add(record)
     db.flush()
 
+    # 코드 리뷰로 찾은 버그: 같은 부품에 대한 두 요청이 거의 동시에 들어오면(단건 입력 폼을
+    # 두 번 빠르게 제출하거나, 엑셀 업로드와 단건 입력이 겹치는 경우) 둘 다 잠금 없이 읽은
+    # install_date를 각자 덮어써서 나중에 커밋한 쪽만 반영되고 먼저 커밋한 쪽의 효과가
+    # 조용히 사라질 수 있었다(ReplacementRecord 행 자체는 둘 다 남지만, 부품의 "현재
+    # 설치일"은 하나만 반영됨). 실제로 바꿀 부품 행만 SELECT ... FOR UPDATE로 다시 읽어
+    # 잠그고(동시 요청은 여기서 직렬화돼 기다린다), 그 최신 값을 기준으로 바꾼다.
+    # populate_existing=True가 꼭 필요하다: `parts`는 이 함수를 부르기 전에(_resolve_parts
+    # 등) 이미 이 세션에서 한 번 읽은 적이 있어서, SQLAlchemy identity map에 옛 install_date를
+    # 가진 같은 객체가 캐시돼 있다. FOR UPDATE만 걸고 이 옵션을 안 주면 잠금은 걸리지만(DB에는
+    # 쿼리가 나간다) 돌려받는 객체는 캐시된 옛 값 그대로라, 다른 트랜잭션이 커밋한 최신
+    # install_date를 못 보고 그대로 덮어써 버린다 — 잠금만으론 못 잡는 버그였다.
+    locked_parts = {
+        p.part_type_code: p
+        for p in db.execute(
+            select(Part)
+            .where(Part.id.in_([parts[code].id for code in part_type_codes]))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalars()
+    }
+
     for code in part_type_codes:
         db.add(ReplacementPart(record_id=record.id, part_type_code=code))
-        part = parts[code]
+        part = locked_parts[code]
         if not part.has_record or replaced_on > part.install_date:
             part.install_date = replaced_on
         part.has_record = True
@@ -543,7 +671,14 @@ async def upload_replacement_records(file: UploadFile, db: Session = Depends(get
     except ExcelFormatError as e:
         raise HTTPException(400, str(e))
 
+    # 행마다 Door·Station·Part를 따로 조회하면(_resolve_parts가 안에서 Station.get·Door.get·Part
+    # 조회를 또 한다) 업로드 1건에 수천 번 DB 왕복이 생긴다(코드 리뷰로 찾은 버그 — 실제로
+    # 더미데이터 1,230건을 한 번에 올린 적이 있다, MVP_계획.md 2026-10-25). 전체 역·문·부품을
+    # 미리 한 번씩만 읽어 와 딕셔너리로 찾는다(N+1 방지, station_by_name과 같은 패턴).
     station_by_name = {s.name: s for s in db.execute(select(Station)).scalars()}
+    door_by_key = {(d.station_id, d.side, d.car, d.position): d for d in db.execute(select(Door)).scalars()}
+    parts_by_key = {(p.station_id, p.door_id, p.part_type_code): p for p in db.execute(select(Part)).scalars()}
+
     errors: list[str] = []
     resolved = []
     for row in parsed:
@@ -561,22 +696,17 @@ async def upload_replacement_records(file: UploadFile, db: Session = Depends(get
             except Exception:
                 errors.append(f"{row.row_no}행: 문번호 형식이 잘못됨(예: '1-1'): {row.door_no!r}")
                 continue
-            door = db.execute(
-                select(Door).where(
-                    Door.station_id == station.id, Door.side == side_code,
-                    Door.car == car, Door.position == position,
-                )
-            ).scalar_one_or_none()
+            door = door_by_key.get((station.id, side_code, car, position))
             if door is None:
                 errors.append(f"{row.row_no}행: {row.station_name} {row.side_label} {row.door_no} 문을 못 찾음")
                 continue
             door_id = door.id
 
         part_codes = [NAME_TO_CODE[name] for name in row.part_names]
-        try:
-            parts = _resolve_parts(db, station.id, door_id, part_codes)
-        except HTTPException as e:
-            errors.append(f"{row.row_no}행: {e.detail}")
+        parts = {code: parts_by_key[(station.id, door_id, code)] for code in part_codes if (station.id, door_id, code) in parts_by_key}
+        missing = set(part_codes) - set(parts)
+        if missing:
+            errors.append(f"{row.row_no}행: 그 역·문에 없는 부품 종류: {sorted(missing)}")
             continue
 
         resolved.append((row, station.id, door_id, part_codes, parts))

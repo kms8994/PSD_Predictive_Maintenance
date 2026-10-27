@@ -58,6 +58,20 @@ def test_parse_upload_rejects_half_filled_side_and_door():
         parse_upload(content)
 
 
+def test_parse_upload_rejects_future_replaced_on():
+    """코드 리뷰로 찾은 버그: 단건 입력 API(schemas.py)는 미래 날짜를 막는데 엑셀 업로드는
+    안 막고 있었다 — 같은 규칙을 여기서도 적용한다."""
+    from datetime import timedelta
+
+    future = (date.today() + timedelta(days=30)).isoformat()
+    content = _xlsx([
+        {"역": "부전", "방향": "", "문번호": "", "교체일": future,
+         "사유": "고장", "부품": "종합제어반 릴레이", "입력자": ""},
+    ])
+    with pytest.raises(ExcelFormatError, match="미래일 수 없습니다"):
+        parse_upload(content)
+
+
 def test_parse_upload_rejects_missing_columns():
     import pandas as pd
     from io import BytesIO

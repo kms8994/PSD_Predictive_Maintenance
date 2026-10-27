@@ -36,6 +36,7 @@ class Station(Base):
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     near_water: Mapped[bool] = mapped_column(default=False)  # 바다·하천 인접 추정(psd/cycle.py STATIONS 주석, 확인 필요)
+    in_service: Mapped[bool] = mapped_column(default=True)  # PSD 실제 운영 중인지(psd/cycle.py Station.in_service 참고)
 
     observatory: Mapped[Observatory] = relationship(back_populates="stations")
     doors: Mapped[list["Door"]] = relationship(back_populates="station")

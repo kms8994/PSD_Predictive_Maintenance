@@ -54,6 +54,11 @@ class Station:
     psd_install_date: date | None = None  # 스크린도어(PSD) 실제 사용개시일. None이면 open_date로 대신한다
     # (아래 psd_install_date 주석 참고) — 2026-10-24 미팅 답변 Q3 근거, open_date와 다를 수 있음.
     aws_stn: str = ""  # 역에서 가장 가까운 AWS(방재기상관측) 지점 코드 — 날씨 계산은 전부 이걸로 한다
+    in_service: bool = True  # PSD가 실제로 설치·운영 중인지. False면 scripts/init_db.py가 문·부품을 만들지 않는다
+    # (open_date가 미래로 지나가도 자동으로 True가 되지 않는다 — 북울산처럼 개통일 자체가
+    # 미정 추정값인 역을 날짜 비교만으로 "운영 중"으로 잘못 판정하지 않기 위한 명시적 플래그.
+    # 코드 리뷰로 찾은 버그: 이 플래그가 없던 시절엔 _D4(2026-09-01, 북울산 임시 개통일)를
+    # 오늘 날짜가 지나자마자 다른 23개 역과 똑같이 "안전" 상태로 보여주고 있었다.)
 
 
 _D1 = date(2016, 12, 30)
@@ -98,7 +103,7 @@ STATIONS: list[Station] = [
     Station(21, "덕하", _D3, "울산", near_water=False, psd_install_date=_PSD_2, aws_stn="954"),
     Station(22, "개운포", _D3, "울산", near_water=True, psd_install_date=_PSD_2, aws_stn="898"),
     Station(23, "태화강", _D3, "울산", near_water=True, psd_install_date=_PSD_2, aws_stn="898"),
-    Station(24, "북울산", _D4, "울산", near_water=False, aws_stn="943"),
+    Station(24, "북울산", _D4, "울산", near_water=False, aws_stn="943", in_service=False),
 ]
 
 # aws_stn: 역 → 가장 가까운 AWS 지점을 행정구역 기준으로 매핑한 것이다(2026-10-25, 실측 좌표

@@ -213,6 +213,16 @@ def test_all_opened_stations_default_to_2022_psd_install_date_except_bukulsan():
     assert by_order[24].psd_install_date is None  # 북울산: 아직 개통 전
 
 
+def test_bukulsan_is_not_in_service_regardless_of_placeholder_open_date():
+    """코드 리뷰로 찾은 버그: 북울산의 open_date(임시값)가 과거가 돼도 in_service는 날짜로
+    추론하지 않고 명시적으로 False여야 한다 — scripts/init_db.py가 이 값으로 문·부품 생성을
+    건너뛴다."""
+    by_order = {s.order: s for s in CYCLE_STATIONS}
+    for order in range(1, 24):
+        assert by_order[order].in_service is True, by_order[order].name
+    assert by_order[24].in_service is False
+
+
 # ---------- AWS 지점 기반 날씨 계산: 2026-10-25 반영 ----------
 #
 # 부산/울산 ASOS 2버킷 대신 역마다 가장 가까운 AWS 지점(Station.aws_stn)으로 날씨를 계산한다.

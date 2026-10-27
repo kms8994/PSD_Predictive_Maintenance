@@ -48,6 +48,39 @@ def test_part_detail_observatory_is_a_real_aws_station_name():
     assert data["weather_basis"]["observatory"] in AWS_STATION_NAMES.values()
 
 
+# ---------- 2026-10-27: 관리 현황(교체 예정 목록, 최근 교체 기록) ----------
+
+
+def test_work_items_groups_add_up_and_stay_within_the_period():
+    data = client.get("/api/work-items?within_days=730").json()
+    assert data["part_count"] == sum(x["count"] for x in data["items"])
+    for x in data["items"]:
+        # 초록은 기간 안에 든 것만, 그 외(위험·확인 필요·주의)는 기간과 상관없이 들어온다
+        assert x["status"] != "초록" or x["days_left"] <= 730
+        assert (x["part_id"] is not None) == (x["count"] == 1)
+
+
+def test_work_items_are_sorted_most_urgent_first():
+    from psd.status import RANK
+
+    items = client.get("/api/work-items?within_days=1095").json()["items"]
+    keys = [(RANK[x["status"]], x["days_left"]) for x in items]
+    assert keys == sorted(keys)
+
+
+def test_work_items_rejects_negative_period():
+    assert client.get("/api/work-items?within_days=-1").status_code == 400
+
+
+def test_recent_replacement_records_are_newest_first_and_capped():
+    data = client.get("/api/replacement-records?limit=5").json()
+    assert len(data["records"]) <= 5
+    assert len(data["records"]) <= data["total"]
+    assert all(r["parts"] for r in data["records"])
+    order = [(r["created_at"], r["id"]) for r in data["records"]]
+    assert order == sorted(order, reverse=True)
+
+
 # ---------- 2026-10-25: 엑셀 업로드 + 보고서 출력 ----------
 
 
@@ -65,7 +98,10 @@ def test_report_download_for_all_stations_is_a_readable_excel():
         "권장 주기(년)", "주기 범위(년)", "판정", "설치일", "교체 기록 있음",
     ]
     assert len(df) > 1000  # 역 24개 x 문마다 여러 부품이라 수천 행이 나온다 — "비어 있지 않다"가 핵심
-    assert df["역"].nunique() == 24
+    # 아직 PSD가 없는 역(북울산)은 부품 자체가 없어 보고서에도 안 나온다 — 운영 중인 역만 셈
+    from psd.cycle import STATIONS
+
+    assert df["역"].nunique() == len([s for s in STATIONS if s.in_service])
     assert set(df["상태"]) <= {"빨강", "노랑", "초록", "확인 필요"}  # 코드값(확인_필요)이 아니라 사람이 읽는 표시값
     assert pd.api.types.is_datetime64_any_dtype(df["다음 교체 예정일"])  # 문자열이 아니라 엑셀 날짜형
 
