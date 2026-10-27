@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>시안 1 · 업무 시스템형</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Pretendard, "Malgun Gothic", sans-serif; font-size: 13px; color: #222; background: #eef0f3; width: 1280px; }
+.bar { height: 44px; background: #1f3a5f; color: #fff; display: flex; align-items: center; padding: 0 18px; gap: 14px; }
+.bar b { font-size: 15px; letter-spacing: -0.2px; }
+.bar .sys { font-size: 12px; opacity: .7; }
+.bar .user { margin-left: auto; font-size: 12px; opacity: .85; }
+.wrap { display: grid; grid-template-columns: 188px 1fr; min-height: 860px; }
+.side { background: #fff; border-right: 1px solid #cfd5dd; padding: 14px 0; }
+.side h4 { font-size: 11px; color: #7a8492; font-weight: 600; padding: 10px 18px 6px; }
+.side a { display: block; padding: 8px 18px; color: #333; text-decoration: none; border-left: 3px solid transparent; }
+.side a.on { background: #e8eef6; border-left-color: #1f3a5f; font-weight: 700; color: #1f3a5f; }
+.side a.lab { color: #8a929c; }
+main { padding: 16px 20px; }
+.path { font-size: 12px; color: #7a8492; margin-bottom: 6px; }
+h1 { font-size: 18px; font-weight: 700; display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+h1 small { font-size: 12px; font-weight: 400; color: #666; }
+.kpi { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid #cfd5dd; background: #fff; margin-bottom: 16px; }
+.kpi div { padding: 12px 16px; border-right: 1px solid #e2e6eb; }
+.kpi div:last-child { border-right: 0; }
+.kpi span { display: block; font-size: 12px; color: #666; }
+.kpi b { display: block; font-size: 24px; font-weight: 700; margin: 2px 0; }
+.kpi em { font-style: normal; font-size: 11.5px; color: #888; }
+.red { color: #c62828; } .amb { color: #b26a00; } .gry { color: #5f6b7a; }
+.box { background: #fff; border: 1px solid #cfd5dd; margin-bottom: 16px; }
+.boxh { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid #cfd5dd; background: #f7f8fa; }
+.boxh h2 { font-size: 13.5px; font-weight: 700; }
+.boxh .cnt { color: #666; font-size: 12px; }
+.boxh .r { margin-left: auto; display: flex; gap: 6px; }
+select, .btn { font: inherit; font-size: 12px; height: 26px; border: 1px solid #b9c1cb; background: #fff; padding: 0 8px; border-radius: 2px; color: #222; }
+.btn.pri { background: #1f3a5f; border-color: #1f3a5f; color: #fff; }
+.seg { display: inline-flex; border: 1px solid #b9c1cb; border-radius: 2px; overflow: hidden; }
+.seg span { padding: 4px 10px; font-size: 12px; border-right: 1px solid #b9c1cb; background: #fff; }
+.seg span:last-child { border-right: 0; }
+.seg span.on { background: #1f3a5f; color: #fff; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border-bottom: 1px solid #e2e6eb; padding: 7px 10px; text-align: left; white-space: nowrap; }
+th { background: #f1f3f6; font-weight: 600; color: #4a5361; font-size: 12px; border-bottom-color: #cfd5dd; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+td.c { text-align: center; }
+tr:nth-child(even) td { background: #fafbfc; }
+.st { font-weight: 700; font-size: 12px; }
+.st::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 5px; vertical-align: 0; background: currentColor; }
+.st.g { color: #2e7d32; }
+.lnk { color: #1f5fa8; text-decoration: underline; }
+.foot { font-size: 11.5px; color: #7a8492; }
+</style></head><body>
+<div class="bar"><b>동해선 PSD 교체주기 관리</b><span class="sys">스크린도어 부품 정비계획</span><span class="user">기준일 2026-10-27 (화)</span></div>
+<div class="wrap">
+  <nav class="side">
+    <h4>정비 관리</h4>
+    <a class="on">현황</a><a>역별 조회</a><a>교체 기록</a><a>보고서</a>
+    <h4>참고</h4>
+    <a class="lab">분석 (실험)</a>
+  </nav>
+  <main>
+    <div class="path">정비 관리 &gt; 현황</div>
+    <h1>교체 현황 <small>운영 23개 역 · 부품 4,439개</small></h1>
+    <div class="kpi">
+      <div><span>위험 (6개월 이내)</span><b class="red">2</b><em>즉시 교체 계획 필요</em></div>
+      <div><span>확인 필요</span><b class="gry">1</b><em>기록 없이 예정일 지남</em></div>
+      <div><span>주의 (1년 이내)</span><b class="amb">2</b><em>예산·자재 준비</em></div>
+      <div><span>다음 교체</span><b style="font-size:19px;padding:3px 0 2px">2026-12-03</b><em>태화강 DCM · 37일 남음</em></div>
+    </div>
+    <div class="box">
+      <div class="boxh"><h2>교체 예정 목록</h2><span class="cnt">2년 이내 · 8건 (부품 64개)</span>
+        <div class="r"><span class="seg"><span>6개월</span><span>1년</span><span class="on">2년</span><span>3년</span></span><select><option>전체 역</option></select><select><option>전체 부품</option></select><span class="btn">엑셀 저장</span></div>
+      </div>
+      <table>
+        <tr><th style="width:90px">상태</th><th>역</th><th>부품</th><th>위치</th><th class="n">수량</th><th class="n">교체 예정일</th><th class="n">남은 기간</th><th class="c">기록</th></tr>
+        <tr><td><span class="st red">위험</span></td><td>태화강</td><td>DCM</td><td>북울산 방면 4-2</td><td class="n">1</td><td class="n">2026-12-03</td><td class="n red">37일</td><td class="c"><span class="lnk">입력</span></td></tr>
+        <tr><td><span class="st red">위험</span></td><td>개운포</td><td>도어 행거</td><td>부전 방면 2-1</td><td class="n">1</td><td class="n">2027-02-14</td><td class="n red">3개월</td><td class="c"><span class="lnk">입력</span></td></tr>
+        <tr><td><span class="st gry">확인필요</span></td><td>덕하</td><td>모터</td><td>북울산 방면 3-3</td><td class="n">1</td><td class="n">2026-09-18</td><td class="n gry">39일 지남</td><td class="c"><span class="lnk">입력</span></td></tr>
+        <tr><td><span class="st amb">주의</span></td><td>망양</td><td>풀리</td><td>부전 방면 1-4</td><td class="n">1</td><td class="n">2027-05-30</td><td class="n">7개월</td><td class="c"><span class="lnk">입력</span></td></tr>
+        <tr><td><span class="st amb">주의</span></td><td>남창</td><td>타이밍벨트</td><td>북울산 방면 2-2</td><td class="n">1</td><td class="n">2027-08-11</td><td class="n">9개월</td><td class="c"><span class="lnk">입력</span></td></tr>
+        <tr><td><span class="st g">안전</span></td><td>오시리아</td><td>IFM 릴레이</td><td>문 전체</td><td class="n">12</td><td class="n">2027-11-24</td><td class="n">1년 1개월</td><td class="c"><span class="lnk">입력</span></td></tr>
+        <tr><td><span class="st g">안전</span></td><td>기장</td><td>IFM 릴레이</td><td>문 전체</td><td class="n">23</td><td class="n">2027-11-24</td><td class="n">1년 1개월</td><td class="c"><span class="lnk">입력</span></td></tr>
+        <tr><td><span class="st g">안전</span></td><td>부산원동</td><td>IFM 릴레이</td><td>문 전체</td><td class="n">22</td><td class="n">2027-12-10</td><td class="n">1년 1개월</td><td class="c"><span class="lnk">입력</span></td></tr>
+      </table>
+    </div>
+    <div class="box">
+      <div class="boxh"><h2>최근 교체 기록</h2><span class="cnt">전체 1,230건</span><div class="r"><span class="btn pri">기록 입력</span><span class="btn">엑셀 업로드</span></div></div>
+      <table>
+        <tr><th>교체일</th><th>역</th><th>위치</th><th>부품</th><th>사유</th><th>입력</th></tr>
+        <tr><td>2026-10-21</td><td>태화강</td><td>북울산 방면 4-4</td><td>도어 행거</td><td>고장</td><td>정비1팀</td></tr>
+        <tr><td>2026-10-14</td><td>센텀</td><td>부전 방면 3-1</td><td>DCM, IFM 릴레이</td><td>예방 교체</td><td>정비2팀</td></tr>
+        <tr><td>2026-10-02</td><td>교대</td><td>역 공통</td><td>종합제어반 릴레이</td><td>고장</td><td>정비1팀</td></tr>
+        <tr><td>2026-09-27</td><td>일광</td><td>북울산 방면 1-2</td><td>풀리</td><td>함께 교체</td><td>정비2팀</td></tr>
+      </table>
+    </div>
+    <p class="foot">※ 문 수(역당 32개)는 임시값입니다. 예정일 = 마지막 교체일(기록 없으면 PSD 사용개시일) + 역별 권장 주기.</p>
+  </main>
+</div>
+</body></html>

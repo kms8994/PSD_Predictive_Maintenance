@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>시안 5 · 일정표형</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --ink: #1d1d1b; --mut: #74726c; --rule: #e4e1da; --bg: #fdfcf9; --red: #d6402f; --amb: #e39a1b; --chk: #8a8780; --ok: #2f6f5e; }
+body { width: 1280px; background: var(--bg); color: var(--ink); font-family: Pretendard, sans-serif; font-size: 14px; }
+.top { display: flex; align-items: baseline; gap: 32px; padding: 26px 40px 18px; }
+.top h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.6px; }
+.top nav { display: flex; gap: 22px; font-size: 14.5px; color: var(--mut); }
+.top nav b { color: var(--ink); }
+.top .r { margin-left: auto; font-size: 13px; color: var(--mut); }
+.sum { display: flex; gap: 40px; padding: 0 40px 22px; font-size: 14px; border-bottom: 1px solid var(--rule); }
+.sum span b { font-size: 22px; font-weight: 800; margin-right: 4px; vertical-align: -1px; }
+.sum .next { margin-left: auto; color: var(--mut); }
+.sum .next b { color: var(--ink); font-size: 14px; }
+.tl { padding: 22px 40px 10px; }
+.tlh { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.tlh h2 { font-size: 17px; font-weight: 800; }
+.tlh span { color: var(--mut); font-size: 13px; }
+.tlh .seg { margin-left: auto; display: flex; gap: 14px; font-size: 13px; color: var(--mut); }
+.tlh .seg b { color: var(--ink); border-bottom: 2px solid var(--ink); }
+.grid { display: grid; grid-template-columns: 128px 62px repeat(14, 1fr); }
+.grid > div { border-bottom: 1px solid var(--rule); height: 40px; position: relative; }
+.grid .mh { height: 30px; font-size: 12px; color: var(--mut); padding-top: 6px; border-left: 1px solid var(--rule); padding-left: 6px; border-bottom: 1px solid var(--ink); }
+.grid .mh.y { color: var(--ink); font-weight: 700; }
+.grid .mh.now { background: #f3efe6; }
+.grid .lbl { font-weight: 700; padding-top: 10px; font-size: 14px; }
+.grid .lbl small { font-weight: 400; color: var(--mut); font-size: 12px; margin-left: 4px; }
+.grid .cell { border-left: 1px solid var(--rule); }
+.grid .cell.now { background: #f3efe6; }
+.grid .od { border-left: 1px solid var(--rule); background: repeating-linear-gradient(45deg, transparent 0 6px, #f1eee8 6px 8px); }
+.ev { position: absolute; top: 8px; left: 5px; height: 24px; padding: 0 8px; border-radius: 3px; font-size: 12px; font-weight: 700; display: flex; align-items: center; white-space: nowrap; color: #fff; z-index: 1; }
+.ev.r { background: var(--red); } .ev.y { background: var(--amb); color: #2a1d00; } .ev.c { background: #fff; color: var(--chk); border: 1.5px dashed var(--chk); } .ev.g { background: #fff; color: var(--ok); border: 1.5px solid var(--ok); font-weight: 600; }
+.foot { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; padding: 20px 40px 30px; }
+.foot h3 { font-size: 15px; font-weight: 800; margin-bottom: 10px; }
+.todo { list-style: none; }
+.todo li { display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; align-items: start; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+.todo .box { width: 16px; height: 16px; border: 1.5px solid var(--ink); border-radius: 2px; margin-top: 2px; }
+.todo b { font-weight: 700; } .todo small { display: block; color: var(--mut); font-size: 12.5px; }
+.todo .when { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rec { font-size: 13.5px; }
+.rec div { display: grid; grid-template-columns: 54px 1fr auto; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+.rec .d { color: var(--mut); font-variant-numeric: tabular-nums; }
+.rec .w { color: var(--mut); font-size: 12.5px; }
+.links { margin-top: 12px; display: flex; gap: 18px; font-size: 13px; }
+.links a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+</style></head><body>
+<div class="top"><h1>동해선 PSD 교체 일정</h1><nav><b>현황</b><span>역</span><span>교체 기록</span><span style="color:#aaa69d">분석(실험)</span></nav><span class="r">2026년 10월 27일 기준</span></div>
+<div class="sum">
+  <span style="color:var(--red)"><b>2</b>위험</span><span style="color:var(--chk)"><b>1</b>확인 필요</span><span style="color:#b07400"><b>2</b>주의</span><span style="color:var(--ok)"><b>4,434</b>안전</span>
+  <span class="next">다음 교체 <b>12월 3일 태화강 DCM</b> (37일 남음)</span>
+</div>
+
+<section class="tl">
+  <div class="tlh"><h2>월별 교체 일정</h2><span>역 x 부품, 같은 날 예정인 문은 한 칸으로</span><div class="seg"><span>6개월</span><span>1년</span><b>14개월</b><span>3년</span></div></div>
+  <div class="grid">
+    <div class="mh" style="border-left:0"></div><div class="mh">지남</div>
+    <div class="mh y now">26.11</div><div class="mh">12</div><div class="mh y">27.1</div><div class="mh">2</div><div class="mh">3</div><div class="mh">4</div><div class="mh">5</div><div class="mh">6</div><div class="mh">7</div><div class="mh">8</div><div class="mh">9</div><div class="mh">10</div><div class="mh">11</div><div class="mh">12</div>
+
+    <div class="lbl">태화강</div><div class="od"></div><div class="cell now"></div><div class="cell"><span class="ev r">DCM · 북울산 4-2</span></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    <div class="lbl">개운포</div><div class="od"></div><div class="cell now"></div><div class="cell"></div><div class="cell"></div><div class="cell"><span class="ev r">도어 행거 · 부전 2-1</span></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    <div class="lbl">덕하</div><div class="od"><span class="ev c">모터</span></div><div class="cell now"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    <div class="lbl">망양</div><div class="od"></div><div class="cell now"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"><span class="ev y">풀리 · 부전 1-4</span></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    <div class="lbl">남창</div><div class="od"></div><div class="cell now"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"><span class="ev y">타이밍벨트 · 북울산 2-2</span></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+    <div class="lbl">오시리아 <small>외 4역</small></div><div class="od"></div><div class="cell now"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell" style="z-index:1"><span class="ev g" style="left:-40px">IFM 릴레이 · 문 80개</span></div><div class="cell"></div>
+    <div class="lbl">부산원동 <small>외 5역</small></div><div class="od"></div><div class="cell now"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"><span class="ev g" style="left:-58px">IFM 릴레이 · 문 97개</span></div>
+  </div>
+</section>
+
+<div class="foot">
+  <div>
+    <h3>이번 분기에 챙길 것</h3>
+    <ul class="todo">
+      <li><span class="box"></span><span><b>태화강 DCM 교체</b><small>북울산 방면 4-2 · 위험</small></span><span class="when" style="color:var(--red)">12.03</span></li>
+      <li><span class="box"></span><span><b>덕하 모터 교체 여부 확인</b><small>북울산 방면 3-3 · 예정일 지났는데 기록 없음</small></span><span class="when" style="color:var(--chk)">9.18 지남</span></li>
+      <li><span class="box"></span><span><b>개운포 도어 행거 자재 주문</b><small>부전 방면 2-1 · 2월 교체 예정</small></span><span class="when">27.02.14</span></li>
+    </ul>
+  </div>
+  <div>
+    <h3>최근 교체 기록 <span style="font-weight:400;color:var(--mut);font-size:13px">· 전체 1,230건</span></h3>
+    <div class="rec">
+      <div><span class="d">10.21</span><span>태화강 도어 행거 <span class="w">· 북울산 4-4 · 고장</span></span><span class="w">정비1팀</span></div>
+      <div><span class="d">10.14</span><span>센텀 DCM, IFM 릴레이 <span class="w">· 부전 3-1 · 예방</span></span><span class="w">정비2팀</span></div>
+      <div><span class="d">10.02</span><span>교대 종합제어반 릴레이 <span class="w">· 역 공통 · 고장</span></span><span class="w">정비1팀</span></div>
+    </div>
+    <div class="links"><a>기록 입력</a><a>엑셀 업로드</a><a>보고서 내려받기</a></div>
+  </div>
+</div>
+</body></html>

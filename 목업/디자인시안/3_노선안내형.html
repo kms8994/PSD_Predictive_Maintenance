@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>시안 3 · 노선 안내형</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --line: #0065b3; --red: #e0352b; --amb: #f2a900; --gry: #8c949e; --ok: #c9d3de; }
+body { width: 1280px; background: #fff; color: #111; font-family: Pretendard, sans-serif; font-size: 14px; }
+header { background: var(--line); color: #fff; padding: 0 40px; display: flex; align-items: center; height: 64px; gap: 18px; }
+.badge { width: 34px; height: 34px; border-radius: 50%; background: #fff; color: var(--line); font-weight: 800; display: grid; place-items: center; font-size: 13px; }
+header h1 { font-size: 21px; font-weight: 800; letter-spacing: -0.5px; }
+header nav { margin-left: auto; display: flex; gap: 4px; }
+header nav a { color: #fff; padding: 8px 14px; font-weight: 600; font-size: 14px; opacity: .8; }
+header nav a.on { background: #fff; color: var(--line); opacity: 1; border-radius: 3px; }
+header nav a.lab { opacity: .55; font-weight: 500; }
+.map { padding: 26px 40px 22px; border-bottom: 1px solid #e3e7ec; background: #f6f8fa; }
+.map .t { display: flex; justify-content: space-between; font-size: 13px; color: #555; margin-bottom: 14px; }
+.map .t b { color: #111; font-size: 15px; }
+.rail { position: relative; display: grid; grid-template-columns: repeat(24, 1fr); }
+.rail::before { content: ""; position: absolute; left: 20px; right: 20px; top: 31px; height: 6px; background: var(--line); border-radius: 3px; }
+.stn { position: relative; display: grid; grid-template-rows: 22px 24px 22px; justify-items: center; align-items: center; }
+.dot { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 5px solid var(--line); grid-row: 2; position: relative; }
+.dot.r { background: var(--red); border-color: #fff; box-shadow: 0 0 0 3px var(--red); }
+.dot.y { background: var(--amb); border-color: #fff; box-shadow: 0 0 0 3px var(--amb); }
+.dot.c { background: var(--gry); border-color: #fff; box-shadow: 0 0 0 3px var(--gry); }
+.dot.x { border-color: #c4ccd5; border-style: dashed; }
+.stn span { grid-row: 3; font-size: 12px; white-space: nowrap; color: #333; }
+.stn:nth-child(even) span { grid-row: 1; }
+.stn.hl span { font-weight: 800; color: #111; }
+.legend { display: flex; gap: 18px; font-size: 12.5px; color: #444; margin-top: 14px; }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.body { display: grid; grid-template-columns: 1fr 340px; gap: 36px; padding: 28px 40px; }
+h2 { font-size: 19px; font-weight: 800; margin-bottom: 4px; letter-spacing: -0.3px; }
+.sub { font-size: 13px; color: #666; margin-bottom: 14px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.tabs span { border: 1.5px solid #d3d9e0; padding: 5px 14px; border-radius: 99px; font-size: 13px; font-weight: 600; color: #555; }
+.tabs span.on { background: #111; color: #fff; border-color: #111; }
+.item { display: grid; grid-template-columns: 8px 130px 1fr 120px 96px; align-items: center; gap: 16px; padding: 13px 0; border-bottom: 1px solid #e8ebef; }
+.item .bar { width: 8px; height: 38px; border-radius: 2px; }
+.item .s { font-size: 17px; font-weight: 800; }
+.item .p b { font-weight: 700; } .item .p span { display: block; font-size: 12.5px; color: #777; }
+.item .d { font-variant-numeric: tabular-nums; color: #444; font-size: 13.5px; }
+.item .left { text-align: right; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+.side .card { border: 2px solid #111; padding: 18px 20px; margin-bottom: 18px; }
+.side .card .k { font-size: 12.5px; font-weight: 700; color: var(--red); }
+.side .card .big { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin: 4px 0; }
+.counts { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid #e3e7ec; }
+.counts div { padding: 12px 0; text-align: center; border-right: 1px solid #e3e7ec; }
+.counts div:last-child { border-right: 0; }
+.counts b { display: block; font-size: 26px; font-weight: 800; }
+.counts span { font-size: 12px; color: #666; }
+.side h3 { font-size: 15px; font-weight: 800; margin: 6px 0 8px; }
+.rec { font-size: 13px; padding: 9px 0; border-bottom: 1px solid #eef0f3; }
+.rec b { font-weight: 700; } .rec span { color: #777; display: block; font-size: 12px; margin-top: 2px; }
+.btn { display: block; text-align: center; background: var(--line); color: #fff; font-weight: 700; padding: 11px; margin-top: 14px; border-radius: 3px; }
+</style></head><body>
+<header><div class="badge">동해</div><h1>스크린도어 교체 관리</h1>
+  <nav><a class="on">현황</a><a>역</a><a>교체 기록</a><a class="lab">분석(실험)</a></nav></header>
+
+<section class="map">
+  <div class="t"><b>노선 상태</b><span>2026.10.27 기준 · 역을 누르면 역 상세로</span></div>
+  <div class="rail">
+    <div class="stn"><div class="dot"></div><span>부전</span></div>
+    <div class="stn"><div class="dot"></div><span>거제해맞이</span></div>
+    <div class="stn"><div class="dot"></div><span>거제</span></div>
+    <div class="stn"><div class="dot"></div><span>교대</span></div>
+    <div class="stn"><div class="dot"></div><span>동래</span></div>
+    <div class="stn"><div class="dot"></div><span>안락</span></div>
+    <div class="stn"><div class="dot"></div><span>부산원동</span></div>
+    <div class="stn"><div class="dot"></div><span>재송</span></div>
+    <div class="stn"><div class="dot"></div><span>센텀</span></div>
+    <div class="stn"><div class="dot"></div><span>벡스코</span></div>
+    <div class="stn"><div class="dot"></div><span>신해운대</span></div>
+    <div class="stn"><div class="dot"></div><span>송정</span></div>
+    <div class="stn"><div class="dot"></div><span>오시리아</span></div>
+    <div class="stn"><div class="dot"></div><span>기장</span></div>
+    <div class="stn"><div class="dot"></div><span>일광</span></div>
+    <div class="stn"><div class="dot"></div><span>좌천</span></div>
+    <div class="stn"><div class="dot"></div><span>월내</span></div>
+    <div class="stn"><div class="dot"></div><span>서생</span></div>
+    <div class="stn hl"><div class="dot y"></div><span>남창</span></div>
+    <div class="stn hl"><div class="dot y"></div><span>망양</span></div>
+    <div class="stn hl"><div class="dot c"></div><span>덕하</span></div>
+    <div class="stn hl"><div class="dot r"></div><span>개운포</span></div>
+    <div class="stn hl"><div class="dot r"></div><span>태화강</span></div>
+    <div class="stn"><div class="dot x"></div><span style="color:#999">북울산</span></div>
+  </div>
+  <div class="legend"><span><i style="background:var(--red)"></i>위험 6개월 안</span><span><i style="background:var(--gry)"></i>확인 필요</span><span><i style="background:var(--amb)"></i>주의 1년 안</span><span><i style="border:3px solid var(--line);width:11px;height:11px"></i>안전</span><span><i style="border:2px dashed #c4ccd5"></i>개통 전</span></div>
+</section>
+
+<div class="body">
+  <div>
+    <h2>교체 예정</h2><p class="sub">앞으로 2년 · 8건 · 부품 64개</p>
+    <div class="tabs"><span>6개월</span><span>1년</span><span class="on">2년</span><span>3년</span></div>
+    <div class="item"><i class="bar" style="background:var(--red)"></i><span class="s">태화강</span><span class="p"><b>DCM</b><span>북울산 방면 4-2</span></span><span class="d">2026.12.03</span><span class="left" style="color:var(--red)">D-37</span></div>
+    <div class="item"><i class="bar" style="background:var(--red)"></i><span class="s">개운포</span><span class="p"><b>도어 행거</b><span>부전 방면 2-1</span></span><span class="d">2027.02.14</span><span class="left" style="color:var(--red)">D-110</span></div>
+    <div class="item"><i class="bar" style="background:var(--gry)"></i><span class="s">덕하</span><span class="p"><b>모터</b><span>북울산 방면 3-3 · 기록 없이 예정일 지남</span></span><span class="d">2026.09.18</span><span class="left" style="color:#555">+39일</span></div>
+    <div class="item"><i class="bar" style="background:var(--amb)"></i><span class="s">망양</span><span class="p"><b>풀리</b><span>부전 방면 1-4</span></span><span class="d">2027.05.30</span><span class="left">D-215</span></div>
+    <div class="item"><i class="bar" style="background:var(--amb)"></i><span class="s">남창</span><span class="p"><b>타이밍벨트</b><span>북울산 방면 2-2</span></span><span class="d">2027.08.11</span><span class="left">D-288</span></div>
+    <div class="item"><i class="bar" style="background:var(--ok)"></i><span class="s">오시리아</span><span class="p"><b>IFM 릴레이</b><span>문 12개</span></span><span class="d">2027.11.24</span><span class="left" style="color:#777">D-393</span></div>
+  </div>
+  <aside class="side">
+    <div class="card"><div class="k">다음 교체</div><div class="big">태화강 DCM</div><div style="color:#555;font-size:13px">2026년 12월 3일 · 37일 남음</div></div>
+    <div class="counts"><div><b style="color:var(--red)">2</b><span>위험</span></div><div><b style="color:var(--gry)">1</b><span>확인 필요</span></div><div><b style="color:#c48900">2</b><span>주의</span></div></div>
+    <h3 style="margin-top:22px">최근 교체 기록</h3>
+    <div class="rec"><b>태화강</b> 도어 행거 · 고장<span>10.21 · 북울산 방면 4-4 · 정비1팀</span></div>
+    <div class="rec"><b>센텀</b> DCM, IFM 릴레이 · 예방 교체<span>10.14 · 부전 방면 3-1 · 정비2팀</span></div>
+    <div class="rec"><b>교대</b> 종합제어반 릴레이 · 고장<span>10.02 · 역 공통 · 정비1팀</span></div>
+    <span class="btn">교체 기록 입력</span>
+  </aside>
+</div>
+</body></html>

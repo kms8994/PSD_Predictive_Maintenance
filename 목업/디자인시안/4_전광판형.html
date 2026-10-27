@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>시안 4 · 전광판형</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --bg: #121212; --panel: #1b1b1b; --line: #2c2c2c; --amb: #ffb000; --red: #ff5a4e; --txt: #e9e6df; --dim: #8d8a83; --grn: #7fbf7f; }
+body { width: 1280px; background: var(--bg); color: var(--txt); font-family: Pretendard, sans-serif; font-size: 14px; }
+.top { display: flex; align-items: center; height: 56px; padding: 0 32px; border-bottom: 1px solid var(--line); gap: 28px; }
+.top h1 { font-size: 16px; font-weight: 700; }
+.top nav { display: flex; gap: 22px; font-size: 14px; color: var(--dim); }
+.top nav .on { color: var(--txt); font-weight: 700; box-shadow: 0 2px 0 var(--amb); padding-bottom: 3px; }
+.top .clock { margin-left: auto; font-family: "Nanum Gothic Coding", monospace; color: var(--amb); font-size: 15px; letter-spacing: 1px; }
+.wrap { padding: 26px 32px; }
+.row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: 26px; }
+.row div { background: var(--panel); padding: 16px 20px; }
+.row .k { font-size: 12.5px; color: var(--dim); }
+.row .v { font-family: "Nanum Gothic Coding", monospace; font-size: 40px; font-weight: 700; line-height: 1.2; margin-top: 4px; }
+.row .d { font-size: 12px; color: var(--dim); }
+.board { border: 1px solid var(--line); background: #0b0b0b; margin-bottom: 26px; }
+.bh { display: flex; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); gap: 14px; }
+.bh h2 { font-size: 15px; font-weight: 700; }
+.bh .f { margin-left: auto; display: flex; gap: 0; border: 1px solid #3a3a3a; }
+.bh .f span { padding: 4px 12px; font-size: 12.5px; color: var(--dim); border-right: 1px solid #3a3a3a; }
+.bh .f span:last-child { border-right: 0; }
+.bh .f span.on { background: var(--amb); color: #111; font-weight: 700; }
+table { width: 100%; border-collapse: collapse; font-family: "Nanum Gothic Coding", monospace; font-size: 16px; }
+th { font-family: Pretendard, sans-serif; font-size: 11.5px; font-weight: 600; color: var(--dim); text-align: left; padding: 9px 18px; border-bottom: 1px solid var(--line); letter-spacing: .5px; }
+td { padding: 11px 18px; border-bottom: 1px dashed #262626; color: var(--amb); white-space: nowrap; }
+td.w { color: var(--txt); }
+td.r, th.r { text-align: right; }
+.s { font-family: Pretendard, sans-serif; font-size: 12.5px; font-weight: 700; padding: 2px 0; display: inline-block; width: 64px; }
+.s.red { color: var(--red); } .s.amb { color: var(--amb); } .s.chk { color: #c7c3ba; } .s.ok { color: var(--grn); font-weight: 500; }
+tr.blink td { background: #1f1311; }
+tr.ok td { color: #9b958a; }
+.two { display: grid; grid-template-columns: 1.4fr 1fr; gap: 26px; }
+.rec td { font-size: 14px; color: var(--txt); padding: 9px 18px; }
+.rec td.dt { color: var(--amb); }
+.act { border: 1px solid var(--line); padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.act h2 { font-size: 15px; margin-bottom: 4px; }
+.act a { display: flex; justify-content: space-between; border: 1px solid #3a3a3a; padding: 12px 14px; color: var(--txt); text-decoration: none; font-size: 14px; }
+.act a.p { background: var(--amb); color: #111; border-color: var(--amb); font-weight: 700; }
+.act a span { color: var(--dim); }
+.act a.p span { color: #111; }
+.act .lab { margin-top: auto; font-size: 12px; color: var(--dim); border-top: 1px solid var(--line); padding-top: 10px; }
+</style></head><body>
+<div class="top"><h1>동해선 PSD 정비</h1><nav><span class="on">현황</span><span>역</span><span>교체 기록</span></nav><span class="clock">2026-10-27 TUE</span></div>
+<div class="wrap">
+  <div class="row">
+    <div><div class="k">위험 · 6개월 안</div><div class="v" style="color:var(--red)">02</div><div class="d">교체 일정 확정</div></div>
+    <div><div class="k">확인 필요</div><div class="v" style="color:#c7c3ba">01</div><div class="d">기록 없이 예정일 지남</div></div>
+    <div><div class="k">주의 · 1년 안</div><div class="v" style="color:var(--amb)">02</div><div class="d">자재 준비</div></div>
+    <div><div class="k">다음 교체까지</div><div class="v" style="color:var(--amb)">D-37</div><div class="d">태화강 DCM · 2026-12-03</div></div>
+  </div>
+  <div class="board">
+    <div class="bh"><h2>교체 예정</h2><span style="color:var(--dim);font-size:12.5px">2년 이내 8건 · 부품 64개</span>
+      <div class="f"><span>6개월</span><span>1년</span><span class="on">2년</span><span>3년</span></div></div>
+    <table>
+      <tr><th>예정일</th><th>상태</th><th>역</th><th>부품</th><th>위치</th><th class="r">남은 기간</th></tr>
+      <tr class="blink"><td>2026-12-03</td><td><span class="s red">■ 위험</span></td><td class="w">태화강</td><td class="w">DCM</td><td class="w">북울산 4-2</td><td class="r" style="color:var(--red)">37일</td></tr>
+      <tr class="blink"><td>2027-02-14</td><td><span class="s red">■ 위험</span></td><td class="w">개운포</td><td class="w">도어 행거</td><td class="w">부전 2-1</td><td class="r" style="color:var(--red)">110일</td></tr>
+      <tr><td style="color:#c7c3ba">2026-09-18</td><td><span class="s chk">□ 확인</span></td><td class="w">덕하</td><td class="w">모터</td><td class="w">북울산 3-3</td><td class="r" style="color:#c7c3ba">39일 지남</td></tr>
+      <tr><td>2027-05-30</td><td><span class="s amb">■ 주의</span></td><td class="w">망양</td><td class="w">풀리</td><td class="w">부전 1-4</td><td class="r">215일</td></tr>
+      <tr><td>2027-08-11</td><td><span class="s amb">■ 주의</span></td><td class="w">남창</td><td class="w">타이밍벨트</td><td class="w">북울산 2-2</td><td class="r">288일</td></tr>
+      <tr class="ok"><td>2027-11-24</td><td><span class="s ok">안전</span></td><td>오시리아</td><td>IFM 릴레이</td><td>문 12개</td><td class="r">393일</td></tr>
+      <tr class="ok"><td>2027-11-24</td><td><span class="s ok">안전</span></td><td>기장</td><td>IFM 릴레이</td><td>문 23개</td><td class="r">393일</td></tr>
+    </table>
+  </div>
+  <div class="two">
+    <div class="board" style="margin:0">
+      <div class="bh"><h2>최근 교체 기록</h2><span style="color:var(--dim);font-size:12.5px;margin-left:auto">전체 1,230건</span></div>
+      <table class="rec">
+        <tr><td class="dt">10-21</td><td>태화강 · 북울산 4-4</td><td>도어 행거</td><td style="color:var(--dim)">고장</td></tr>
+        <tr><td class="dt">10-14</td><td>센텀 · 부전 3-1</td><td>DCM, IFM 릴레이</td><td style="color:var(--dim)">예방</td></tr>
+        <tr><td class="dt">10-02</td><td>교대 · 역 공통</td><td>종합제어반 릴레이</td><td style="color:var(--dim)">고장</td></tr>
+      </table>
+    </div>
+    <div class="act"><h2>바로 하기</h2>
+      <a class="p">교체 기록 입력 <span>→</span></a>
+      <a>엑셀로 한꺼번에 올리기 <span>.xlsx</span></a>
+      <a>보고서 내려받기 <span>.xlsx</span></a>
+      <div class="lab">분석(실험) 화면: 날씨 영향 · 교체 물량 →</div>
+    </div>
+  </div>
+</div>
+</body></html>

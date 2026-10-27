@@ -1,83 +1,91 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>동해선 PSD 교체주기</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
-/* 레이아웃은 목업(목업/동해선_PSD_교체주기_목업.html)과 동일하게 두고, 데이터만 실제 API에서 받는다 */
+/* 디자인: 목업/디자인시안/3_노선안내형.html(동해선 파란색, 노선도 중심). 데이터는 실제 API에서 받는다 */
 :root {
-  --bg: #f4f7fb;
+  --hdr: #0065b3;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --ink: #15202d;
-  --muted: #5a6677;
-  --line: #d9e1eb;
-  --rail: #8fb2dd;
-  --accent: #1d5ea8;
-  --accent-soft: #e6eef8;
-  --red: #cf4430;
-  --red-soft: #fbe8e4;
-  --amber: #c98a12;
-  --amber-soft: #fbf1dc;
-  --green: #2b9457;
-  --green-soft: #e2f3e9;
-  --gray: #7d8796;
-  --gray-soft: #eceff3;
-  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
-  --font-data: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
-  --scroll-edge: rgba(0, 0, 0, .18);
+  --surface-2: #f6f8fa;
+  --ink: #111111;
+  --muted: #5f6873;
+  --line: #e3e7ec;
+  --rail: #0065b3;
+  --accent: #0065b3;
+  --accent-soft: #e9f2fa;
+  --on-accent: #ffffff;
+  --red: #e0352b;
+  --red-soft: #fdebea;
+  --amber: #b77f00;
+  --amber-dot: #f2a900;
+  --amber-soft: #fdf3dc;
+  --green: #2f7d5b;
+  --green-soft: #e4f2ec;
+  --gray: #7d8590;
+  --gray-soft: #eef0f3;
+  --font-body: Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-data: Pretendard, "Malgun Gothic", system-ui, sans-serif;
+  --scroll-edge: rgba(0, 0, 0, .14);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f151d; --surface: #17202b; --ink: #e5ebf2; --muted: #9aa7b7; --line: #2a3644;
-    --rail: #4d76a6; --accent: #7fb0f0; --accent-soft: #1d2b3c;
-    --red: #f0705c; --red-soft: #3a211d; --amber: #eeb54a; --amber-soft: #3a2f18;
-    --green: #4cc27e; --green-soft: #183224; --gray: #8a94a3; --gray-soft: #252e39;
+    --hdr: #0b4f8c; --bg: #10151b; --surface: #161d25; --surface-2: #1b232d; --ink: #e8ecf1; --muted: #9aa5b2; --line: #2a3440;
+    --rail: #3d8fd6; --accent: #6fb0ec; --accent-soft: #1a2a3b; --on-accent: #0b1520;
+    --red: #f2675d; --red-soft: #3a1f1d; --amber: #f0b43c; --amber-dot: #f0b43c; --amber-soft: #3a2f18;
+    --green: #5cc08f; --green-soft: #183224; --gray: #8f99a6; --gray-soft: #252e39;
     --scroll-edge: rgba(255, 255, 255, .16);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0f151d; --surface: #17202b; --ink: #e5ebf2; --muted: #9aa7b7; --line: #2a3644;
-  --rail: #4d76a6; --accent: #7fb0f0; --accent-soft: #1d2b3c;
-  --red: #f0705c; --red-soft: #3a211d; --amber: #eeb54a; --amber-soft: #3a2f18;
-  --green: #4cc27e; --green-soft: #183224; --gray: #8a94a3; --gray-soft: #252e39;
+  --hdr: #0b4f8c; --bg: #10151b; --surface: #161d25; --surface-2: #1b232d; --ink: #e8ecf1; --muted: #9aa5b2; --line: #2a3440;
+  --rail: #3d8fd6; --accent: #6fb0ec; --accent-soft: #1a2a3b; --on-accent: #0b1520;
+  --red: #f2675d; --red-soft: #3a1f1d; --amber: #f0b43c; --amber-dot: #f0b43c; --amber-soft: #3a2f18;
+  --green: #5cc08f; --green-soft: #183224; --gray: #8f99a6; --gray-soft: #252e39;
   --scroll-edge: rgba(255, 255, 255, .16);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; margin: 0; }
-.wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+.wrap { max-width: 1200px; margin: 0 auto; padding-inline: 40px; padding-block: 0 56px; }
+@media (max-width: 640px) { .wrap { padding-inline: 16px; } }
 h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.3; }
-h1 { font-size: 1.35rem; font-weight: 700; }
-h2 { font-size: 1.12rem; font-weight: 700; }
-h3 { font-size: 0.98rem; font-weight: 600; }
+h1 { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.2rem; font-weight: 800; letter-spacing: -0.02em; }
+h3 { font-size: 1rem; font-weight: 800; }
 p { margin: 0; }
 a { color: var(--accent); }
 .num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }
 
-.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
-.top-inner { max-width: 980px; margin: 0 auto; padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; }
-.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.brand .line-chip { font-size: 0.75rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 999px; letter-spacing: 0.02em; }
-.navbtns { display: flex; gap: 6px; margin-left: auto; }
-.navbtn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 0.82rem; font-weight: 600; padding: 5px 10px; border-radius: 999px; cursor: pointer; }
-.navbtn:hover { border-color: var(--accent); color: var(--accent); }
-.tabs { display: flex; gap: 4px; }
-.tab { appearance: none; border: 0; background: none; font: inherit; font-weight: 600; color: var(--muted); padding: 8px 12px 10px; border-bottom: 3px solid transparent; cursor: pointer; }
-.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
-.lab-tab { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
-.lab-tab .pill { font-size: 0.7rem; padding: 1px 6px; }
-.tab:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--hdr); color: #fff; }
+.top-inner { max-width: 1200px; margin: 0 auto; padding: 12px 40px; display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; }
+.badge { width: 34px; height: 34px; border-radius: 50%; background: #fff; color: var(--hdr); font-weight: 800; display: grid; place-items: center; font-size: 13px; flex: none; }
+.navbtns { display: flex; gap: 2px; }
+.navbtn { appearance: none; border: 0; background: none; color: #fff; opacity: .7; font: inherit; font-size: 1.1rem; font-weight: 700; width: 30px; height: 30px; border-radius: 3px; cursor: pointer; }
+.navbtn:hover { opacity: 1; background: rgba(255, 255, 255, .12); }
+.tabs { display: flex; gap: 4px; margin-left: auto; }
+.tab { appearance: none; border: 0; background: none; font: inherit; font-size: 0.93rem; font-weight: 700; color: #fff; opacity: .8; padding: 7px 14px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+.tab:hover { opacity: 1; }
+.tab[aria-selected="true"] { background: #fff; color: var(--hdr); opacity: 1; }
+.lab-tab { font-weight: 500; opacity: .6; }
+@media (max-width: 640px) {
+  .top-inner { padding: 10px 16px; }
+  .tabs { margin-left: 0; width: 100%; overflow-x: auto; }
+  .tab { padding: 6px 11px; }
+}
+.tab:focus-visible, .navbtn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mockbar { background: var(--accent-soft); color: var(--ink); font-size: 0.82rem; padding: 8px 16px; border-bottom: 1px solid var(--line); }
-.mockbar-inner { max-width: 980px; margin: 0 auto; }
+.mockbar-inner { max-width: 1200px; margin: 0 auto; padding-inline: 24px; }
 
-.view { display: flex; flex-direction: column; gap: 18px; padding-top: 18px; }
+.view { display: flex; flex-direction: column; gap: 20px; padding-top: 24px; }
 .crumbs { display: flex; gap: 6px; flex-wrap: wrap; font-size: 0.88rem; color: var(--muted); }
 .crumbs button { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 0.92rem; }
 .kv dt { color: var(--muted); }
@@ -91,7 +99,7 @@ a { color: var(--accent); }
 .legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.82rem; }
 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
 .stat b { font-family: var(--font-data); font-size: 1.5rem; font-weight: 500; font-variant-numeric: tabular-nums; }
 .stat.red b { color: var(--red); } .stat.amber b { color: var(--amber); } .stat.check b { color: var(--gray); }
 .stat.next b { font-size: 1.15rem; padding-block: 5px 4px; }
@@ -104,9 +112,67 @@ a { color: var(--accent); }
 .wtable td.wempty { white-space: normal; text-align: center; padding: 28px 12px; }
 .wtable td.wempty b, .wtable td.wempty span { display: block; }
 .wtable td.wempty span { margin-top: 4px; }
+/* 현황: 노선도 */
+.map { background: var(--surface-2); border-radius: 4px; padding: 20px 24px 18px; display: flex; flex-direction: column; gap: 12px; }
+.map-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; }
+.map-scroll { overflow-x: auto; padding-bottom: 4px; }
+.rail { position: relative; display: grid; grid-template-columns: repeat(24, minmax(40px, 1fr)); min-width: 960px; }
+.rail::before { content: ""; position: absolute; left: 20px; right: 20px; top: 31px; height: 6px; background: var(--rail); border-radius: 3px; }
+.stn { appearance: none; background: none; border: 0; font: inherit; color: inherit; padding: 0; cursor: pointer; position: relative; display: grid; grid-template-rows: 22px 24px 22px; justify-items: center; align-items: center; }
+.stn .dot { grid-row: 2; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); border: 5px solid var(--rail); }
+.stn .dot.r { background: var(--red); border-color: var(--surface); box-shadow: 0 0 0 3px var(--red); }
+.stn .dot.y { background: var(--amber-dot); border-color: var(--surface); box-shadow: 0 0 0 3px var(--amber-dot); }
+.stn .dot.c { background: var(--gray); border-color: var(--surface); box-shadow: 0 0 0 3px var(--gray); }
+.stn .dot.x { border-color: var(--line); border-style: dashed; }
+.stn .nm { grid-row: 3; font-size: 12px; white-space: nowrap; color: var(--muted); }
+.stn:nth-child(even) .nm { grid-row: 1; }
+.stn.hl .nm { font-weight: 800; color: var(--ink); }
+.stn:hover .nm { color: var(--accent); text-decoration: underline; }
+.stn:hover .dot { transform: scale(1.12); }
+.maplegend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.8rem; color: var(--muted); }
+.maplegend i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+/* 현황: 교체 예정 + 옆 패널 */
+.homegrid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 36px; align-items: start; }
+@media (max-width: 900px) { .homegrid { grid-template-columns: minmax(0, 1fr); gap: 28px; } }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.segbtn { appearance: none; border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-size: 0.85rem; font-weight: 700; padding: 5px 14px; border-radius: 999px; cursor: pointer; }
+.segbtn:hover { border-color: var(--ink); color: var(--ink); }
+.segbtn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.items { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.item { appearance: none; background: none; border: 0; border-bottom: 1px solid var(--line); font: inherit; color: inherit; text-align: left; cursor: pointer; display: grid; grid-template-columns: 8px 120px minmax(0, 1fr) 100px 76px; align-items: center; gap: 16px; padding: 12px 4px 12px 0; }
+.item:hover { background: var(--surface-2); }
+.item .bar { width: 8px; height: 38px; border-radius: 2px; background: var(--line); }
+.item.r .bar { background: var(--red); } .item.y .bar { background: var(--amber-dot); } .item.c .bar { background: var(--gray); }
+.item .s { font-size: 1.05rem; font-weight: 800; }
+.item .p { min-width: 0; } .item .p b { font-weight: 700; } .item .p span { display: block; font-size: 0.8rem; color: var(--muted); }
+.item .d { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.88rem; }
+.item .left { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted); }
+.item.r .left { color: var(--red); } .item.y .left { color: var(--ink); } .item.c .left { color: var(--gray); }
+@media (max-width: 640px) {
+  .item { grid-template-columns: 6px minmax(0, 1fr) auto; gap: 4px 12px; }
+  .item .bar { grid-row: 1 / 3; width: 6px; }
+  .item .s { grid-column: 2; } .item .left { grid-column: 3; grid-row: 1; }
+  .item .p { grid-column: 2; } .item .d { grid-column: 3; grid-row: 2; text-align: right; }
+}
+.items-empty { padding: 28px 12px; text-align: center; border-bottom: 1px solid var(--line); }
+.items-empty b, .items-empty span { display: block; }
+.items-empty span { margin-top: 4px; }
+.nextcard { border: 2px solid var(--ink); padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
+.nextcard .k { font-size: 0.8rem; font-weight: 800; color: var(--red); }
+.nextcard .big { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.25; }
+.counts { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.counts div { padding: 12px 0; text-align: center; border-right: 1px solid var(--line); }
+.counts div:last-child { border-right: 0; }
+.counts b { display: block; font-size: 1.6rem; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.counts span { font-size: 0.78rem; color: var(--muted); }
+.side { display: flex; flex-direction: column; gap: 18px; }
+.recs { display: flex; flex-direction: column; }
+.recs .rec { font-size: 0.86rem; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.recs .rec b { font-weight: 700; } .recs .rec span { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+.btn.block { align-self: stretch; text-align: center; padding: 11px; }
 .labnav { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-.route { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.route { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
 .route li { position: relative; }
 .route li + li .st { border-top: 1px solid var(--line); }
 .route li::before { content: ""; position: absolute; left: 28px; top: 0; bottom: 0; width: 3px; background: var(--rail); }
@@ -158,13 +224,13 @@ th { font-weight: 600; color: var(--muted); font-size: 0.8rem; }
 .rangebar .base { position: absolute; top: 8px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--accent); }
 .rangeaxis { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); font-family: var(--font-data); }
 
-.btn { appearance: none; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 8px; cursor: pointer; align-self: flex-start; }
+.btn { appearance: none; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 700; padding: 9px 16px; border-radius: 3px; cursor: pointer; align-self: flex-start; }
 .btn.ghost { background: none; color: var(--accent); }
 .form { display: flex; flex-direction: column; gap: 14px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label, .field legend { font-weight: 600; font-size: 0.9rem; }
 fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-input[type="date"], input[type="search"], select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); max-width: 260px; }
+input[type="date"], input[type="search"], select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); color: var(--ink); max-width: 260px; }
 .stfilter-wrap { position: relative; }
 input.stfilter { width: 100%; max-width: none; padding-left: 34px; }
 .stfilter-wrap::before { content: "⌕"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 1.1rem; pointer-events: none; }
@@ -173,7 +239,7 @@ input.stfilter { width: 100%; max-width: none; padding-left: 34px; }
 .checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .checks label { font-weight: 400; display: flex; gap: 6px; align-items: center; }
 .err { color: var(--red); font-size: 0.88rem; }
-.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 0.9rem; z-index: 20; }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 3px; font-size: 0.9rem; z-index: 20; }
 
 .vol td.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; min-width: 52px; }
 .vol td.n:empty::before { content: "–"; color: var(--line); }
@@ -184,7 +250,7 @@ input.stfilter { width: 100%; max-width: none; padding-left: 34px; }
 ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; }
 
 .psdhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-.dirtabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.dirtabs { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
 .dirtab { appearance: none; border: 0; background: var(--surface); color: var(--muted); font: inherit; font-size: 0.88rem; font-weight: 600; padding: 7px 14px; cursor: pointer; }
 .dirtab + .dirtab { border-left: 1px solid var(--line); }
 .dirtab[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
@@ -203,7 +269,7 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
   scrollbar-color: var(--muted) transparent;
 }
 .strip { display: flex; gap: 10px; min-width: max-content; }
-.car { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.car { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); }
 .carlabel { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-align: center; letter-spacing: 0.04em; }
 .cardoors { display: flex; gap: 4px; }
 .psd { appearance: none; border: 2px solid transparent; background: none; padding: 2px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font: inherit; color: var(--ink); }
@@ -237,7 +303,7 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
 .ptable .prow:hover, .ptable .prow:focus-visible { background: var(--accent-soft); outline: none; }
 
 .switcher { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.swbtn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 0.88rem; padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+.swbtn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 0.88rem; padding: 7px 12px; border-radius: 3px; cursor: pointer; }
 .swbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .swbtn:disabled { color: var(--muted); cursor: default; opacity: 0.6; }
 
@@ -259,7 +325,7 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
 .charts2 figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .charts2 figcaption { font-weight: 600; font-size: 0.92rem; }
 .charts2 svg { width: 100%; height: auto; }
-.tip { position: fixed; z-index: 30; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 0.82rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); display: flex; flex-direction: column; gap: 2px; max-width: 240px; }
+.tip { position: fixed; z-index: 30; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px; font-size: 0.82rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); display: flex; flex-direction: column; gap: 2px; max-width: 240px; }
 .tip strong { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
 .tip span { color: var(--muted); }
 .sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 20px; }
@@ -273,19 +339,18 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 </style>
 
-<div class="top">
+<header class="top">
   <div class="top-inner">
-    <div class="brand"><h1>동해선 PSD 교체주기</h1><span class="line-chip">부전 – 북울산 · 24개 역</span>
-      <div class="navbtns"><button class="navbtn" id="nav-back" aria-label="이전 화면으로">‹ 이전</button><button class="navbtn" id="nav-fwd" aria-label="다음 화면으로">다음 ›</button></div>
-    </div>
-    <div class="tabs" role="tablist">
+    <span class="badge" aria-hidden="true">동해</span><h1>스크린도어 교체 관리</h1>
+    <div class="navbtns"><button class="navbtn" id="nav-back" aria-label="이전 화면으로" title="이전 화면">‹</button><button class="navbtn" id="nav-fwd" aria-label="다음 화면으로" title="다음 화면">›</button></div>
+    <nav class="tabs" role="tablist">
       <button class="tab" id="tab-home" role="tab" aria-selected="true">현황</button>
       <button class="tab" id="tab-route" role="tab" aria-selected="false">역</button>
       <button class="tab" id="tab-records" role="tab" aria-selected="false">교체 기록</button>
-      <button class="tab lab-tab" id="tab-lab" role="tab" aria-selected="false">분석 <span class="pill s-check">실험</span></button>
-    </div>
+      <button class="tab lab-tab" id="tab-lab" role="tab" aria-selected="false">분석(실험)</button>
+    </nav>
   </div>
-</div>
+</header>
 <!-- 날씨 영향·교체 물량은 과제의 실험 결과를 보여 주는 화면이라 관리 화면과 떨어뜨려 두고, 들어가면 이 띠로 알린다 -->
 <div class="mockbar" id="labbar" hidden><div class="mockbar-inner"><b>분석(실험)</b> · 날씨가 교체주기에 주는 영향을 살펴보는 연구용 화면입니다. 기상청 AWS 4년치(2022~2025) 날씨로 계산했고, 문 수(역당 32개)는 임시값입니다. 정비 계획에는 <a href="#/home">현황</a> 화면을 쓰세요.</div></div>
 <main class="wrap" id="app"></main>
@@ -558,45 +623,64 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     return records.map(r => `<tr><td class="num">${r.replaced_on}</td><td><button class="linkbtn" style="padding:0" ${goAttr({ name: "station", st: r.station_id })}>${esc(r.station_name)}</button></td><td>${esc(r.location)}</td><td>${r.parts.map(esc).join(", ")}</td><td><span class="pill s-check">${REASONS[r.reason] || esc(r.reason)}</span></td><td class="muted">${esc(r.created_by || "-")}</td></tr>`).join("");
   }
   const recHead = `<tr><th>교체일</th><th>역</th><th>위치</th><th>부품</th><th>사유</th><th>입력자</th></tr>`;
+  const ITEM_CLS = { 빨강: "r", 노랑: "y", 확인_필요: "c", 초록: "" };
+  function dday(days) { return days < 0 ? `+${-days}일` : `D-${days}`; }
+  function stationDot(s) {
+    if (!s.in_service) return "x";
+    const c = s.counts;
+    return c.빨강 ? "r" : c.확인_필요 ? "c" : c.노랑 ? "y" : "";
+  }
   async function vHome() {
     const h = HORIZONS.some(x => x[0] === view.h) ? view.h : 730;
     const hLabel = HORIZONS.find(x => x[0] === h)[1];
-    const [wi, data, rec] = await Promise.all([api(`/api/work-items?within_days=${h}`), api("/api/stations"), api("/api/replacement-records?limit=5")]);
+    const [wi, data, rec] = await Promise.all([api(`/api/work-items?within_days=${h}`), api("/api/stations"), api("/api/replacement-records?limit=4")]);
     const t = data.totals, s0 = wi.soonest;
     const items = wi.items.filter(x => (!view.fst || x.station_id === view.fst) && (!view.fpart || x.part_type_code === view.fpart));
     const filtered = items.length !== wi.items.length;
     const nParts = items.reduce((a, x) => a + x.count, 0);
     const opened = data.stations.filter(s => s.in_service);
 
-    const horizonBtns = `<div class="dirtabs" role="group" aria-label="기간">${HORIZONS.map(([d, l]) => `<button class="dirtab" aria-pressed="${d === h}" ${goAttr({ ...view, h: d, keep: true })}>${l}</button>`).join("")}</div>`;
-    const filters = `<div class="filters">${horizonBtns}
+    const map = `<section class="map" aria-label="노선 상태">
+        <div class="map-head"><h3>노선 상태</h3><span class="small muted">${fmtDateKR(wi.today)} 기준 · 역을 누르면 역 상세로 갑니다</span></div>
+        <div class="map-scroll"><div class="rail">${data.stations.map(s => {
+          const d = stationDot(s);
+          const label = !s.in_service ? "개통 전" : d === "r" ? "위험" : d === "c" ? "확인 필요" : d === "y" ? "주의" : "안전";
+          return `<button class="stn ${d && d !== "x" ? "hl" : ""}" ${goAttr({ name: "station", st: s.id })} aria-label="${esc(s.name + " · " + label)}" title="${esc(s.name + " · " + label)}"><span class="dot ${d}"></span><span class="nm">${esc(s.name)}</span></button>`;
+        }).join("")}</div></div>
+        <div class="maplegend"><span><i style="background:var(--red)"></i>위험 6개월 안</span><span><i style="background:var(--gray)"></i>확인 필요</span><span><i style="background:var(--amber-dot)"></i>주의 1년 안</span><span><i style="border:3px solid var(--rail)"></i>안전</span><span><i style="border:2px dashed var(--line)"></i>개통 전</span></div>
+      </section>`;
+
+    const filters = `<div class="filters">
+        <div class="seg" role="group" aria-label="기간">${HORIZONS.map(([d, l]) => `<button class="segbtn" aria-pressed="${d === h}" ${goAttr({ ...view, h: d, keep: true })}>${l}</button>`).join("")}</div>
         <select id="w-st" aria-label="역으로 거르기"><option value="">모든 역</option>${opened.map(s => `<option value="${s.id}" ${s.id === view.fst ? "selected" : ""}>${s.name}</option>`).join("")}</select>
         <select id="w-part" aria-label="부품으로 거르기"><option value="">모든 부품</option>${PART_TYPES.map(p => `<option value="${p.code}" ${p.code === view.fpart ? "selected" : ""}>${p.name}</option>`).join("")}</select>
       </div>`;
     const rows = items.map(x => {
       const target = x.part_id ? { name: "part", partId: x.part_id } : { name: "station", st: x.station_id };
-      return `<tr class="prow" tabindex="0" ${goAttr(target)}><td>${pill(x.status)}</td><td><b>${esc(x.station_name)}</b></td><td>${esc(x.part_name)}</td><td>${x.count > 1 ? `문 ${x.count}개` : esc(x.location)}</td><td class="num r">${x.due}</td><td class="r">${dur(x.days_left)}</td></tr>`;
+      const where = x.count > 1 ? `문 ${x.count}개` : esc(x.location);
+      return `<button class="item ${ITEM_CLS[x.status]}" ${goAttr(target)}><i class="bar" aria-hidden="true"></i><span class="s">${esc(x.station_name)}</span><span class="p"><b>${esc(x.part_name)}</b><span>${where}${x.status === "확인_필요" ? " · 기록 없이 예정일 지남" : ""} · ${STATE[x.status][0]}</span></span><span class="d">${x.due.replaceAll("-", ".")}</span><span class="left" title="${dur(x.days_left)}">${dday(x.days_left)}</span></button>`;
     }).join("");
-    // 목록이 비면 표째 사라져 헷갈리므로, 표 머리글은 두고 그 안에 "없음"을 적는다
-    const empty = `<b>${filtered ? "고른 조건에" : `앞으로 ${hLabel} 안에`} 교체할 부품이 없습니다.</b>${s0 && !filtered ? `<span class="small muted">가장 빠른 교체는 ${esc(s0.station_name)} ${esc(s0.part_name)}, ${fmtDateKR(s0.due)}(${dur(s0.days_left)})입니다. 기간을 늘리면 볼 수 있습니다.</span>` : ""}`;
+    // 목록이 비면 통째로 사라져 헷갈리므로, 그 자리에 "없음"을 적는다
+    const empty = `<div class="items-empty"><b>${filtered ? "고른 조건에" : `앞으로 ${hLabel} 안에`} 교체할 부품이 없습니다.</b>${s0 && !filtered ? `<span class="small muted">가장 빠른 교체는 ${esc(s0.station_name)} ${esc(s0.part_name)}, ${fmtDateKR(s0.due)}(${dur(s0.days_left)})입니다. 기간을 늘리면 볼 수 있습니다.</span>` : ""}</div>`;
+
+    const recs = rec.records.map(r => `<div class="rec"><b>${esc(r.station_name)}</b> ${r.parts.map(esc).join(", ")} · ${REASONS[r.reason] || esc(r.reason)}<span>${r.replaced_on.slice(5).replace("-", ".")} · ${esc(r.location)}${r.created_by ? " · " + esc(r.created_by) : ""}</span></div>`).join("");
 
     return `<section class="view">
-      <div class="headrow"><h2>관리 현황</h2><span class="small muted">기준일 ${fmtDateKR(wi.today)} · 운영 중 ${opened.length}개 역</span></div>
-      <div class="stats">
-        <div class="stat red"><span class="small muted">위험</span><b>${t.빨강.toLocaleString()}</b><span class="small muted">6개월 안에 교체</span></div>
-        <div class="stat check"><span class="small muted">확인 필요</span><b>${t.확인_필요.toLocaleString()}</b><span class="small muted">기록 없이 예정일 지남</span></div>
-        <div class="stat amber"><span class="small muted">주의</span><b>${t.노랑.toLocaleString()}</b><span class="small muted">1년 안에 교체</span></div>
-        <div class="stat next"><span class="small muted">다음 교체</span><b>${s0 ? s0.due : "-"}</b><span class="small muted">${s0 ? `${esc(s0.station_name)} ${esc(s0.part_name)} · ${dur(s0.days_left)}` : "교체 대상 없음"}</span></div>
-      </div>
-      <div class="panel">
-        <div class="headrow"><h3>교체 예정 목록</h3><a class="linkbtn" href="/api/report" download>보고서 내려받기(엑셀) ›</a></div>
-        ${filters}
-        <p class="small muted">${filtered ? "고른 조건에서 " : ""}앞으로 ${hLabel} 안에 <b>${nParts.toLocaleString()}</b>개 부품 · ${items.length}건. 한 역의 같은 부품은 같은 날 예정이라 한 줄로 묶었습니다. 위험·확인 필요·주의는 기간과 상관없이 항상 나옵니다.</p>
-        <div class="scroll"><table class="ptable wtable"><tr><th>상태</th><th>역</th><th>부품</th><th>대상</th><th class="r">예정일</th><th class="r">남은 기간</th></tr>${items.length ? rows : `<tr><td colspan="6" class="wempty">${empty}</td></tr>`}</table></div>
-      </div>
-      <div class="panel">
-        <div class="headrow"><h3>최근 교체 기록</h3><button class="linkbtn" ${goAttr({ name: "records" })}>전체 ${rec.total.toLocaleString()}건 보기 ›</button></div>
-        ${rec.records.length ? `<div class="scroll"><table>${recHead}${recRows(rec.records)}</table></div>` : `<p class="muted">입력된 교체 기록이 없습니다.</p>`}
+      ${map}
+      <div class="homegrid">
+        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+          <div><h2>교체 예정</h2><p class="small muted">${filtered ? "고른 조건에서 " : ""}앞으로 ${hLabel} · ${items.length}건 · 부품 ${nParts.toLocaleString()}개. 한 역의 같은 부품은 예정일이 같아 한 줄로 묶었고, 위험·확인 필요·주의는 기간과 상관없이 항상 나옵니다.</p></div>
+          ${filters}
+          <div class="items">${items.length ? rows : empty}</div>
+        </div>
+        <aside class="side">
+          <div class="nextcard"><span class="k">다음 교체</span>${s0 ? `<span class="big">${esc(s0.station_name)} ${esc(s0.part_name)}</span><span class="small muted">${fmtDateKR(s0.due)} · ${dur(s0.days_left)}</span>` : `<span class="big">없음</span>`}</div>
+          <div class="counts"><div><b style="color:var(--red)">${t.빨강.toLocaleString()}</b><span>위험</span></div><div><b style="color:var(--gray)">${t.확인_필요.toLocaleString()}</b><span>확인 필요</span></div><div><b style="color:var(--amber)">${t.노랑.toLocaleString()}</b><span>주의</span></div></div>
+          <div><div class="headrow"><h3>최근 교체 기록</h3><button class="linkbtn" ${goAttr({ name: "records" })}>전체 ${rec.total.toLocaleString()}건 ›</button></div>
+            <div class="recs">${recs || `<p class="small muted" style="padding:9px 0">입력된 교체 기록이 없습니다.</p>`}</div></div>
+          <button class="btn block" ${goAttr({ name: "records" })}>교체 기록 입력</button>
+          <a class="linkbtn" href="/api/report" download style="align-self:center">전체 역 보고서 내려받기(엑셀) ›</a>
+        </aside>
       </div>
       <p class="note">문 수(역당 32개)는 멘토 확인 전까지 임시값이라 부품 개수는 참고용입니다. 예정일은 마지막 교체일(기록이 없으면 PSD 사용개시일) + 역별 권장 주기입니다.</p>
     </section>`;
