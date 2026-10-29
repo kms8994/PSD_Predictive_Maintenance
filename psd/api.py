@@ -175,7 +175,8 @@ def _part_cycle(part: Part, db: Session) -> CycleResult:
 @app.get("/api/stations")
 def list_stations(db: Session = Depends(get_db)):
     by_station: dict[int, list[UnitStatus]] = {}
-    for u in all_unit_statuses(db):  # 역마다 따로 조회하지 않고 한 번에 가져와 나눔(N+1 방지)
+    statuses = all_unit_statuses(db)
+    for u in statuses:  # 역마다 따로 조회하지 않고 한 번에 가져와 나눔(N+1 방지)
         by_station.setdefault(u.station_id, []).append(u)
 
     rows = []
@@ -204,7 +205,9 @@ def list_stations(db: Session = Depends(get_db)):
                 } if soonest else None,
             }
         )
-    return {"stations": rows, "totals": totals}
+    # 교체 기록이 한 번도 없는 부품은 예정일을 설치일(PSD 사용개시일)로 추정한다 — 관리자가 예정일을 얼마나 믿을지 보라고 비율을 같이 준다
+    data_quality = {"parts": len(statuses), "no_record": sum(1 for u in statuses if not u.has_record)}
+    return {"stations": rows, "totals": totals, "data_quality": data_quality}
 
 
 # ---------- 4-1b. 관리 현황(교체 예정 목록, 최근 교체 기록) ----------
@@ -806,6 +809,57 @@ def download_report(station_id: int | None = None, db: Session = Depends(get_db)
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
+@app.get("/api/stations/{station_id}/report.pdf")
+def download_station_report_pdf(station_id: int, db: Session = Depends(get_db)):
+    """역 1곳의 PSD 부품 교체 현황 보고서(PDF, A4 2쪽). 양식은 psd/report_pdf.py."""
+    from psd.report_pdf import DoorInfo, RecordInfo, build_station_pdf
+
+    station = db.get(Station, station_id)
+    if station is None:
+        raise HTTPException(404, "역 없음")
+    if not station.in_service:
+        raise HTTPException(409, "개통 전 역이라 보고서에 넣을 부품이 없음")
+
+    doors = [
+        DoorInfo(d.id, d.side, d.car, d.position, d.label)
+        for d in db.execute(select(Door).where(Door.station_id == station_id)).scalars()
+    ]
+    recent = (
+        db.execute(
+            select(ReplacementRecord)
+            .options(joinedload(ReplacementRecord.door), joinedload(ReplacementRecord.parts))
+            .where(ReplacementRecord.station_id == station_id)
+            .order_by(ReplacementRecord.replaced_on.desc(), ReplacementRecord.id.desc())
+            .limit(12)
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    total = db.scalar(select(func.count()).select_from(ReplacementRecord).where(ReplacementRecord.station_id == station_id))
+    cfg = next(s for s in STATIONS if s.name == station.name)
+
+    pdf = build_station_pdf(
+        station_id=station.id,
+        station_name=station.name,
+        psd_install_date=cfg.psd_install_date or cfg.open_date,
+        statuses=station_unit_statuses(db, station_id),
+        doors=doors,
+        records=[
+            RecordInfo(r.replaced_on, r.door.label if r.door else "역 공통", [p.part_type_code for p in r.parts], r.reason, r.created_by)
+            for r in recent
+        ],
+        record_total=total,
+    )
+    filename = f"PSD_역보고서_{station.name}_{date.today():%Y%m%d}.pdf"
+    # 엑셀 보고서와 같은 이유로 한글 파일명은 filename*(RFC 5987)로만 준다
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=\"PSD_station_report.pdf\"; filename*=UTF-8''{quote(filename)}"},
     )
 
 

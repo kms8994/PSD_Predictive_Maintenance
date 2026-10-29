@@ -68,6 +68,13 @@ def test_work_items_are_sorted_most_urgent_first():
     assert keys == sorted(keys)
 
 
+def test_stations_data_quality_counts_parts_without_records():
+    data = client.get("/api/stations").json()
+    dq = data["data_quality"]
+    assert 0 <= dq["no_record"] <= dq["parts"]
+    assert dq["parts"] == sum(sum(s["counts"].values()) for s in data["stations"])
+
+
 def test_work_items_rejects_negative_period():
     assert client.get("/api/work-items?within_days=-1").status_code == 400
 
@@ -79,6 +86,29 @@ def test_recent_replacement_records_are_newest_first_and_capped():
     assert all(r["parts"] for r in data["records"])
     order = [(r["created_at"], r["id"]) for r in data["records"]]
     assert order == sorted(order, reverse=True)
+
+
+# ---------- 2026-10-27: 역별 PDF 보고서 ----------
+
+
+def test_station_report_pdf_is_a_readable_two_page_pdf():
+    import io
+
+    from pypdf import PdfReader
+
+    r = client.get("/api/stations/1/report.pdf")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert "filename*=UTF-8''" in r.headers["content-disposition"]
+    reader = PdfReader(io.BytesIO(r.content))
+    assert len(reader.pages) == 2
+    text = reader.pages[0].extract_text()
+    assert "부전역 PSD 부품 교체 현황 보고서" in text
+
+
+def test_station_report_pdf_not_in_service_or_unknown_station():
+    assert client.get("/api/stations/24/report.pdf").status_code == 409  # 북울산(개통 전)
+    assert client.get("/api/stations/999999/report.pdf").status_code == 404
 
 
 # ---------- 2026-10-25: 엑셀 업로드 + 보고서 출력 ----------

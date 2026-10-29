@@ -1,6 +1,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>동해선 PSD 교체주기</title>
+<script>
+// 화면 밝기 설정(자동·밝게·어둡게). 그리기 전에 적용해야 어두운 설정에서 흰 화면이 번쩍이지 않는다
+try { const t = localStorage.getItem("psd-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
 /* 디자인: 목업/디자인시안/3_노선안내형.html(동해선 파란색, 노선도 중심). 데이터는 실제 API에서 받는다 */
@@ -39,6 +43,7 @@
     color-scheme: dark;
   }
 }
+:root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] {
   --hdr: #0b4f8c; --bg: #10151b; --surface: #161d25; --surface-2: #1b232d; --ink: #e8ecf1; --muted: #9aa5b2; --line: #2a3440;
   --rail: #3d8fd6; --accent: #6fb0ec; --accent-soft: #1a2a3b; --on-accent: #0b1520;
@@ -48,6 +53,8 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+/* .tip처럼 display를 직접 준 요소는 hidden 속성이 안 먹어서(날씨 영향 팝업이 안 사라지던 버그) 항상 숨김이 이기게 한다 */
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; margin: 0; }
 .wrap { max-width: 1200px; margin: 0 auto; padding-inline: 40px; padding-block: 0 56px; }
 @media (max-width: 640px) { .wrap { padding-inline: 16px; } }
@@ -68,16 +75,28 @@ a { color: var(--accent); }
 .navbtn { appearance: none; border: 0; background: none; color: #fff; opacity: .7; font: inherit; font-size: 1.1rem; font-weight: 700; width: 30px; height: 30px; border-radius: 3px; cursor: pointer; }
 .navbtn:hover { opacity: 1; background: rgba(255, 255, 255, .12); }
 .tabs { display: flex; gap: 4px; margin-left: auto; }
+/* 화면 밝기 스위치: 흰 글자를 스위치 위에 얹는다(바탕 없음). 어두울 때는 "DARK MODE" + 초록 트랙·오른쪽 짙은 손잡이,
+   밝을 때는 "WHITE MODE" + 회색 트랙·왼쪽 흰 손잡이 */
+.themebtn { appearance: none; border: 0; font: inherit; font-size: 0.56rem; font-weight: 600; letter-spacing: 0.06em; line-height: 1; display: inline-flex; flex-direction: column; align-items: center; gap: 3px; padding: 2px; border-radius: 4px; cursor: pointer; white-space: nowrap; background: none; color: #fff; }
+.themebtn .sw { position: relative; width: 30px; height: 16px; border-radius: 999px; background: #c5ccd4; transition: background .2s; flex: none; }
+.themebtn .knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .35); transition: transform .2s, background .2s; }
+.themebtn[aria-checked="true"] .sw { background: #2bbd5e; }
+.themebtn[aria-checked="true"] .knob { transform: translateX(14px); background: linear-gradient(145deg, #2a333d, #151b21); }
+@media (prefers-reduced-motion: reduce) { .themebtn .sw, .themebtn .knob { transition: none; } }
 .tab { appearance: none; border: 0; background: none; font: inherit; font-size: 0.93rem; font-weight: 700; color: #fff; opacity: .8; padding: 7px 14px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
 .tab:hover { opacity: 1; }
 .tab[aria-selected="true"] { background: #fff; color: var(--hdr); opacity: 1; }
 .lab-tab { font-weight: 500; opacity: .6; }
 @media (max-width: 640px) {
-  .top-inner { padding: 10px 16px; }
-  .tabs { margin-left: 0; width: 100%; overflow-x: auto; }
+  .top-inner { padding: 10px 16px; column-gap: 10px; }
+  .tabs { margin-left: 0; width: 100%; overflow-x: auto; order: 1; }
+  .themebtn { margin-left: auto; }
+  /* 폰 폭에서 밝기 스위치가 제목 줄에 들어가게 제목과 이전/다음 버튼을 조금 줄인다 */
+  .top h1 { font-size: 1.12rem; }
+  .navbtn { width: 26px; }
   .tab { padding: 6px 11px; }
 }
-.tab:focus-visible, .navbtn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.tab:focus-visible, .navbtn:focus-visible, .themebtn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mockbar { background: var(--accent-soft); color: var(--ink); font-size: 0.82rem; padding: 8px 16px; border-bottom: 1px solid var(--line); }
 .mockbar-inner { max-width: 1200px; margin: 0 auto; padding-inline: 24px; }
@@ -138,6 +157,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .segbtn { appearance: none; border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-size: 0.85rem; font-weight: 700; padding: 5px 14px; border-radius: 999px; cursor: pointer; }
 .segbtn:hover { border-color: var(--ink); color: var(--ink); }
 .segbtn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+/* 교체 예정 기간 버튼: "1년 안" 아래에 그 기간이 끝나는 날짜와 건수를 함께 적어, 어디까지 보는지 바로 알게 한다 */
+.horizon { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.horizon .lbl { font-size: 0.85rem; font-weight: 700; color: var(--muted); }
+.hbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border-radius: 8px; padding: 5px 12px; line-height: 1.25; text-align: left; }
+.hbtn small { font-size: 0.72rem; font-weight: 500; opacity: .85; font-family: var(--font-data); }
 .items { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
 .item { appearance: none; background: none; border: 0; border-bottom: 1px solid var(--line); font: inherit; color: inherit; text-align: left; cursor: pointer; display: grid; grid-template-columns: 8px 120px minmax(0, 1fr) 100px 76px; align-items: center; gap: 16px; padding: 12px 4px 12px 0; }
 .item:hover { background: var(--surface-2); }
@@ -157,15 +181,24 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .items-empty { padding: 28px 12px; text-align: center; border-bottom: 1px solid var(--line); }
 .items-empty b, .items-empty span { display: block; }
 .items-empty span { margin-top: 4px; }
-.nextcard { border: 2px solid var(--ink); padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
-.nextcard .k { font-size: 0.8rem; font-weight: 800; color: var(--red); }
-.nextcard .big { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.25; }
 .counts { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .counts div { padding: 12px 0; text-align: center; border-right: 1px solid var(--line); }
 .counts div:last-child { border-right: 0; }
 .counts b { display: block; font-size: 1.6rem; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .counts span { font-size: 0.78rem; color: var(--muted); }
 .side { display: flex; flex-direction: column; gap: 18px; }
+.dq { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+.dq b { color: var(--ink); font-variant-numeric: tabular-nums; }
+/* 분기별 교체 물량(현황 오른쪽): 한 계열 막대. 위쪽 4px 둥글게, 막대 사이 간격, 바닥선·축 글자는 옅게 */
+.vchart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.vchart .bar { fill: var(--rail); pointer-events: none; }
+.vchart .bar.now { fill: var(--accent); }
+.vchart .base { stroke: var(--line); stroke-width: 1; }
+.vchart .hit { fill: transparent; cursor: default; }
+.vchart .hit:hover, .vchart .hit:focus-visible { fill: var(--surface-2); outline: none; }
+.vchart text { fill: var(--muted); font-size: 9px; font-family: var(--font-data); }
+.vchart text.top { fill: var(--ink); font-weight: 700; }
+.vchart-sum { font-size: 0.82rem; margin-top: 4px; }
 .recs { display: flex; flex-direction: column; }
 .recs .rec { font-size: 0.86rem; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .recs .rec b { font-weight: 700; } .recs .rec span { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
@@ -349,6 +382,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       <button class="tab" id="tab-records" role="tab" aria-selected="false">교체 기록</button>
       <button class="tab lab-tab" id="tab-lab" role="tab" aria-selected="false">분석(실험)</button>
     </nav>
+    <button class="themebtn" id="theme-btn" type="button" role="switch" aria-checked="false"><span class="theme-label">WHITE MODE</span><span class="sw" aria-hidden="true"><span class="knob"></span></span></button>
   </div>
 </header>
 <!-- 날씨 영향·교체 물량은 과제의 실험 결과를 보여 주는 화면이라 관리 화면과 떨어뜨려 두고, 들어가면 이 띠로 알린다 -->
@@ -547,11 +581,31 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   document.getElementById("nav-back").onclick = () => history.back();
   document.getElementById("nav-fwd").onclick = () => history.forward();
 
+  // 화면 밝기 스위치. 한 번도 안 눌렀으면 기기 설정(다크 모드 여부)을 따르고, 누르면 그 값을 이 브라우저에 기억한다
+  const themeBtn = document.getElementById("theme-btn");
+  const systemDark = matchMedia("(prefers-color-scheme: dark)");
+  const isDark = () => (document.documentElement.dataset.theme || (systemDark.matches ? "dark" : "light")) === "dark";
+  function showTheme() {
+    const dark = isDark();
+    themeBtn.setAttribute("aria-checked", String(dark));
+    themeBtn.querySelector(".theme-label").textContent = dark ? "DARK MODE" : "WHITE MODE";
+    themeBtn.title = dark ? "누르면 밝은 화면으로" : "누르면 어두운 화면으로";
+  }
+  themeBtn.onclick = () => {
+    const next = isDark() ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("psd-theme", next); } catch (e) {}
+    showTheme();
+  };
+  systemDark.addEventListener("change", showTheme);
+  showTheme();
+
   const TAB_OF = { home: "home", route: "route", station: "route", part: "route", form: "route", records: "records", weather: "lab", volume: "lab" };
   async function render() {
     const tab = TAB_OF[view.name];
     ["home", "route", "records", "lab"].forEach(t => document.getElementById("tab-" + t).setAttribute("aria-selected", String(t === tab)));
     document.getElementById("labbar").hidden = tab !== "lab";
+    tipEl.hidden = true;
     app.innerHTML = `<p class="muted" style="padding-top:18px">불러오는 중…</p>`;
     try {
       await loadPartTypes();
@@ -579,8 +633,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
   app.addEventListener("pointermove", e => { const el = e.target.closest && e.target.closest("[data-tip]"); if (!el) { tipEl.hidden = true; return; } showTip(el); placeTip(e.clientX, e.clientY); });
   app.addEventListener("pointerleave", () => { tipEl.hidden = true; });
-  app.addEventListener("focusin", e => { const el = e.target.closest && e.target.closest("[data-tip]"); if (!el) return; showTip(el); const r = el.getBoundingClientRect(); placeTip(r.left + r.width / 2, r.top); });
+  app.addEventListener("pointerout", e => { const to = e.relatedTarget; if (!(to && to.closest && to.closest("[data-tip]"))) tipEl.hidden = true; });
+  // 마우스로 누르면 그 점에 포커스가 남아 팝업이 다시 뜨고, 스크롤해도 팝업은 화면에 고정돼 있어서
+  // 엉뚱한 줄 위에 떠 있는 채로 안 사라졌다. 키보드 포커스일 때만 띄우고, 스크롤·화면 이동·Esc엔 닫는다.
+  app.addEventListener("focusin", e => { const el = e.target.closest && e.target.closest("[data-tip]"); if (!el || !el.matches(":focus-visible")) return; showTip(el); const r = el.getBoundingClientRect(); placeTip(r.left + r.width / 2, r.top); });
   app.addEventListener("focusout", () => { tipEl.hidden = true; });
+  window.addEventListener("scroll", () => { tipEl.hidden = true; }, { capture: true, passive: true });
+  window.addEventListener("keydown", e => { if (e.key === "Escape") tipEl.hidden = true; });
   const tipAttr = (t, r) => `data-tip="${esc(JSON.stringify({ t, r }))}"`;
 
   function bind() {
@@ -618,7 +677,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   const legend = `<div class="legend">${pill("빨강")}<span class="muted">6개월 이하(지난 경우 포함)</span>${pill("노랑")}<span class="muted">1년 이하</span>${pill("확인_필요")}<span class="muted">기록 없이 예정일 지남</span>${pill("초록")}<span class="muted">그 외</span></div>`;
 
   // ---------- 현황(관리자 첫 화면) ----------
-  const HORIZONS = [[182, "6개월"], [365, "1년"], [730, "2년"], [1095, "3년"]];
+  // [주소에 남는 값, 이름, 개월 수]. 끝나는 날은 달력으로 센다(2년 = 2028.10.29까지, 윤년이 끼어도 날짜가 어긋나지 않게)
+  const HORIZONS = [[182, "6개월", 6], [365, "1년", 12], [730, "2년", 24], [1095, "3년", 36]];
+  function addMonths(iso, n) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1 + n, d)).toISOString().slice(0, 10);  // UTC로 계산해야 한국 시간대에서 하루 밀리지 않는다
+  }
+  const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
   function recRows(records) {
     return records.map(r => `<tr><td class="num">${r.replaced_on}</td><td><button class="linkbtn" style="padding:0" ${goAttr({ name: "station", st: r.station_id })}>${esc(r.station_name)}</button></td><td>${esc(r.location)}</td><td>${r.parts.map(esc).join(", ")}</td><td><span class="pill s-check">${REASONS[r.reason] || esc(r.reason)}</span></td><td class="muted">${esc(r.created_by || "-")}</td></tr>`).join("");
   }
@@ -630,13 +695,39 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     const c = s.counts;
     return c.빨강 ? "r" : c.확인_필요 ? "c" : c.노랑 ? "y" : "";
   }
+  // 현황 오른쪽 "분기별 교체 물량": 앞으로 3년, 분기마다 교체 예정일이 오는 부품 수. 막대에 올리면 부품별 내역
+  function volumeChart(vol) {
+    const qs = vol.quarters, n = qs.length, BW = 24, H = 96, TOP = 14;
+    const max = Math.max(...qs.map(q => q.total), 1);
+    const peak = qs.reduce((a, q) => (q.total > a.total ? q : a), qs[0]);
+    const bars = qs.map((q, i) => {
+      const x = i * BW, h = q.total ? Math.max(3, q.total / max * (H - TOP)) : 0, y = H - h, w = BW - 4, r = Math.min(4, h, w / 2);
+      const [yy, qq] = q.label.match(/\d+/g);
+      const rows = [...PART_TYPES.filter(p => q.counts[p.code]).map(p => [p.name, q.counts[p.code].toLocaleString() + "개"]), ["합계", q.total.toLocaleString() + "개"]];
+      const bar = h ? `<path class="bar ${i === 0 ? "now" : ""}" d="M${x + 2},${H}V${y + r}Q${x + 2},${y} ${x + 2 + r},${y}H${x + 2 + w - r}Q${x + 2 + w},${y} ${x + 2 + w},${y + r}V${H}Z"/>` : "";
+      const lab = qq === "1" ? `<text x="${x + 2}" y="${H + 12}">${yy}년</text>` : "";  // 해가 바뀌는 1분기에만 연도를 적는다
+      const top = q === peak && q.total ? `<text class="top" x="${x + BW / 2}" y="${y - 4}" text-anchor="middle">${q.total.toLocaleString()}</text>` : "";
+      return `<rect class="hit" x="${x}" y="0" width="${BW}" height="${H}" rx="3" tabindex="0" aria-label="${esc(q.label)} ${q.total}개" ${tipAttr(q.label, rows)}/>${bar}${lab}${top}`;
+    }).join("");
+    return `<div class="vchart">
+        <div class="headrow"><h3>분기별 교체 물량</h3><span class="small muted">이번 분기(${esc(vol.current_quarter)})부터 3년</span></div>
+        <svg viewBox="0 -2 ${n * BW} ${H + 16}" role="img" aria-label="분기별 교체 예정 부품 수"><line class="base" x1="0" x2="${n * BW}" y1="${H}" y2="${H}"/>${bars}</svg>
+        <p class="vchart-sum small muted">${peak.total ? `가장 몰리는 때는 <b style="color:var(--ink)">${esc(peak.label)}</b>, ${peak.total.toLocaleString()}개입니다. ` : "앞으로 3년 안에 교체 예정인 부품이 없습니다. "}<button class="linkbtn" style="padding:0" ${goAttr({ name: "volume" })}>부품별 표 ›</button></p>
+      </div>`;
+  }
   async function vHome() {
     const h = HORIZONS.some(x => x[0] === view.h) ? view.h : 730;
     const hLabel = HORIZONS.find(x => x[0] === h)[1];
-    const [wi, data, rec] = await Promise.all([api(`/api/work-items?within_days=${h}`), api("/api/stations"), api("/api/replacement-records?limit=4")]);
+    // 가장 긴 기간(3년)을 한 번 받아 두고 기간별로 잘라 쓴다 — 버튼마다 건수를 미리 보여 주려고.
+    // 3년은 윤년이 끼면 1096일이라 넉넉히 받는다
+    const [wi, data, rec, vol] = await Promise.all([api("/api/work-items?within_days=1100"), api("/api/stations"), api("/api/replacement-records?limit=4"), api("/api/replacement-volume?years_ahead=3")]);
+    const endOf = d => addMonths(wi.today, HORIZONS.find(x => x[0] === d)[2]);
     const t = data.totals, s0 = wi.soonest;
-    const items = wi.items.filter(x => (!view.fst || x.station_id === view.fst) && (!view.fpart || x.part_type_code === view.fpart));
-    const filtered = items.length !== wi.items.length;
+    const inHorizon = (x, d) => x.status !== "초록" || x.days_left <= daysBetween(wi.today, endOf(d));  // 위험·확인 필요·주의는 기간과 상관없이 늘 포함(API와 같은 규칙)
+    const byFilter = wi.items.filter(x => (!view.fst || x.station_id === view.fst) && (!view.fpart || x.part_type_code === view.fpart));
+    const items = byFilter.filter(x => inHorizon(x, h));
+    const filtered = byFilter.length !== wi.items.length;
+    const until = endOf(h);
     const nParts = items.reduce((a, x) => a + x.count, 0);
     const opened = data.stations.filter(s => s.in_service);
 
@@ -651,7 +742,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       </section>`;
 
     const filters = `<div class="filters">
-        <div class="seg" role="group" aria-label="기간">${HORIZONS.map(([d, l]) => `<button class="segbtn" aria-pressed="${d === h}" ${goAttr({ ...view, h: d, keep: true })}>${l}</button>`).join("")}</div>
+        <div class="horizon"><span class="lbl">교체 예정일이</span><div class="seg" role="group" aria-label="교체 예정일 기간">${HORIZONS.map(([d, l]) => {
+          const n = byFilter.filter(x => inHorizon(x, d)).length;
+          return `<button class="segbtn hbtn" aria-pressed="${d === h}" ${goAttr({ ...view, h: d, keep: true })}>${l} 안<small>~${endOf(d).replaceAll("-", ".")} · ${n}건</small></button>`;
+        }).join("")}</div></div>
         <select id="w-st" aria-label="역으로 거르기"><option value="">모든 역</option>${opened.map(s => `<option value="${s.id}" ${s.id === view.fst ? "selected" : ""}>${s.name}</option>`).join("")}</select>
         <select id="w-part" aria-label="부품으로 거르기"><option value="">모든 부품</option>${PART_TYPES.map(p => `<option value="${p.code}" ${p.code === view.fpart ? "selected" : ""}>${p.name}</option>`).join("")}</select>
       </div>`;
@@ -661,24 +755,27 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       return `<button class="item ${ITEM_CLS[x.status]}" ${goAttr(target)}><i class="bar" aria-hidden="true"></i><span class="s">${esc(x.station_name)}</span><span class="p"><b>${esc(x.part_name)}</b><span>${where}${x.status === "확인_필요" ? " · 기록 없이 예정일 지남" : ""} · ${STATE[x.status][0]}</span></span><span class="d">${x.due.replaceAll("-", ".")}</span><span class="left" title="${dur(x.days_left)}">${dday(x.days_left)}</span></button>`;
     }).join("");
     // 목록이 비면 통째로 사라져 헷갈리므로, 그 자리에 "없음"을 적는다
-    const empty = `<div class="items-empty"><b>${filtered ? "고른 조건에" : `앞으로 ${hLabel} 안에`} 교체할 부품이 없습니다.</b>${s0 && !filtered ? `<span class="small muted">가장 빠른 교체는 ${esc(s0.station_name)} ${esc(s0.part_name)}, ${fmtDateKR(s0.due)}(${dur(s0.days_left)})입니다. 기간을 늘리면 볼 수 있습니다.</span>` : ""}</div>`;
+    const empty = `<div class="items-empty"><b>${filtered ? "고른 조건에" : `${fmtDateKR(until)}까지(${hLabel} 안)`} 교체할 부품이 없습니다.</b>${s0 && !filtered ? `<span class="small muted">가장 빠른 교체는 ${esc(s0.station_name)} ${esc(s0.part_name)}, ${fmtDateKR(s0.due)}(${dur(s0.days_left)})입니다. 기간을 늘리면 볼 수 있습니다.</span>` : ""}</div>`;
 
     const recs = rec.records.map(r => `<div class="rec"><b>${esc(r.station_name)}</b> ${r.parts.map(esc).join(", ")} · ${REASONS[r.reason] || esc(r.reason)}<span>${r.replaced_on.slice(5).replace("-", ".")} · ${esc(r.location)}${r.created_by ? " · " + esc(r.created_by) : ""}</span></div>`).join("");
+
+    const dq = data.data_quality;
+    const noRecPct = dq.parts ? Math.round(dq.no_record / dq.parts * 100) : 0;
 
     return `<section class="view">
       ${map}
       <div class="homegrid">
         <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
-          <div><h2>교체 예정</h2><p class="small muted">${filtered ? "고른 조건에서 " : ""}앞으로 ${hLabel} · ${items.length}건 · 부품 ${nParts.toLocaleString()}개. 한 역의 같은 부품은 예정일이 같아 한 줄로 묶었고, 위험·확인 필요·주의는 기간과 상관없이 항상 나옵니다.</p></div>
+          <div><h2>교체 예정</h2><p class="small muted">오늘(${fmtDateKR(wi.today)})부터 <b style="color:var(--ink)">${fmtDateKR(until)}</b>까지 교체할 부품${filtered ? "(고른 조건)" : ""} · ${items.length}건 · ${nParts.toLocaleString()}개. 한 역의 같은 부품은 예정일이 같아 한 줄로 묶었고, 위험·확인 필요·주의는 기간과 상관없이 항상 나옵니다.</p></div>
           ${filters}
           <div class="items">${items.length ? rows : empty}</div>
         </div>
         <aside class="side">
-          <div class="nextcard"><span class="k">다음 교체</span>${s0 ? `<span class="big">${esc(s0.station_name)} ${esc(s0.part_name)}</span><span class="small muted">${fmtDateKR(s0.due)} · ${dur(s0.days_left)}</span>` : `<span class="big">없음</span>`}</div>
-          <div class="counts"><div><b style="color:var(--red)">${t.빨강.toLocaleString()}</b><span>위험</span></div><div><b style="color:var(--gray)">${t.확인_필요.toLocaleString()}</b><span>확인 필요</span></div><div><b style="color:var(--amber)">${t.노랑.toLocaleString()}</b><span>주의</span></div></div>
+          <div><div class="counts"><div><b style="color:var(--red)">${t.빨강.toLocaleString()}</b><span>위험</span></div><div><b style="color:var(--gray)">${t.확인_필요.toLocaleString()}</b><span>확인 필요</span></div><div><b style="color:var(--amber)">${t.노랑.toLocaleString()}</b><span>주의</span></div></div>
+            <p class="dq">부품 <b>${dq.parts.toLocaleString()}</b>개 중 <b>${dq.no_record.toLocaleString()}</b>개(${noRecPct}%)는 교체 기록이 없어, 예정일을 PSD 사용개시일로 추정했습니다.</p></div>
+          ${volumeChart(vol)}
           <div><div class="headrow"><h3>최근 교체 기록</h3><button class="linkbtn" ${goAttr({ name: "records" })}>전체 ${rec.total.toLocaleString()}건 ›</button></div>
             <div class="recs">${recs || `<p class="small muted" style="padding:9px 0">입력된 교체 기록이 없습니다.</p>`}</div></div>
-          <button class="btn block" ${goAttr({ name: "records" })}>교체 기록 입력</button>
           <a class="linkbtn" href="/api/report" download style="align-self:center">전체 역 보고서 내려받기(엑셀) ›</a>
         </aside>
       </div>
@@ -805,7 +902,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         <h2>${s.name}</h2>
         <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)} (스크린도어 설치일로 가정)</dd><dt>날씨 지점</dt><dd>AWS ${s.aws_station} (추정)</dd><dt>문 수</dt><dd>방향마다 4량 × 4개 = 16개 (임시값)</dd><dt>배차간격</dt><dd>부전 방면 하루 약 ${dailyTrips(s.service_interval_min)}회 · 북울산 방면 하루 약 ${dailyTrips(s.service_interval_min)}회<br><span class="small muted">출퇴근 15분·평시 25분 간격 기준 추정치(노선 전체 공통, 참고용 — 계산에는 안 씀)</span></dd></dl>
         <div class="legend">${pill("빨강")} ${c.빨강} ${pill("확인_필요")} ${c.확인_필요} ${pill("노랑")} ${c.노랑} ${pill("초록")} ${c.초록}</div>
-        <a class="linkbtn" href="/api/report?station_id=${s.id}" download>이 역 보고서 내려받기(엑셀) ›</a>
+        <div class="filters"><a class="btn" href="/api/stations/${s.id}/report.pdf" download style="text-decoration:none">${s.name}역 보고서 내려받기(PDF)</a><a class="linkbtn" href="/api/report?station_id=${s.id}" download>엑셀로 받기 ›</a></div>
       </div>
       <div class="panel">
         <div class="psdhead"><h3>승강장 안전문</h3>${dirTabs}</div>
