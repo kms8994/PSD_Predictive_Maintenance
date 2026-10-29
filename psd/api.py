@@ -271,15 +271,24 @@ def work_items(within_days: int = 730, db: Session = Depends(get_db)):
 
 
 @app.get("/api/replacement-records")
-def recent_replacement_records(limit: int = 20, db: Session = Depends(get_db)):
-    """최근에 입력한 교체 기록(입력 순서 최신부터). 업로드·입력이 제대로 들어갔는지 확인하는 용도."""
+def recent_replacement_records(limit: int = 20, order: str = "created", db: Session = Depends(get_db)):
+    """최근 교체 기록.
+
+    order=created(기본): 입력 순서 최신부터. 업로드·입력이 제대로 들어갔는지 확인하는 용도.
+    한 번에 올린 기록은 입력 시각이 같아서, 그 안에서는 교체일 최신부터 늘어놓는다.
+    order=replaced: 교체일 최신부터(현황 화면의 "최근 교체 기록").
+    """
+    if order not in ("created", "replaced"):
+        raise HTTPException(400, "order는 created 또는 replaced여야 함")
     limit = max(1, min(limit, 200))
+    newest_replaced = (ReplacementRecord.replaced_on.desc(), ReplacementRecord.id.desc())
+    sort = newest_replaced if order == "replaced" else (ReplacementRecord.created_at.desc(), *newest_replaced)
     records = (
         db.execute(
             select(ReplacementRecord)
             .options(joinedload(ReplacementRecord.station), joinedload(ReplacementRecord.door),
                      joinedload(ReplacementRecord.parts))
-            .order_by(ReplacementRecord.created_at.desc(), ReplacementRecord.id.desc())
+            .order_by(*sort)
             .limit(limit)
         )
         .unique()

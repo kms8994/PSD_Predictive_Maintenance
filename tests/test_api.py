@@ -84,8 +84,15 @@ def test_recent_replacement_records_are_newest_first_and_capped():
     assert len(data["records"]) <= 5
     assert len(data["records"]) <= data["total"]
     assert all(r["parts"] for r in data["records"])
-    order = [(r["created_at"], r["id"]) for r in data["records"]]
+    order = [(r["created_at"], r["replaced_on"], r["id"]) for r in data["records"]]
     assert order == sorted(order, reverse=True)
+
+
+def test_recent_replacement_records_by_replaced_date():
+    data = client.get("/api/replacement-records?limit=10&order=replaced").json()
+    order = [(r["replaced_on"], r["id"]) for r in data["records"]]
+    assert order == sorted(order, reverse=True)
+    assert client.get("/api/replacement-records?order=wrong").status_code == 400
 
 
 # ---------- 2026-10-27: 역별 PDF 보고서 ----------

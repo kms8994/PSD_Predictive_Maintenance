@@ -115,6 +115,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .s-amber { color: var(--amber); background: var(--amber-soft); }
 .s-green { color: var(--green); background: var(--green-soft); }
 .s-check { color: var(--gray); background: var(--gray-soft); }
+.s-info { color: var(--accent); background: var(--accent-soft); }
 .legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.82rem; }
 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
@@ -158,7 +159,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .segbtn:hover { border-color: var(--ink); color: var(--ink); }
 .segbtn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
 /* 교체 예정 기간 버튼: "1년 안" 아래에 그 기간이 끝나는 날짜와 건수를 함께 적어, 어디까지 보는지 바로 알게 한다 */
-.horizon { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* 기간 버튼은 한 줄을 다 쓰고, 역·부품 선택은 다음 줄에 같이 둔다(선택 하나만 따로 떨어지지 않게) */
+.horizon { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-basis: 100%; }
 .horizon .lbl { font-size: 0.85rem; font-weight: 700; color: var(--muted); }
 .hbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border-radius: 8px; padding: 5px 12px; line-height: 1.25; text-align: left; }
 .hbtn small { font-size: 0.72rem; font-weight: 500; opacity: .85; font-family: var(--font-data); }
@@ -187,6 +189,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .counts b { display: block; font-size: 1.6rem; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .counts span { font-size: 0.78rem; color: var(--muted); }
 .side { display: flex; flex-direction: column; gap: 18px; }
+/* 현황 맨 위 요약 한 줄: 지금 챙길 게 있는지, 가장 빠른 교체가 언제인지 */
+.summary { font-size: 1.05rem; font-weight: 600; }
+.summary .r { color: var(--red); } .summary .c { color: var(--gray); } .summary .y { color: var(--amber); }
 .dq { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
 .dq b { color: var(--ink); font-variant-numeric: tabular-nums; }
 /* 분기별 교체 물량(현황 오른쪽): 한 계열 막대. 위쪽 4px 둥글게, 막대 사이 간격, 바닥선·축 글자는 옅게 */
@@ -433,11 +438,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   const REASONS = { fail: "고장", prev: "예방 교체", with: "함께 교체" };
   const STATE = { 빨강: ["위험", "s-red"], 노랑: ["주의", "s-amber"], 초록: ["안전", "s-green"], 확인_필요: ["확인 필요", "s-check"] };
   const RANK = { 빨강: 0, 확인_필요: 1, 노랑: 2, 초록: 3 };
+  // 판정은 주기 계산 결과라 상태색(빨강=위험, 노랑=주의, 초록=안전)을 쓰지 않는다. "안전" 옆에 빨간 "짧음 확실"이 붙어 위험처럼 보였다
   const JUDGE = {
     같음: ["10년과 같음", "s-check", "비중을 어떻게 잡아도 10년과 0.5년 이내로 차이 납니다."],
-    짧음_확실: ["짧음 확실", "s-red", "원인 비중을 어떻게 잡아도 10년보다 짧습니다."],
-    김_확실: ["김 확실", "s-green", "원인 비중을 어떻게 잡아도 10년보다 깁니다. 10년보다 늦은 교체는 권고하지 않고 참고로만 보여 줍니다."],
-    불확실: ["불확실", "s-amber", "원인 비중에 따라 10년보다 짧게도, 길게도 나옵니다."],
+    짧음_확실: ["짧음 확실", "s-info", "원인 비중을 어떻게 잡아도 10년보다 짧습니다."],
+    김_확실: ["김 확실", "s-check", "원인 비중을 어떻게 잡아도 10년보다 깁니다. 10년보다 늦은 교체는 권고하지 않고 참고로만 보여 줍니다."],
+    불확실: ["불확실", "s-check", "원인 비중에 따라 10년보다 짧게도, 길게도 나옵니다."],
     날씨무관: ["날씨 보정 없음", "s-check", "날씨가 수명을 줄인다는 정량 근거를 찾지 못해 제조사 권장 10년을 씁니다."]
   };
   const SRC = {
@@ -720,7 +726,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     const hLabel = HORIZONS.find(x => x[0] === h)[1];
     // 가장 긴 기간(3년)을 한 번 받아 두고 기간별로 잘라 쓴다 — 버튼마다 건수를 미리 보여 주려고.
     // 3년은 윤년이 끼면 1096일이라 넉넉히 받는다
-    const [wi, data, rec, vol] = await Promise.all([api("/api/work-items?within_days=1100"), api("/api/stations"), api("/api/replacement-records?limit=4"), api("/api/replacement-volume?years_ahead=3")]);
+    const [wi, data, rec, vol] = await Promise.all([api("/api/work-items?within_days=1100"), api("/api/stations"), api("/api/replacement-records?limit=4&order=replaced"), api("/api/replacement-volume?years_ahead=3")]);
     const endOf = d => addMonths(wi.today, HORIZONS.find(x => x[0] === d)[2]);
     const t = data.totals, s0 = wi.soonest;
     const inHorizon = (x, d) => x.status !== "초록" || x.days_left <= daysBetween(wi.today, endOf(d));  // 위험·확인 필요·주의는 기간과 상관없이 늘 포함(API와 같은 규칙)
@@ -757,12 +763,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     // 목록이 비면 통째로 사라져 헷갈리므로, 그 자리에 "없음"을 적는다
     const empty = `<div class="items-empty"><b>${filtered ? "고른 조건에" : `${fmtDateKR(until)}까지(${hLabel} 안)`} 교체할 부품이 없습니다.</b>${s0 && !filtered ? `<span class="small muted">가장 빠른 교체는 ${esc(s0.station_name)} ${esc(s0.part_name)}, ${fmtDateKR(s0.due)}(${dur(s0.days_left)})입니다. 기간을 늘리면 볼 수 있습니다.</span>` : ""}</div>`;
 
-    const recs = rec.records.map(r => `<div class="rec"><b>${esc(r.station_name)}</b> ${r.parts.map(esc).join(", ")} · ${REASONS[r.reason] || esc(r.reason)}<span>${r.replaced_on.slice(5).replace("-", ".")} · ${esc(r.location)}${r.created_by ? " · " + esc(r.created_by) : ""}</span></div>`).join("");
+    const recs = rec.records.map(r => `<div class="rec"><b>${esc(r.station_name)}</b> ${r.parts.map(esc).join(", ")} · ${REASONS[r.reason] || esc(r.reason)}<span>${r.replaced_on.replaceAll("-", ".")} · ${esc(r.location)}${r.created_by ? " · " + esc(r.created_by) : ""}</span></div>`).join("");
 
     const dq = data.data_quality;
     const noRecPct = dq.parts ? Math.round(dq.no_record / dq.parts * 100) : 0;
 
+    const urgent = [[t.빨강, "위험", "r"], [t.확인_필요, "확인 필요", "c"], [t.노랑, "주의", "y"]].filter(([n]) => n);
+    const soonest = s0 ? ` 가장 빠른 교체는 ${esc(s0.station_name)} ${esc(s0.part_name)}, ${fmtDateKR(s0.due)}(${dur(s0.days_left)})입니다.` : "";
+    const summary = `<p class="summary">${urgent.length
+      ? urgent.map(([n, l, c]) => `${l} <span class="${c}">${n.toLocaleString()}개</span>`).join(" · ") + "를 먼저 챙기세요."
+      : "지금 위험·주의 부품은 없습니다."}${soonest}</p>`;
+
     return `<section class="view">
+      ${summary}
       ${map}
       <div class="homegrid">
         <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
