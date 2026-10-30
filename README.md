@@ -8,6 +8,7 @@
 - 설계 결정: [설계_v2.md](설계_v2.md)
 - 계산 공식 근거: [4단계_계산공식_근거조사.md](4단계_계산공식_근거조사.md)
 - 진행 상황: [MVP_계획.md](MVP_계획.md)
+- UI 개발 환경(Windows): [docs/ui-development.md](docs/ui-development.md)
 - 화면 방향성(가정 날씨로 만든 참고용 목업, 실제 계산과는 다름): [목업/동해선_PSD_교체주기_목업.html](목업/동해선_PSD_교체주기_목업.html)
 
 ## 구성
