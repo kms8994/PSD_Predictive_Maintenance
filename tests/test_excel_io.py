@@ -59,8 +59,7 @@ def test_parse_upload_rejects_half_filled_side_and_door():
 
 
 def test_parse_upload_rejects_future_replaced_on():
-    """코드 리뷰로 찾은 버그: 단건 입력 API(schemas.py)는 미래 날짜를 막는데 엑셀 업로드는
-    안 막고 있었다 — 같은 규칙을 여기서도 적용한다."""
+    """코드 리뷰로 찾은 버그: 미래 날짜가 날짜로 읽히기만 하면 업로드를 통과하고 있었다."""
     from datetime import timedelta
 
     future = (date.today() + timedelta(days=30)).isoformat()

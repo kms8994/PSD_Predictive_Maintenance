@@ -9,3 +9,4 @@ pytest==9.1.1
 openpyxl==3.1.5
 python-multipart==0.0.24
 reportlab==4.2.5
+pypdf==6.9.2

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, String, func
+from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from psd.db import Base
@@ -93,8 +93,30 @@ class Part(Base):
     door: Mapped[Door | None] = relationship(back_populates="parts")
 
 
+class UploadBatch(Base):
+    """업로드 이력: 정비기록 엑셀을 한 번 올릴 때마다 1줄(psd/sync.py — 엑셀이 원본, DB는 그에 맞춘다).
+
+    되돌리기는 가장 최근 것부터 차례로만 된다. 이 업로드로 넣은 기록은 ReplacementRecord.batch_id로,
+    지운 기록은 removed(JSON)에 그대로 적어 두었다가 되돌릴 때 다시 넣는다.
+    """
+
+    __tablename__ = "upload_batches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    file_name: Mapped[str] = mapped_column(String(255))
+    uploaded_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
+    scope_from: Mapped[dt.date] = mapped_column(Date)  # 비교 범위: 파일의 가장 이른 날짜
+    scope_to: Mapped[dt.date] = mapped_column(Date)  # ~ 가장 늦은 날짜
+    station_count: Mapped[int] = mapped_column()  # 파일에 나온 역 수
+    inserted: Mapped[int] = mapped_column()  # 새로 넣은 기록
+    updated: Mapped[int] = mapped_column()  # 고친 기록(사유·부품이 달라 바꿔 넣은 것)
+    deleted: Mapped[int] = mapped_column()  # 지운 기록(엑셀에서 빠진 것 + DB 중복)
+    removed: Mapped[list] = mapped_column(JSON)  # 지우거나 고치기 전 기록들(되돌리기용)
+    undone_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class ReplacementRecord(Base):
-    """교체 기록: 화면에서 입력. 한 기록에 부품(종류) 여러 개가 함께 묶일 수 있다."""
+    """교체 기록: 정비기록 엑셀을 올려 넣는다. 한 기록에 부품(종류) 여러 개가 함께 묶일 수 있다."""
 
     __tablename__ = "replacement_records"
 
@@ -105,6 +127,7 @@ class ReplacementRecord(Base):
     reason: Mapped[str] = mapped_column(String(10))  # "fail" | "prev" | "with" | "check"(점검 이상 없음 — 교체 아님)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
     created_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("upload_batches.id"), nullable=True)  # 이 기록을 넣은 업로드
 
     station: Mapped[Station] = relationship()
     door: Mapped[Door | None] = relationship()

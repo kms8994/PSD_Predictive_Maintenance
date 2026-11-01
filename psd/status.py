@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from psd.calibrate import Calibrated, calibration_map, data_version
+from psd.calibrate import MAX_YEARS, Calibrated, calibration_map, data_version
 from psd.models import CycleResult, Part
 
 RANK = {"빨강": 0, "확인_필요": 1, "노랑": 2, "초록": 3}
@@ -33,8 +33,8 @@ class UnitStatus:
 
     @property
     def cycle_years(self) -> float:
-        """예정일 계산에 쓴 주기: 기록 반영 주기가 있으면 그것, 없으면 날씨 공식 주기."""
-        return self.cal.years if self.cal else self.cycle.base_years
+        """예정일 계산에 쓴 주기: 기록 반영 주기가 있으면 그것, 없으면 날씨 공식 주기(둘 다 10년 이하)."""
+        return self.cal.years if self.cal else min(self.cycle.base_years, MAX_YEARS)
 
 
 def next_due_date(install_date: date, base_years: float) -> date:
@@ -53,7 +53,7 @@ def judge_status(days_left: int, has_record: bool) -> str:
 
 def to_unit_status(part: Part, cycle: CycleResult, today: date | None = None, cal: Calibrated | None = None) -> UnitStatus:
     today = today or date.today()
-    due = next_due_date(part.install_date, cal.years if cal else cycle.base_years)
+    due = next_due_date(part.install_date, cal.years if cal else min(cycle.base_years, MAX_YEARS))
     days_left = (due - today).days
     return UnitStatus(
         part_id=part.id,

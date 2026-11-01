@@ -5,19 +5,17 @@
 from __future__ import annotations
 
 import io
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload
-
-from pydantic import BaseModel, Field
 
 from psd.calibrate import PRIOR_FAILURES, PSD_START, Calibrated, calibration_map
 from psd.catalog import NAME_TO_CODE, PART_TYPES, SIDES
@@ -37,9 +35,16 @@ from psd.cycle import (
     single_cause_cycle,
 )
 from psd.db import get_session
-from psd.excel_io import REASON_CODE_TO_LABEL, SIDE_LABEL_TO_CODE, ExcelFormatError, parse_upload, rows_to_excel_bytes
-from psd.models import CycleResult, Door, Part, ReplacementPart, ReplacementRecord, Station
-from psd.schemas import ReplacementRecordIn
+from psd.excel_io import (
+    REASON_CODE_TO_LABEL,
+    SIDE_LABEL_TO_CODE,
+    ExcelFormatError,
+    ParsedRow,
+    parse_upload,
+    rows_to_excel_bytes,
+    template_bytes,
+)
+from psd.models import CycleResult, Door, Part, ReplacementPart, ReplacementRecord, Station, UploadBatch
 from psd.status import (
     RANK,
     _joined_parts,
@@ -52,6 +57,7 @@ from psd.status import (
     to_unit_status,
     worst,
 )
+from psd.sync import RecordSig, diff_records
 
 app = FastAPI(title="동해선 PSD 교체주기 API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -129,6 +135,8 @@ def _cal_dict(cal: Calibrated | None) -> dict | None:
     return {
         "formula_years": round(cal.formula_years, 2),
         "years": round(cal.years, 2),
+        "raw_years": round(cal.raw_years, 2),  # 10년 제한 전 계산값
+        "capped": cal.capped,
         "failures": cal.failures,
         "units": cal.units,
         "observed_years": round(cal.observed_years, 1),
@@ -291,31 +299,47 @@ def work_items(within_days: int = 730, db: Session = Depends(get_db)):
 
 
 @app.get("/api/replacement-records")
-def recent_replacement_records(limit: int = 20, order: str = "created", db: Session = Depends(get_db)):
-    """최근 교체 기록.
+def recent_replacement_records(
+    limit: int = 20,
+    offset: int = 0,
+    order: str = "created",
+    station_id: int | None = None,
+    part: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """교체 기록 목록(교체 기록 탭의 기록 찾기, 현황의 "최근 교체 기록").
 
-    order=created(기본): 입력 순서 최신부터. 업로드·입력이 제대로 들어갔는지 확인하는 용도.
+    order=created(기본): 입력 순서 최신부터. 업로드가 제대로 들어갔는지 확인하는 용도.
     한 번에 올린 기록은 입력 시각이 같아서, 그 안에서는 교체일 최신부터 늘어놓는다.
-    order=replaced: 교체일 최신부터(현황 화면의 "최근 교체 기록").
+    order=replaced: 교체일 최신부터.
+    station_id·part(부품 종류 코드)로 거르고 offset으로 쪽을 넘긴다. total은 거른 뒤의 건수.
     """
     if order not in ("created", "replaced"):
         raise HTTPException(400, "order는 created 또는 replaced여야 함")
     limit = max(1, min(limit, 200))
+    offset = max(0, offset)
     newest_replaced = (ReplacementRecord.replaced_on.desc(), ReplacementRecord.id.desc())
     sort = newest_replaced if order == "replaced" else (ReplacementRecord.created_at.desc(), *newest_replaced)
+    where = []
+    if station_id is not None:
+        where.append(ReplacementRecord.station_id == station_id)
+    if part:
+        where.append(ReplacementRecord.id.in_(select(ReplacementPart.record_id).where(ReplacementPart.part_type_code == part)))
     records = (
         db.execute(
             select(ReplacementRecord)
             .options(joinedload(ReplacementRecord.station), joinedload(ReplacementRecord.door),
                      joinedload(ReplacementRecord.parts))
+            .where(*where)
             .order_by(*sort)
+            .offset(offset)
             .limit(limit)
         )
         .unique()
         .scalars()
         .all()
     )
-    total = db.scalar(select(func.count()).select_from(ReplacementRecord))
+    total = db.scalar(select(func.count(ReplacementRecord.id)).where(*where))
     return {
         "total": total,
         "records": [
@@ -613,103 +637,216 @@ def replacement_volume(years_ahead: int = 5, db: Session = Depends(get_db)):
     }
 
 
-# ---------- 4-7. 교체 기록 입력 ----------
+# ---------- 4-7. 교체 기록 올리기 (엑셀이 원본, psd/sync.py) ----------
+# 2026-11-01: 한 건 입력 화면·API는 없앴다. 현장 정비기록(엑셀)이 유일한 원본이어야 다음 업로드 때
+# "엑셀에 없는 기록"이 헷갈리지 않는다. 고칠 때도 엑셀을 고쳐 다시 올린다.
 
 
-def _resolve_parts(db: Session, station_id: int, door_id: int | None, part_type_codes: list[str]) -> dict[str, Part]:
-    """역·문·부품이 실제 있는지 확인하고 코드→Part 매핑을 돌려준다. 단건 입력과 엑셀 업로드가
-    같이 쓴다 — 역·문 해석(이름→id)은 호출하는 쪽에서 미리 끝내고 와야 한다."""
-    station = db.get(Station, station_id)
-    if station is None:
-        raise HTTPException(404, "역 없음")
-    if door_id is not None:
-        door = db.get(Door, door_id)
-        if door is None or door.station_id != station_id:
-            raise HTTPException(404, "그 역에 그 문이 없음")
+def _resolve_rows(db: Session, parsed: list[ParsedRow]) -> list[tuple[ParsedRow, RecordSig]]:
+    """엑셀 행의 역·문·부품 이름을 DB id로 바꾼다.
 
-    parts = {
-        p.part_type_code: p
-        for p in db.execute(
-            select(Part).where(
-                Part.station_id == station_id,
-                Part.door_id == door_id,
-                Part.part_type_code.in_(part_type_codes),
-            )
-        ).scalars()
+    한 행이라도 틀리면 아무것도 하지 않는다(all-or-nothing) — 절반만 들어가면 어디까지 들어갔는지
+    헷갈리고, 엑셀을 고쳐서 다시 올리기도 더 어려워진다. 그래서 틀린 행을 전부 모아 한 번에 알려준다.
+    """
+    # 행마다 Door·Station·Part를 따로 조회하면 업로드 1건에 수천 번 DB 왕복이 생긴다(코드 리뷰로 찾은
+    # 버그 — 더미데이터 1,230건을 한 번에 올린 적이 있다, MVP_계획.md 2026-10-25). 전체 역·문·부품을
+    # 미리 한 번씩만 읽어 와 딕셔너리로 찾는다(N+1 방지).
+    station_by_name = {s.name: s for s in db.execute(select(Station)).scalars()}
+    door_by_key = {(d.station_id, d.side, d.car, d.position): d for d in db.execute(select(Door)).scalars()}
+    part_keys = {(p.station_id, p.door_id, p.part_type_code) for p in db.execute(select(Part)).scalars()}
+
+    errors: list[str] = []
+    resolved = []
+    for row in parsed:
+        station = station_by_name.get(row.station_name)
+        if station is None:
+            errors.append(f"{row.row_no}행: 역 이름을 못 찾음: {row.station_name!r}")
+            continue
+
+        door_id = None
+        if row.side_label:
+            side_code = SIDE_LABEL_TO_CODE[row.side_label]
+            try:
+                car_s, position_s = row.door_no.split("-")
+                car, position = int(car_s), int(position_s)
+            except Exception:
+                errors.append(f"{row.row_no}행: 문번호 형식이 잘못됨(예: '1-1'): {row.door_no!r}")
+                continue
+            door = door_by_key.get((station.id, side_code, car, position))
+            if door is None:
+                errors.append(f"{row.row_no}행: {row.station_name} {row.side_label} {row.door_no} 문을 못 찾음")
+                continue
+            door_id = door.id
+
+        part_codes = sorted({NAME_TO_CODE[name] for name in row.part_names})
+        missing = [c for c in part_codes if (station.id, door_id, c) not in part_keys]
+        if missing:
+            errors.append(f"{row.row_no}행: 그 역·문에 없는 부품 종류: {missing}")
+            continue
+
+        resolved.append((row, RecordSig(station.id, door_id, row.replaced_on, row.reason_code, tuple(part_codes))))
+
+    if errors:
+        raise HTTPException(400, {"message": f"{len(errors)}건 오류 — 아무것도 저장하지 않았습니다", "errors": errors})
+    return resolved
+
+
+def _sig_of(r: ReplacementRecord) -> RecordSig:
+    return RecordSig(r.station_id, r.door_id, r.replaced_on, r.reason, tuple(sorted(p.part_type_code for p in r.parts)))
+
+
+def _record_dict(r: ReplacementRecord) -> dict:
+    """지우는 기록을 그대로 적어 둔다(UploadBatch.removed — 되돌릴 때 이걸로 다시 넣는다)."""
+    return {
+        "station_id": r.station_id, "door_id": r.door_id, "replaced_on": r.replaced_on.isoformat(), "reason": r.reason,
+        "parts": sorted(p.part_type_code for p in r.parts), "created_by": r.created_by,
+        "created_at": r.created_at.isoformat() if r.created_at else None, "batch_id": r.batch_id,
     }
-    missing = set(part_type_codes) - set(parts)
-    if missing:
-        raise HTTPException(400, f"그 역·문에 없는 부품 종류: {sorted(missing)}")
-    return parts
 
 
-def _last_replaced_on(db: Session, station_id: int, door_id: int | None, code: str, exclude_id: int | None = None) -> date | None:
-    """그 부품의 마지막 교체일(점검 기록은 빼고). 없으면 None."""
-    q = (select(func.max(ReplacementRecord.replaced_on))
-         .join(ReplacementPart, ReplacementPart.record_id == ReplacementRecord.id)
-         .where(ReplacementRecord.station_id == station_id, ReplacementRecord.door_id == door_id,
-                ReplacementPart.part_type_code == code, ReplacementRecord.reason != "check"))
-    if exclude_id is not None:
-        q = q.where(ReplacementRecord.id != exclude_id)
-    return db.scalar(q)
-
-
-def _insert_replacement_record(
-    db: Session,
-    station_id: int,
-    door_id: int | None,
-    replaced_on: date,
-    reason: str,
-    part_type_codes: list[str],
-    created_by: str | None,
-    parts: dict[str, Part],
-) -> ReplacementRecord:
-    """레코드 1건 + 교체 부품들을 세션에 올린다(커밋은 호출하는 쪽에서 — 엑셀 업로드는
-    여러 건을 한 트랜잭션으로 묶어야 해서)."""
-    record = ReplacementRecord(
-        replaced_on=replaced_on,
-        station_id=station_id,
-        door_id=door_id,
-        reason=reason,
-        created_by=created_by,
-    )
+def _add_record(db: Session, sig: RecordSig, created_by: str | None, batch_id: int | None, created_at: datetime | None = None) -> None:
+    record = ReplacementRecord(replaced_on=sig.replaced_on, station_id=sig.station_id, door_id=sig.door_id,
+                               reason=sig.reason, created_by=created_by, batch_id=batch_id)
+    if created_at is not None:
+        record.created_at = created_at
+    record.parts = [ReplacementPart(part_type_code=code) for code in sig.parts]
     db.add(record)
-    db.flush()
 
-    # 코드 리뷰로 찾은 버그: 같은 부품에 대한 두 요청이 거의 동시에 들어오면(단건 입력 폼을
-    # 두 번 빠르게 제출하거나, 엑셀 업로드와 단건 입력이 겹치는 경우) 둘 다 잠금 없이 읽은
-    # install_date를 각자 덮어써서 나중에 커밋한 쪽만 반영되고 먼저 커밋한 쪽의 효과가
-    # 조용히 사라질 수 있었다(ReplacementRecord 행 자체는 둘 다 남지만, 부품의 "현재
-    # 설치일"은 하나만 반영됨). 실제로 바꿀 부품 행만 SELECT ... FOR UPDATE로 다시 읽어
-    # 잠그고(동시 요청은 여기서 직렬화돼 기다린다), 그 최신 값을 기준으로 바꾼다.
-    # populate_existing=True가 꼭 필요하다: `parts`는 이 함수를 부르기 전에(_resolve_parts
-    # 등) 이미 이 세션에서 한 번 읽은 적이 있어서, SQLAlchemy identity map에 옛 install_date를
-    # 가진 같은 객체가 캐시돼 있다. FOR UPDATE만 걸고 이 옵션을 안 주면 잠금은 걸리지만(DB에는
-    # 쿼리가 나간다) 돌려받는 객체는 캐시된 옛 값 그대로라, 다른 트랜잭션이 커밋한 최신
-    # install_date를 못 보고 그대로 덮어써 버린다 — 잠금만으론 못 잡는 버그였다.
-    locked_parts = {
-        p.part_type_code: p
-        for p in db.execute(
-            select(Part)
-            .where(Part.id.in_([parts[code].id for code in part_type_codes]))
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        ).scalars()
+
+def _delete_record(db: Session, r: ReplacementRecord) -> None:
+    for p in r.parts:
+        db.delete(p)
+    db.delete(r)
+
+
+def _recompute_parts(db: Session, part_keys: set[tuple[int, int | None, str]]) -> None:
+    """부품의 설치일(마지막 교체일 — 점검은 빼고)과 기록 여부를 남은 기록으로 다시 맞춘다.
+
+    기록을 넣고 지운 뒤 한 번만 부른다. 넣은 기록마다 설치일을 앞뒤로 비교해 바꾸던 예전 방식은
+    지우기가 함께 있으면 순서에 따라 틀릴 수 있어서, 끝난 상태에서 한 번에 다시 센다.
+    점검(이상 없음)은 부품을 바꾼 게 아니라 설치일엔 안 들어가고 기록 여부(has_record)만 켠다.
+    """
+    if not part_keys:
+        return
+    station_ids = {sid for sid, _door, _code in part_keys}
+    agg = {
+        (sid, door_id, code): (last, n)
+        for sid, door_id, code, last, n in db.execute(
+            select(ReplacementRecord.station_id, ReplacementRecord.door_id, ReplacementPart.part_type_code,
+                   func.max(case((ReplacementRecord.reason != "check", ReplacementRecord.replaced_on))),
+                   func.count(ReplacementRecord.id))
+            .join(ReplacementPart, ReplacementPart.record_id == ReplacementRecord.id)
+            .where(ReplacementRecord.station_id.in_(station_ids))
+            .group_by(ReplacementRecord.station_id, ReplacementRecord.door_id, ReplacementPart.part_type_code)
+        )
     }
+    # 업로드 두 개가 겹쳐 같은 부품을 동시에 바꾸지 않게 부품 행을 잠근다(SELECT ... FOR UPDATE).
+    # populate_existing=True가 있어야 이 세션에 캐시된 옛 값이 아니라 DB의 최신 값을 받는다.
+    parts = db.execute(
+        select(Part).where(Part.station_id.in_(station_ids)).with_for_update().execution_options(populate_existing=True)
+    ).scalars()
+    for p in parts:
+        key = (p.station_id, p.door_id, p.part_type_code)
+        if key in part_keys:
+            last, n = agg.get(key, (None, 0))
+            p.install_date = last or PSD_START[p.station_id]
+            p.has_record = n > 0
 
-    # 점검(이상 없음)은 부품을 바꾼 게 아니라 설치일은 그대로 두고, "기록이 관리되는 부품"으로만 표시한다
-    # → 예정일이 지났어도 "확인 필요"(기록이 없어 바꿨는지 모름)가 아니라 실제 교체 대상으로 본다.
-    # 그래서 has_record만으로는 install_date가 실제 교체일인지 알 수 없어, 마지막 교체 기록과 비교한다.
-    for code in part_type_codes:
-        db.add(ReplacementPart(record_id=record.id, part_type_code=code))
-        part = locked_parts[code]
-        if reason != "check":
-            last = _last_replaced_on(db, station_id, door_id, code, exclude_id=record.id)
-            if last is None or replaced_on > last:
-                part.install_date = replaced_on
-        part.has_record = True
 
-    return record
+class _Labels:
+    """화면에 보여 줄 기록 한 줄(역 이름·문 이름·부품 이름)."""
+
+    def __init__(self, db: Session):
+        self.station = {s.id: s.name for s in db.execute(select(Station)).scalars()}
+        self.door = {d.id: d.label for d in db.execute(select(Door)).scalars()}
+
+    def row(self, sig: RecordSig, created_by: str | None = None) -> dict:
+        return {
+            "replaced_on": sig.replaced_on, "station_id": sig.station_id, "station_name": self.station[sig.station_id],
+            "location": self.door[sig.door_id] if sig.door_id else "역 공통(종합제어반)", "reason": sig.reason,
+            "parts": [NAME_BY_CODE[c] for c in sig.parts], "created_by": created_by,
+        }
+
+
+SHOW_ROWS = 300  # 비교 결과에 줄 단위로 보여 줄 최대 수(건수는 전부 센다)
+MISSING_WARN = 20  # 엑셀에서 빠진 기록이 이만큼 넘으면 "다른 파일을 고른 것 같다"고 경고
+
+
+def _sync(db: Session, content: bytes, file_name: str, delete_missing: bool) -> dict:
+    """엑셀을 DB와 비교하고 엑셀에 맞춘다(flush까지만). 커밋·롤백은 부르는 쪽이 정한다 —
+    비교 화면·정비기록 시연은 롤백, "반영하기"는 커밋.
+
+    - 엑셀에만 있음 → 넣는다 / 같은 역·문·날짜인데 사유·부품이 다름 → 고친다
+    - DB에만 있음(비교 범위 안) → delete_missing일 때만 지운다(화면에서 체크해야 지움)
+    - DB에 같은 기록이 여러 번 → 하나만 남긴다
+    """
+    try:
+        parsed = parse_upload(content)
+    except ExcelFormatError as e:
+        raise HTTPException(400, str(e))
+    resolved = _resolve_rows(db, parsed)
+    sigs = [sig for _row, sig in resolved]
+    created_by: dict[RecordSig, str | None] = {}
+    for row, sig in resolved:
+        created_by.setdefault(sig, row.created_by)
+
+    station_ids = {s.station_id for s in sigs}
+    scope_from, scope_to = min(s.replaced_on for s in sigs), max(s.replaced_on for s in sigs)
+    in_scope = (
+        db.execute(
+            select(ReplacementRecord).options(joinedload(ReplacementRecord.parts))
+            .where(ReplacementRecord.station_id.in_(station_ids), ReplacementRecord.replaced_on.between(scope_from, scope_to))
+        ).unique().scalars().all()
+    )
+    by_id = {r.id: r for r in in_scope}
+    d = diff_records(sigs, [(r.id, _sig_of(r)) for r in in_scope])
+
+    removed_ids = d.db_duplicates + [rid for rid, _sig in d.changed] + (d.missing if delete_missing else [])
+    to_delete = [by_id[rid] for rid in removed_ids]
+    to_insert = d.new + [sig for _rid, sig in d.changed]
+    part_keys = ({(s.station_id, s.door_id, c) for s in to_insert for c in s.parts}
+                 | {(r.station_id, r.door_id, p.part_type_code) for r in to_delete for p in r.parts})
+    keys = {(sid, code) for sid, _door, code in part_keys}
+
+    labels = _Labels(db)
+    old_row = lambda rid: labels.row(_sig_of(by_id[rid]), by_id[rid].created_by)  # noqa: E731
+    result = {
+        "file": file_name,
+        "scope": {"from": scope_from, "to": scope_to, "stations": len(station_ids)},
+        "counts": {"new": len(d.new), "changed": len(d.changed), "missing": len(d.missing), "db_duplicates": len(d.db_duplicates),
+                   "same": d.same, "file_duplicates": d.file_duplicates},
+        "delete_missing": delete_missing,
+        "missing_warn": len(d.missing) >= MISSING_WARN,
+        "new": [labels.row(s, created_by[s]) for s in d.new[:SHOW_ROWS]],
+        "changed": [{"before": old_row(rid), "after": labels.row(s, created_by[s])} for rid, s in d.changed[:SHOW_ROWS]],
+        "missing": [old_row(rid) for rid in d.missing[:SHOW_ROWS]],
+        "inserted": len(to_insert),
+        "replaced": sum(1 for s in to_insert if s.reason != "check"),
+        "checked": sum(1 for s in to_insert if s.reason == "check"),
+        "deleted": len(to_delete) - len(d.changed),
+        "batch_id": None,
+        "changes": [],
+    }
+    if not to_insert and not to_delete:
+        return result  # 바뀌는 게 없으면 이력도 남기지 않는다
+
+    before = _group_snapshot(db, keys)
+    batch = UploadBatch(
+        file_name=file_name[:255], scope_from=scope_from, scope_to=scope_to, station_count=len(station_ids),
+        inserted=len(d.new), updated=len(d.changed), deleted=result["deleted"], removed=[_record_dict(r) for r in to_delete],
+    )
+    db.add(batch)
+    db.flush()
+    for r in to_delete:
+        _delete_record(db, r)
+    for s in to_insert:
+        _add_record(db, s, created_by[s], batch.id)
+    db.flush()
+    _recompute_parts(db, part_keys)
+    db.flush()
+    result["batch_id"] = batch.id
+    result["changes"] = _changes(db, before, _group_snapshot(db, keys))
+    return result
 
 
 def _group_snapshot(db: Session, keys: set[tuple[int, str]]) -> dict[tuple[int, str], dict]:
@@ -762,111 +899,23 @@ def _changes(db: Session, before: dict, after: dict) -> list[dict]:
     return rows
 
 
-@app.post("/api/replacement-records", status_code=201)
-def create_replacement_record(payload: ReplacementRecordIn, db: Session = Depends(get_db)):
-    parts = _resolve_parts(db, payload.station_id, payload.door_id, payload.part_type_codes)
-    keys = {(payload.station_id, code) for code in payload.part_type_codes}
-    before = _group_snapshot(db, keys)
-    record = _insert_replacement_record(
-        db, payload.station_id, payload.door_id, payload.replaced_on, payload.reason,
-        payload.part_type_codes, payload.created_by, parts,
-    )
-    db.flush()
-    after = _group_snapshot(db, keys)
-    db.commit()
-
-    cal = calibration_map(db, station_id=payload.station_id)
-    return {
-        "record_id": record.id,
-        "replaced_on": record.replaced_on,
-        "updated_parts": [
-            {
-                "part_id": parts[code].id,
-                "part_type_code": code,
-                "next_due": next_due_date(parts[code].install_date, cal[(payload.station_id, code)].years),
-            }
-            for code in payload.part_type_codes
-        ],
-        "changes": _changes(db, before, after),
-    }
-
-
-@app.post("/api/replacement-records/upload", status_code=201)
-async def upload_replacement_records(file: UploadFile, db: Session = Depends(get_db)):
-    """교체(고장) 기록을 엑셀로 한 번에 여러 건 올린다(열 형식은 psd/excel_io.py).
-
-    한 행이라도 틀리면 아무것도 저장하지 않는다(all-or-nothing) — 절반만 들어가면 어디까지
-    들어갔는지 헷갈리고, 엑셀을 고쳐서 다시 올리기도 더 어려워진다. 그래서 전체 행을 먼저
-    검사(역·문·부품이 실제 있는지)하고, 문제 있는 행을 전부 모아 한 번에 알려준다.
-    """
-    result = _apply_upload(db, await file.read())
-    db.commit()
+@app.post("/api/replacement-records/compare")
+async def compare_replacement_records(file: UploadFile, delete_missing: bool = Form(False), db: Session = Depends(get_db)):
+    """올리기 전에 DB와 비교만 한다(무엇이 들어가고·고쳐지고·빠지는지, 교체주기가 어떻게 바뀌는지). 저장하지 않는다."""
+    try:
+        result = _sync(db, await file.read(), file.filename or "업로드.xlsx", delete_missing)
+    finally:
+        db.rollback()
+    del result["batch_id"]  # 롤백해서 없는 이력
     return result
 
 
-def _apply_upload(db: Session, content: bytes) -> dict:
-    """엑셀 기록을 검사해 넣고(flush까지만) 결과를 돌려준다. 커밋·롤백은 부르는 쪽이 정한다 —
-    실제 업로드는 커밋, 정비기록 시연 탭의 미리보기는 롤백한다."""
-    try:
-        parsed = parse_upload(content)
-    except ExcelFormatError as e:
-        raise HTTPException(400, str(e))
-
-    # 행마다 Door·Station·Part를 따로 조회하면(_resolve_parts가 안에서 Station.get·Door.get·Part
-    # 조회를 또 한다) 업로드 1건에 수천 번 DB 왕복이 생긴다(코드 리뷰로 찾은 버그 — 실제로
-    # 더미데이터 1,230건을 한 번에 올린 적이 있다, MVP_계획.md 2026-10-25). 전체 역·문·부품을
-    # 미리 한 번씩만 읽어 와 딕셔너리로 찾는다(N+1 방지, station_by_name과 같은 패턴).
-    station_by_name = {s.name: s for s in db.execute(select(Station)).scalars()}
-    door_by_key = {(d.station_id, d.side, d.car, d.position): d for d in db.execute(select(Door)).scalars()}
-    parts_by_key = {(p.station_id, p.door_id, p.part_type_code): p for p in db.execute(select(Part)).scalars()}
-
-    errors: list[str] = []
-    resolved = []
-    for row in parsed:
-        station = station_by_name.get(row.station_name)
-        if station is None:
-            errors.append(f"{row.row_no}행: 역 이름을 못 찾음: {row.station_name!r}")
-            continue
-
-        door_id = None
-        if row.side_label:
-            side_code = SIDE_LABEL_TO_CODE[row.side_label]
-            try:
-                car_s, position_s = row.door_no.split("-")
-                car, position = int(car_s), int(position_s)
-            except Exception:
-                errors.append(f"{row.row_no}행: 문번호 형식이 잘못됨(예: '1-1'): {row.door_no!r}")
-                continue
-            door = door_by_key.get((station.id, side_code, car, position))
-            if door is None:
-                errors.append(f"{row.row_no}행: {row.station_name} {row.side_label} {row.door_no} 문을 못 찾음")
-                continue
-            door_id = door.id
-
-        part_codes = [NAME_TO_CODE[name] for name in row.part_names]
-        parts = {code: parts_by_key[(station.id, door_id, code)] for code in part_codes if (station.id, door_id, code) in parts_by_key}
-        missing = set(part_codes) - set(parts)
-        if missing:
-            errors.append(f"{row.row_no}행: 그 역·문에 없는 부품 종류: {sorted(missing)}")
-            continue
-
-        resolved.append((row, station.id, door_id, part_codes, parts))
-
-    if errors:
-        raise HTTPException(400, {"message": f"{len(errors)}건 오류 — 아무것도 저장하지 않았습니다", "errors": errors})
-
-    keys = {(station_id, code) for _row, station_id, _door, part_codes, _parts in resolved for code in part_codes}
-    before = _group_snapshot(db, keys)
-    records = [
-        _insert_replacement_record(db, station_id, door_id, row.replaced_on, row.reason_code, part_codes, row.created_by, parts)
-        for row, station_id, door_id, part_codes, parts in resolved
-    ]
-    db.flush()
-    after = _group_snapshot(db, keys)
-
-    checks = sum(1 for r in records if r.reason == "check")
-    return {"inserted": len(records), "replaced": len(records) - checks, "checked": checks,
-            "record_ids": [r.id for r in records], "changes": _changes(db, before, after)}
+@app.post("/api/replacement-records/sync", status_code=201)
+async def sync_replacement_records(file: UploadFile, delete_missing: bool = Form(False), db: Session = Depends(get_db)):
+    """비교 화면의 "반영하기": 엑셀에 맞춰 DB를 고치고 업로드 이력을 남긴다(열 형식은 psd/excel_io.py)."""
+    result = _sync(db, await file.read(), file.filename or "업로드.xlsx", delete_missing)
+    db.commit()
+    return result
 
 
 # 정비기록 시연 탭에서 쓰는 샘플(scripts/make_sample_records.py로 만든 파일)
@@ -898,71 +947,123 @@ def sample_records():
 
 @app.post("/api/sample-records/preview")
 def preview_sample_records(db: Session = Depends(get_db)):
-    """샘플을 올렸다고 치고 결과만 계산한 뒤 롤백한다 — 몇 번을 눌러도 DB는 그대로다."""
+    """샘플을 올렸다고 치고 결과만 계산한 뒤 롤백한다 — 몇 번을 눌러도 DB는 그대로다.
+    샘플은 한 정비팀의 기록이라 다른 기록(초기 데이터)은 지우지 않는다(delete_missing=False)."""
     try:
-        result = _apply_upload(db, _sample_bytes())
+        result = _sync(db, _sample_bytes(), SAMPLE_RECORDS_PATH.name, delete_missing=False)
     finally:
         db.rollback()
-    del result["record_ids"]  # 롤백해서 없는 기록
-    return {"file": SAMPLE_RECORDS_PATH.name, **result}
+    del result["batch_id"]
+    return result
 
 
-class UndoIn(BaseModel):
-    record_ids: list[int] = Field(min_length=1)
+# ---------- 업로드 이력·되돌리기 ----------
 
 
-@app.post("/api/replacement-records/undo")
-def undo_replacement_records(payload: UndoIn, db: Session = Depends(get_db)):
-    """방금 올린 기록을 되돌린다(업로드 결과 화면의 "되돌리기"). 기록을 지우고, 그 기록이 바꿔 놓은
-    부품의 설치일·기록 여부를 남은 기록 기준으로 다시 맞춘다 — 업로드를 잘못했을 때와 시연 반복용."""
-    records = (
-        db.execute(select(ReplacementRecord).options(joinedload(ReplacementRecord.parts)).where(ReplacementRecord.id.in_(payload.record_ids)))
+def _latest_active_batch_id(db: Session) -> int | None:
+    return db.scalar(select(func.max(UploadBatch.id)).where(UploadBatch.undone_at.is_(None)))
+
+
+@app.get("/api/upload-batches")
+def list_upload_batches(limit: int = 20, db: Session = Depends(get_db)):
+    """업로드 이력(최근 것부터). 되돌리기는 아직 안 되돌린 것 중 가장 최근 것만 된다(can_undo)."""
+    limit = max(1, min(limit, 100))
+    latest = _latest_active_batch_id(db)
+    batches = db.execute(select(UploadBatch).order_by(UploadBatch.id.desc()).limit(limit)).scalars().all()
+    return {
+        "total": db.scalar(select(func.count(UploadBatch.id))),
+        "batches": [
+            {
+                "id": b.id, "file_name": b.file_name, "uploaded_at": b.uploaded_at,
+                "scope_from": b.scope_from, "scope_to": b.scope_to, "station_count": b.station_count,
+                "inserted": b.inserted, "updated": b.updated, "deleted": b.deleted,
+                "undone_at": b.undone_at, "can_undo": b.id == latest,
+            }
+            for b in batches
+        ],
+    }
+
+
+@app.post("/api/upload-batches/{batch_id}/undo")
+def undo_upload_batch(batch_id: int, db: Session = Depends(get_db)):
+    """업로드 한 번을 되돌린다: 그때 넣은 기록은 지우고, 그때 지우거나 고친 기록은 원래대로 다시 넣는다.
+
+    나중 업로드가 이 업로드의 기록을 또 고쳤을 수 있어서, 가장 최근 업로드부터 차례로만 되돌린다.
+    """
+    batch = db.execute(select(UploadBatch).where(UploadBatch.id == batch_id).with_for_update()).scalar_one_or_none()
+    if batch is None:
+        raise HTTPException(404, "업로드 이력 없음")
+    if batch.undone_at is not None:
+        raise HTTPException(409, "이미 되돌린 업로드입니다")
+    if batch.id != _latest_active_batch_id(db):
+        raise HTTPException(409, "가장 최근 업로드부터 차례로 되돌릴 수 있습니다")
+
+    added = (
+        db.execute(select(ReplacementRecord).options(joinedload(ReplacementRecord.parts)).where(ReplacementRecord.batch_id == batch.id))
         .unique().scalars().all()
     )
-    if not records:
-        raise HTTPException(404, "되돌릴 기록이 없음(이미 되돌렸을 수 있음)")
-    part_keys = {(r.station_id, r.door_id, p.part_type_code) for r in records for p in r.parts}
-    keys = {(sid, code) for sid, _door, code in part_keys}
-    before = _group_snapshot(db, keys)
+    restore = [
+        (RecordSig(x["station_id"], x["door_id"], date.fromisoformat(x["replaced_on"]), x["reason"], tuple(x["parts"])), x)
+        for x in batch.removed
+    ]
+    part_keys = ({(r.station_id, r.door_id, p.part_type_code) for r in added for p in r.parts}
+                 | {(s.station_id, s.door_id, c) for s, _x in restore for c in s.parts})
 
-    for r in records:
-        for p in r.parts:
-            db.delete(p)
-        db.delete(r)
+    for r in added:
+        _delete_record(db, r)
+    for s, x in restore:
+        _add_record(db, s, x["created_by"], x["batch_id"], datetime.fromisoformat(x["created_at"]) if x["created_at"] else None)
     db.flush()
-
-    for sid, door_id, code in part_keys:
-        part = db.execute(
-            select(Part).where(Part.station_id == sid, Part.door_id == door_id, Part.part_type_code == code)
-            .with_for_update().execution_options(populate_existing=True)
-        ).scalar_one()
-        last = _last_replaced_on(db, sid, door_id, code)
-        any_record = db.scalar(
-            select(func.count(ReplacementRecord.id))
-            .join(ReplacementPart, ReplacementPart.record_id == ReplacementRecord.id)
-            .where(ReplacementRecord.station_id == sid, ReplacementRecord.door_id == door_id, ReplacementPart.part_type_code == code)
-        )
-        part.install_date = last or PSD_START[sid]
-        part.has_record = bool(any_record)
-    db.flush()
-    after = _group_snapshot(db, keys)
+    _recompute_parts(db, part_keys)
+    batch.undone_at = datetime.now()
     db.commit()
-    return {"deleted": len(records), "changes": _changes(db, before, after)}
+    return {"file": batch.file_name, "deleted": len(added), "restored": len(restore)}
 
 
 @app.get("/api/replacement-records/template")
 def download_upload_template():
-    """엑셀 업로드 양식(열 이름 + 예시 2행). 예시 행은 지우고 쓰면 된다."""
-    rows = [
-        {"역": "거제해맞이", "방향": "부전 방면", "문번호": "1-1", "교체일": date.today().isoformat(), "사유": "고장", "부품": "IFM 릴레이", "입력자": "홍길동"},
-        {"역": "거제해맞이", "방향": "", "문번호": "", "교체일": date.today().isoformat(), "사유": "예방 교체", "부품": "종합제어반 릴레이", "입력자": "홍길동"},
-        {"역": "거제해맞이", "방향": "부전 방면", "문번호": "1-2", "교체일": date.today().isoformat(), "사유": "점검(이상 없음)", "부품": "전체", "입력자": "홍길동"},
+    """엑셀 업로드 양식: 첫 시트 "기록"은 열 이름만, 둘째 시트 "작성 예시"에 예시 3행.
+    업로드는 첫 시트만 읽어서, 예시를 안 지워도 가짜 기록이 들어가지 않는다."""
+    examples = [
+        {"역": "거제해맞이", "방향": "부전 방면", "문번호": "1-1", "교체일": "2026-10-15", "사유": "고장", "부품": "IFM 릴레이", "입력자": "홍길동"},
+        {"역": "거제해맞이", "방향": "", "문번호": "", "교체일": "2026-10-15", "사유": "예방 교체", "부품": "종합제어반 릴레이", "입력자": "홍길동"},
+        {"역": "거제해맞이", "방향": "부전 방면", "문번호": "1-2", "교체일": "2026-10-16", "사유": "점검(이상 없음)", "부품": "전체", "입력자": "홍길동"},
     ]
-    filename = "PSD_교체기록_업로드양식.xlsx"
+    return _xlsx_response(template_bytes(examples), "PSD_교체기록_업로드양식.xlsx", "PSD_upload_template.xlsx")
+
+
+@app.get("/api/replacement-records/export")
+def export_replacement_records(db: Session = Depends(get_db)):
+    """DB의 교체 기록 전부를 업로드 양식 그대로 내려받는다(교체일 순). 원본 엑셀을 잃어버렸을 때
+    이 파일을 원본 삼아 이어 쓰면 되고, 그대로 다시 올리면 "변경 없음"이 나온다."""
+    records = (
+        db.execute(
+            select(ReplacementRecord)
+            .options(joinedload(ReplacementRecord.station), joinedload(ReplacementRecord.door), joinedload(ReplacementRecord.parts))
+            .order_by(ReplacementRecord.replaced_on, ReplacementRecord.id)
+        ).unique().scalars().all()
+    )
+    rows = [
+        {
+            "역": r.station.name,
+            "방향": SIDES[r.door.side] if r.door else "",
+            "문번호": f"{r.door.car}-{r.door.position}" if r.door else "",
+            "교체일": r.replaced_on.isoformat(),
+            "사유": REASON_CODE_TO_LABEL[r.reason],
+            "부품": ",".join(NAME_BY_CODE[c] for c in sorted(p.part_type_code for p in r.parts)),
+            "입력자": r.created_by or "",
+        }
+        for r in records
+    ]
+    today = date.today().isoformat()
+    return _xlsx_response(rows_to_excel_bytes(rows), f"PSD_교체기록_전체_{today}.xlsx", f"PSD_records_{today}.xlsx")
+
+
+def _xlsx_response(content: bytes, filename: str, ascii_name: str) -> StreamingResponse:
     return StreamingResponse(
-        io.BytesIO(rows_to_excel_bytes(rows)),
+        io.BytesIO(content),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=\"PSD_upload_template.xlsx\"; filename*=UTF-8''{quote(filename)}"},
+        headers={"Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"},
     )
 
 
@@ -1052,26 +1153,19 @@ def download_report(station_id: int | None = None, db: Session = Depends(get_db)
     )
 
 
-@app.get("/api/stations/{station_id}/report.pdf")
-def download_station_report_pdf(station_id: int, db: Session = Depends(get_db)):
+def _station_pdf(db: Session, station: Station) -> bytes:
     """역 1곳의 PSD 부품 교체 현황 보고서(PDF, A4 2쪽). 양식은 psd/report_pdf.py."""
     from psd.report_pdf import DoorInfo, RecordInfo, build_station_pdf
 
-    station = db.get(Station, station_id)
-    if station is None:
-        raise HTTPException(404, "역 없음")
-    if not station.in_service:
-        raise HTTPException(409, "개통 전 역이라 보고서에 넣을 부품이 없음")
-
     doors = [
         DoorInfo(d.id, d.side, d.car, d.position, d.label)
-        for d in db.execute(select(Door).where(Door.station_id == station_id)).scalars()
+        for d in db.execute(select(Door).where(Door.station_id == station.id)).scalars()
     ]
     recent = (
         db.execute(
             select(ReplacementRecord)
             .options(joinedload(ReplacementRecord.door), joinedload(ReplacementRecord.parts))
-            .where(ReplacementRecord.station_id == station_id)
+            .where(ReplacementRecord.station_id == station.id)
             .order_by(ReplacementRecord.replaced_on.desc(), ReplacementRecord.id.desc())
             .limit(12)
         )
@@ -1079,14 +1173,13 @@ def download_station_report_pdf(station_id: int, db: Session = Depends(get_db)):
         .scalars()
         .all()
     )
-    total = db.scalar(select(func.count()).select_from(ReplacementRecord).where(ReplacementRecord.station_id == station_id))
+    total = db.scalar(select(func.count()).select_from(ReplacementRecord).where(ReplacementRecord.station_id == station.id))
     cfg = next(s for s in STATIONS if s.name == station.name)
-
-    pdf = build_station_pdf(
+    return build_station_pdf(
         station_id=station.id,
         station_name=station.name,
         psd_install_date=cfg.psd_install_date or cfg.open_date,
-        statuses=station_unit_statuses(db, station_id),
+        statuses=station_unit_statuses(db, station.id),
         doors=doors,
         records=[
             RecordInfo(r.replaced_on, r.door.label if r.door else "역 공통", [p.part_type_code for p in r.parts], r.reason, r.created_by)
@@ -1094,13 +1187,39 @@ def download_station_report_pdf(station_id: int, db: Session = Depends(get_db)):
         ],
         record_total=total,
     )
-    filename = f"PSD_역보고서_{station.name}_{date.today():%Y%m%d}.pdf"
+
+
+def _pdf_response(pdf: bytes, filename: str) -> StreamingResponse:
     # 엑셀 보고서와 같은 이유로 한글 파일명은 filename*(RFC 5987)로만 준다
     return StreamingResponse(
         io.BytesIO(pdf),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=\"PSD_station_report.pdf\"; filename*=UTF-8''{quote(filename)}"},
     )
+
+
+@app.get("/api/stations/{station_id}/report.pdf")
+def download_station_report_pdf(station_id: int, db: Session = Depends(get_db)):
+    """역 1곳의 보고서(PDF, A4 2쪽)."""
+    station = db.get(Station, station_id)
+    if station is None:
+        raise HTTPException(404, "역 없음")
+    if not station.in_service:
+        raise HTTPException(409, "개통 전 역이라 보고서에 넣을 부품이 없음")
+    return _pdf_response(_station_pdf(db, station), f"PSD_역보고서_{station.name}_{date.today():%Y%m%d}.pdf")
+
+
+@app.get("/api/report.pdf")
+def download_all_stations_report_pdf(db: Session = Depends(get_db)):
+    """운영 중인 역 전부의 보고서를 역 순서대로 한 PDF로 묶는다(역마다 2쪽, 2026-11-01 보고서 형식 고르기)."""
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    for station in db.execute(select(Station).where(Station.in_service).order_by(Station.id)).scalars():
+        writer.append(io.BytesIO(_station_pdf(db, station)))
+    buf = io.BytesIO()
+    writer.write(buf)
+    return _pdf_response(buf.getvalue(), f"PSD_역보고서_전체_{date.today():%Y%m%d}.pdf")
 
 
 # ---------- 화면 (설계_v2.md 6-3, MVP_계획.md 5단계) ----------

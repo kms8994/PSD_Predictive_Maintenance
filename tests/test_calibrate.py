@@ -51,3 +51,11 @@ def test_part_lives_inspection_does_not_end_life():
     with_check = part_lives(START, [(date(2024, 1, 1), "fail"), (date(2025, 6, 1), "check")], TODAY)
     without = part_lives(START, [(date(2024, 1, 1), "fail")], TODAY)
     assert with_check == without
+
+
+def test_cycle_is_capped_at_manufacturer_10_years():
+    """고장 없이 오래 버틴 기록이 쌓여 계산이 10년을 넘어도 예정일엔 10년까지만 쓴다(계산값은 raw_years에 남긴다)."""
+    c = calibrate(9.5, [(9.0, False)] * 40)
+    assert c.raw_years > 10
+    assert c.years == 10.0 and c.capped
+    assert not calibrate(6.5, []).capped

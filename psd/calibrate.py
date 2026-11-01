@@ -31,6 +31,8 @@ WEIBULL_SHAPE = 2.0
 PRIOR_FAILURES = 8.0  # 날씨 공식 값을 "고장 8건을 본 것"만큼 믿는다. 4로 두면 더미데이터(역 x 부품당 고장 10~20건)의
 # 우연한 차이만으로 주기가 ±25%까지 흔들려서, 역 사이 차이가 날씨보다 우연에 더 좌우됐다(2026-10-31 확인)
 _GAMMA = math.gamma(1 + 1 / WEIBULL_SHAPE)
+MAX_YEARS = 10.0  # 제조사 권장 교체주기. 고장 없는 기록이 쌓여 계산이 이보다 길어져도 예정일은 10년을 넘기지 않는다
+# (2026-11-01: "제조사 권장보다 늦게 바꾸라는 거냐"는 혼란을 막음 — 날씨 분석의 "10년보다 늦은 교체는 권고하지 않음"과 같은 원칙)
 
 # 역 id → PSD 사용개시일. 부품의 첫 설치일이라 기록 사이 기간을 셀 출발점이 된다(scripts/init_db.py와 같은 값)
 PSD_START = {s.order: s.psd_install_date or s.open_date for s in STATIONS}
@@ -39,10 +41,15 @@ PSD_START = {s.order: s.psd_install_date or s.open_date for s in STATIONS}
 @dataclass(frozen=True)
 class Calibrated:
     formula_years: float  # 날씨 공식이 낸 주기(사전값)
-    years: float  # 기록을 반영한 주기 — 예정일 계산에 쓴다
+    years: float  # 기록을 반영한 주기 — 예정일 계산에 쓴다(MAX_YEARS를 넘지 않음)
     failures: int  # 반영한 고장 수
     units: int  # 지켜본 부품 수명 수(고장·교체로 끝난 것 + 지금 쓰는 중인 것)
     observed_years: float  # 지켜본 기간 합(년)
+    raw_years: float  # 10년 제한 전 계산값(참고로만 보여 준다)
+
+    @property
+    def capped(self) -> bool:
+        return self.raw_years > MAX_YEARS
 
     @property
     def data_share(self) -> float:
@@ -64,8 +71,8 @@ def calibrate(formula_years: float, lives: list[tuple[float, bool]]) -> Calibrat
         if failed:
             a += 1
             failures += 1
-    years = (b / a) ** (1 / WEIBULL_SHAPE) * _GAMMA
-    return Calibrated(formula_years, years, failures, sum(1 for y, _ in lives if y > 0), observed)
+    raw = (b / a) ** (1 / WEIBULL_SHAPE) * _GAMMA
+    return Calibrated(formula_years, min(raw, MAX_YEARS), failures, sum(1 for y, _ in lives if y > 0), observed, raw)
 
 
 def part_lives(start: date, records: list[tuple[date, str]], today: date) -> list[tuple[float, bool]]:

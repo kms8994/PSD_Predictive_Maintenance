@@ -6,7 +6,8 @@ DB와 똑같다). 이 스크립트로 다시 만들지 않고 파일을 넣는 �
 달라져 지금 다시 돌리면 같은 기록이 안 나온다.
 
 넣지 않으면 교체 기록이 0건이라 모든 부품이 "안전"으로 나온다(README "초기 데이터" 참고).
-교체 기록이 이미 있으면 겹치지 않게 아무것도 하지 않는다.
+교체 기록이 이미 있으면 겹치지 않게 아무것도 하지 않는다. 화면에서 올린 것과 똑같이 업로드 이력이 1줄
+남아서, 교체 기록 탭의 업로드 이력에서 되돌릴 수도 있다. 실제 운영에서는 쓰지 않는다.
 
     python scripts/load_initial_records.py
 """
@@ -18,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 from sqlalchemy import func, select  # noqa: E402
 
-from psd.api import _apply_upload  # noqa: E402
+from psd.api import _sync  # noqa: E402
 from psd.db import get_session  # noqa: E402
 from psd.models import ReplacementRecord  # noqa: E402
 
@@ -32,7 +33,7 @@ def main() -> None:
         if existing:
             print(f"교체 기록이 이미 {existing}건 있어 넣지 않았습니다(겹침 방지).")
             return
-        result = _apply_upload(session, INITIAL_RECORDS.read_bytes())
+        result = _sync(session, INITIAL_RECORDS.read_bytes(), INITIAL_RECORDS.name, delete_missing=False)
         session.commit()
         print(f"넣음: {INITIAL_RECORDS.name} {result['inserted']}건")
     finally:
