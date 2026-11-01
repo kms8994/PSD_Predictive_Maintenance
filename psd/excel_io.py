@@ -8,8 +8,11 @@
 - 방향·문번호: 역 단위 부품(종합제어반 릴레이)만 교체했으면 비움
 - 방향: "부전 방면" | "북울산 방면" (psd/catalog.py SIDES의 값)
 - 문번호: "차량-문" 형식, 예: "1-1"
-- 사유: "고장" | "예방 교체" | "함께 교체" (psd/schemas.py VALID_REASONS의 한글 값과 같다)
-- 부품: 쉼표로 여러 개, 예: "DCM,IFM 릴레이" (psd/catalog.py PART_TYPES의 이름)
+- 사유: "고장" | "예방 교체" | "함께 교체" | "점검(이상 없음)" (psd/schemas.py VALID_REASONS의 한글 값과 같다).
+  점검(이상 없음)은 정기 점검에서 문제가 없었다는 기록이다 — 부품을 바꾼 게 아니라서 설치일은 그대로이고,
+  "교체일" 칸에는 점검일을 쓴다. "점검", "이상 없음"으로 써도 같은 뜻으로 받는다
+- 부품: 쉼표로 여러 개, 예: "DCM,IFM 릴레이" (psd/catalog.py PART_TYPES의 이름).
+  "전체"라고 쓰면 그 문의 부품 6종 전부(방향·문번호를 비웠으면 종합제어반 릴레이) — 문 단위 점검용
 """
 from __future__ import annotations
 
@@ -19,11 +22,14 @@ from io import BytesIO
 
 import pandas as pd
 
-from psd.catalog import NAME_TO_CODE, SIDES
+from psd.catalog import DOOR_PART_CODES, NAME_TO_CODE, SIDES, STATION_PART_CODES
 
 COLUMNS = ["역", "방향", "문번호", "교체일", "사유", "부품", "입력자"]
-REASON_LABEL_TO_CODE = {"고장": "fail", "예방 교체": "prev", "함께 교체": "with"}
+REASON_LABEL_TO_CODE = {"고장": "fail", "예방 교체": "prev", "함께 교체": "with", "점검(이상 없음)": "check"}
 REASON_CODE_TO_LABEL = {v: k for k, v in REASON_LABEL_TO_CODE.items()}
+REASON_ALIASES = {"점검": "check", "이상 없음": "check", "점검 이상 없음": "check"}  # 손으로 쓸 때 흔한 표기
+ALL_PARTS = "전체"
+CODE_TO_NAME = {code: name for name, code in NAME_TO_CODE.items()}
 SIDE_LABEL_TO_CODE = {label: code for code, label in SIDES.items()}
 
 
@@ -87,16 +93,9 @@ def parse_upload(content: bytes) -> list[ParsedRow]:
             raise ExcelFormatError(row_no, f"교체일은 미래일 수 없습니다: {replaced_on}")
 
         reason_label = _cell(r, "사유")
-        if reason_label not in REASON_LABEL_TO_CODE:
+        reason_code = REASON_LABEL_TO_CODE.get(reason_label) or REASON_ALIASES.get(reason_label)
+        if reason_code is None:
             raise ExcelFormatError(row_no, f"사유는 {list(REASON_LABEL_TO_CODE)} 중 하나여야 합니다: {reason_label!r}")
-
-        parts_raw = _cell(r, "부품")
-        part_names = [p.strip() for p in parts_raw.split(",") if p.strip()]
-        if not part_names:
-            raise ExcelFormatError(row_no, "부품이 비어 있습니다")
-        unknown = [p for p in part_names if p not in NAME_TO_CODE]
-        if unknown:
-            raise ExcelFormatError(row_no, f"알 수 없는 부품 이름: {unknown} (가능한 값: {sorted(NAME_TO_CODE)})")
 
         side_label = _cell(r, "방향") or None
         door_no = _cell(r, "문번호") or None
@@ -105,13 +104,24 @@ def parse_upload(content: bytes) -> list[ParsedRow]:
         if bool(side_label) != bool(door_no):
             raise ExcelFormatError(row_no, "방향과 문번호는 둘 다 채우거나 둘 다 비워야 합니다")
 
+        parts_raw = _cell(r, "부품")
+        if parts_raw == ALL_PARTS:
+            part_names = [CODE_TO_NAME[c] for c in (DOOR_PART_CODES if side_label else STATION_PART_CODES)]
+        else:
+            part_names = [p.strip() for p in parts_raw.split(",") if p.strip()]
+        if not part_names:
+            raise ExcelFormatError(row_no, "부품이 비어 있습니다")
+        unknown = [p for p in part_names if p not in NAME_TO_CODE]
+        if unknown:
+            raise ExcelFormatError(row_no, f"알 수 없는 부품 이름: {unknown} (가능한 값: {sorted(NAME_TO_CODE)} 또는 {ALL_PARTS!r})")
+
         rows.append(ParsedRow(
             row_no=row_no,
             station_name=station_name,
             side_label=side_label,
             door_no=door_no,
             replaced_on=replaced_on,
-            reason_code=REASON_LABEL_TO_CODE[reason_label],
+            reason_code=reason_code,
             part_names=part_names,
             created_by=_cell(r, "입력자") or None,
         ))

@@ -8,7 +8,7 @@ from pydantic import BaseModel, field_validator
 from psd.catalog import PART_TYPES
 
 VALID_PART_CODES = {p["code"] for p in PART_TYPES}
-VALID_REASONS = {"fail": "고장", "prev": "예방 교체", "with": "함께 교체"}
+VALID_REASONS = {"fail": "고장", "prev": "예방 교체", "with": "함께 교체", "check": "점검(이상 없음)"}
 
 
 class ReplacementRecordIn(BaseModel):

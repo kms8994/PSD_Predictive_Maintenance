@@ -30,7 +30,6 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
-WEATHER_CSV = ROOT / "data" / "processed" / "weather_daily.csv"  # ASOS(부산/울산), 더는 계산에 안 씀 — 아래 AWS_WEATHER_CSV 참고
 AWS_WEATHER_CSV = ROOT / "data" / "processed" / "aws_weather_daily.csv"  # AWS, 2026-10-25부터 날씨 계산의 기준
 
 K_EV = 8.617e-5  # 볼츠만 상수 (eV/K)
@@ -49,7 +48,7 @@ class Station:
     order: int
     name: str
     open_date: date  # 철도(동해선) 개통일 — 역사적 사실, 김민수 제공(2026-10-14)
-    obs: str  # "부산" 또는 "울산" (ASOS 코드, scripts/load_weather.py의 DB 적재용·역 화면 표시용으로만 남음)
+    obs: str  # "부산" 또는 "울산" (ASOS 관측소, DB에서 역 → 관측소 연결(stations.observatory_id)용으로만 남음. 날씨 계산은 aws_stn)
     near_water: bool = False  # 역 근처 바다·하천 인접 여부 (2026-10-24 미팅 답변 Q5 근거, 아래 주석 참고)
     psd_install_date: date | None = None  # 스크린도어(PSD) 실제 사용개시일. None이면 open_date로 대신한다
     # (아래 psd_install_date 주석 참고) — 2026-10-24 미팅 답변 Q3 근거, open_date와 다를 수 있음.
@@ -144,10 +143,9 @@ if _unknown_aws_stn:
 # 효과를 가속 계수(af_hum) 쪽에서 직접 낸다 — 비중까지 또 옮기면 같은 "해안=습함" 효과를 두 번
 # 적용하는 중복이 된다. near_water 필드 자체는 역 화면 표시·참고용으로만 남겨 둔다.
 
-OBS_CODE = {"부산": "159", "울산": "152"}  # ASOS 코드. 이제 날씨 계산에는 안 쓰고 DB 적재(scripts/load_weather.py)·역 화면 표시용으로만 남음
+OBS_CODE = {"부산": "159", "울산": "152"}  # ASOS 코드. 날씨 계산에는 안 쓰고 scripts/init_db.py가 역 → 관측소를 연결할 때만 쓴다
 
 PARTS = ["모터", "타이밍벨트", "풀리", "도어 행거", "DCM", "IFM 릴레이", "종합제어반 릴레이"]
-WEATHER_PARTS = {"DCM", "IFM 릴레이", "모터"}
 
 # 비중 범위 (4단계_계산공식_근거조사.md 3장). 근거가 없으므로 기본값은 균등, 범위는 전체
 # 격자/구간으로 계산한다 — 역 성격과 무관하게 전부 같다(위 near_water 주석 참고: AWS 실측
@@ -182,14 +180,8 @@ SERVICE_INTERVAL_MIN = {"peak": 15, "offpeak": 25}  # 분 단위, 전 역·상�
 # ---------- 날씨 ----------
 #
 # 2026-10-25: 부산/울산 ASOS 2버킷 대신 AWS(방재기상관측) 지점별로 날씨를 계산한다(설계_v2.md
-# 2-6). load_weather()/WEATHER_CSV(ASOS)는 scripts/load_weather.py의 DB 적재(daily_weather
-# 표, 실제로 읽는 화면 없음)에만 남겨 두고, 실제 계산은 load_aws_weather()를 쓴다.
-
-
-def load_weather() -> pd.DataFrame:
-    df = pd.read_csv(WEATHER_CSV, parse_dates=["date"])
-    df["stn"] = df["stn"].astype(str)
-    return df
+# 2-6). 날씨는 load_aws_weather()로 data/processed/aws_weather_daily.csv에서 읽는다(ASOS 자료와
+# 수집·적재 스크립트는 2026-11-01에 정리해 지웠다).
 
 
 def load_aws_weather() -> pd.DataFrame:

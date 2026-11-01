@@ -100,3 +100,17 @@ def test_columns_constant_matches_rows_to_excel_bytes_header():
     data = rows_to_excel_bytes([{c: "" for c in COLUMNS}])
     df = pd.read_excel(BytesIO(data))
     assert list(df.columns) == COLUMNS
+
+
+def test_parse_upload_reads_inspection_with_all_parts():
+    content = _xlsx([
+        {"역": "부전", "방향": "부전 방면", "문번호": "1-2", "교체일": "2026-06-10",
+         "사유": "점검(이상 없음)", "부품": "전체", "입력자": "정비1팀"},
+        {"역": "부전", "방향": "", "문번호": "", "교체일": "2026-06-10",
+         "사유": "이상 없음", "부품": "전체", "입력자": "정비1팀"},
+    ])
+    door_row, station_row = parse_upload(content)
+    assert door_row.reason_code == "check"
+    assert door_row.part_names == ["모터", "타이밍벨트", "풀리", "도어 행거", "DCM", "IFM 릴레이"]
+    assert station_row.reason_code == "check"  # 손으로 쓴 표기("이상 없음")도 받는다
+    assert station_row.part_names == ["종합제어반 릴레이"]

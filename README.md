@@ -2,7 +2,7 @@
 
 동해선 스크린도어(PSD) 부품의 권장 교체주기를 날씨(기상청 AWS 2022~2025년치, 역마다 가장
 가까운 지점 7곳)로 보정해 계산하고, 역 → 문 → 부품 단위로 보여 주는 도구다. 실제 고장
-기록은 엑셀로 업로드해 반영하고(없으면 더미데이터로 대신), 현재 상태는 엑셀 보고서로
+기록은 엑셀로 업로드해 반영하고(없으면 더미데이터로 대신), 현재 상태는 엑셀·PDF 보고서로
 내려받을 수 있다.
 
 - 설계 결정: [설계_v2.md](설계_v2.md)
@@ -10,64 +10,135 @@
 - 진행 상황: [MVP_계획.md](MVP_계획.md)
 - 화면 방향성(가정 날씨로 만든 참고용 목업, 실제 계산과는 다름): [목업/동해선_PSD_교체주기_목업.html](목업/동해선_PSD_교체주기_목업.html)
 
+## 다른 컴퓨터에서 처음 설치하기
+
+날씨 집계 결과(`data/processed/aws_weather_daily.csv`)는 저장소에 들어 있어서, 날씨를 다시 받지
+않아도 아래 순서만 따라 하면 화면이 뜬다. Windows·macOS·Linux 어디서든 같다.
+
+### 1. 준비물
+
+- Python 3.10 이상
+- MySQL 8.0 (서버가 켜져 있어야 함)
+- Git
+
+### 2. 내려받기와 패키지 설치
+
+```bash
+git clone https://github.com/kms8994/PSD_Predictive_Maintenance.git
+cd PSD_Predictive_Maintenance
+python -m venv .venv
+```
+
+가상환경 켜기 — Windows: `.venv\Scripts\activate`, macOS/Linux: `source .venv/bin/activate`
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. MySQL에 DB와 전용 계정 만들기
+
+MySQL에 root로 접속해서(`mysql -u root -p`) 한 번만 실행한다. `<비밀번호>`는 직접 정한다:
+
+```sql
+CREATE DATABASE IF NOT EXISTS psd CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'psd_app'@'localhost' IDENTIFIED BY '<비밀번호>';
+GRANT ALL PRIVILEGES ON psd.* TO 'psd_app'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+### 4. `.env` 만들기
+
+`.env.example`을 복사해 `.env`로 저장하고 `DB_PASSWORD`에 3단계의 비밀번호를 넣는다.
+`.env`는 비밀번호가 들어 있어 저장소에 올라가지 않는다(`.gitignore`).
+
+```
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=psd
+DB_USER=psd_app
+DB_PASSWORD=<비밀번호>
+```
+
+### 5. 표 만들기와 교체주기 계산
+
+```bash
+python scripts/init_db.py          # 표 생성 + 역 24개·문·부품 4,439개 등 기본 데이터
+python scripts/compute_cycles.py   # 날씨로 역 x 부품 7종 권장 교체주기를 계산해 저장
+```
+
+### 6. (선택) 초기 데이터 넣기 — 더미 교체 기록 1,230건
+
+```bash
+python scripts/load_initial_records.py
+```
+
+> **⚠️ 이 단계는 선택이다. 넣을지 말지에 따라 화면이 크게 달라진다.**
+>
+> 실제 고장 데이터가 아직 없어서, 신뢰성 공식이 낸 주기를 평균으로 한 와이블 분포로 "이미 고장났을
+> 법한" 기록 1,230건을 만들어 두었다(`data/dummy/초기데이터_교체기록_1230건.xlsx`, 개발 PC의 DB와 같은 내용).
+>
+> | | 넣으면 | 넣지 않으면 |
+> | --- | --- | --- |
+> | 화면 상태 | 개발 PC와 똑같다 — 위험 38 · 주의 104 · 안전 4,297 | 부품 4,439개가 **전부 "안전"** |
+> | 교체주기 | 고장 기록으로 보정된 값(예: IFM 릴레이 평균 약 6.3년) | 고장 기록이 0건이라 날씨 공식보다 길게 나옴(IFM 릴레이 평균 약 10.5년) |
+> | 최근 교체 기록·교체 물량·보고서 | 기록이 채워져 있음 | 거의 비어 있음 |
+> | 정비기록 시연 탭 | 샘플이 이 기록을 기준으로 만들어져 결과가 의도대로 나옴 | 동작은 하지만 바뀌는 모습이 다르게 나옴 |
+>
+> - **시연·발표처럼 지금 화면 그대로 보여 주려면 넣는다.**
+> - **실제 고장 데이터를 받아서 처음부터 쓰려면 넣지 않는다.** 이 기록은 가짜라서, 실제 데이터와 섞이면
+>   교체주기 보정이 틀어진다. 실제 기록은 화면의 "교체 기록" 탭에서 엑셀로 올리면 된다.
+> - 이미 교체 기록이 있는 DB에서는 겹치지 않게 아무것도 하지 않는다. 넣은 뒤 빼고 싶으면
+>   `python scripts/init_db.py --reset`으로 표를 지우고 5단계부터 다시 한다(그 DB의 모든 교체 기록이 지워진다).
+
+### 7. 실행
+
+```bash
+uvicorn psd.api:app --reload
+```
+
+브라우저에서 `http://127.0.0.1:8000/` 을 연다. API 문서는 `http://127.0.0.1:8000/docs`.
+
+PDF 보고서의 한글 글꼴은 Windows의 맑은 고딕을 쓰고, 없으면(macOS·Linux) PDF 뷰어의 기본 한글 글꼴로
+대신 나온다.
+
+## 화면 구성
+
+| 탭 | 내용 |
+| --- | --- |
+| 현황 | 노선 전체 상태, 교체 예정 목록, 분기별 교체 물량, 최근 교체 기록 |
+| 역 | 역 → 문 → 부품 상태, 역별 PDF·엑셀 보고서 |
+| 교체 기록 | 고장·교체·점검 기록 엑셀 업로드(되돌리기 가능), 한 건씩 입력, 보고서 내려받기 |
+| 정비기록 시연 | 정비기록 샘플 162건을 입력으로 보여 주고, 올리면 결과가 어떻게 바뀌는지 미리 계산(저장 안 함) |
+| 날씨 분석 | 날씨가 바뀌면 교체주기가 얼마나 달라지는지, 기간별 교체 물량(실험) |
+
 ## 구성
 
 ```
 기상자료개방포털 웹(수동) ──→ data/raw/aws/hourly ──→ [시간→일 집계] ──┐
-기상청 API(자동, ASOS만)  ──→ data/raw/asos_daily_raw.csv ──→ [전처리]─┤(ASOS는 DB 적재용일 뿐,
-                                                                        실제 계산엔 안 씀)
                                                                         ↓
                                                           [주기 계산] psd/cycle.py
                                                                         ↓
 엑셀 업로드(고장 기록) ──┐                                      MySQL
-더미데이터 생성 ─────────┼──→ POST /api/replacement-records/upload ──┘
+초기 데이터(선택) ───────┼──→ 기록 반영 + 주기 보정(psd/calibrate.py) ──┘
                           │
-                   [API] psd/api.py (FastAPI) ──→ [화면] psd/web/ ──→ 엑셀 보고서 내려받기
+                   [API] psd/api.py (FastAPI) ──→ [화면] psd/web/ ──→ 엑셀·PDF 보고서
 ```
 
 | 구성 | 파일 |
 | --- | --- |
 | AWS 날씨(수동 다운로드 → 집계) | `data/raw/aws/hourly/`(gitignore) → `scripts/preprocess_aws_weather.py` → `data/processed/aws_weather_daily.csv` |
-| ASOS 날씨(자동, DB 적재용) | `scripts/collect_weather.py`(최초 수집), `scripts/daily_weather_update.py`(매일), `scripts/preprocess_weather.py` |
 | 주기 계산 | `psd/cycle.py` (AWS 기준, 역별 `aws_stn`으로 지점 묶음) |
+| 고장 기록으로 주기 보정 | `psd/calibrate.py` (날씨 공식 값을 사전값으로 와이블 + 베이지안) |
 | DB 모델 | `psd/models.py`, `psd/db.py`, `psd/catalog.py` |
-| DB 초기 데이터 | `scripts/init_db.py`, `scripts/load_weather.py`, `scripts/compute_cycles.py` |
+| DB 만들기 | `scripts/init_db.py`, `scripts/compute_cycles.py`, (선택) `scripts/load_initial_records.py` |
 | 경고 상태 | `psd/status.py` |
-| 고장 기록 엑셀 입출력 | `psd/excel_io.py`, 더미데이터 생성 `scripts/generate_dummy_records.py` |
+| 고장 기록 엑셀 입출력 | `psd/excel_io.py` |
+| 더미·샘플 기록 만들기 | `scripts/generate_dummy_records.py`, `scripts/make_sample_records.py` |
 | API | `psd/api.py` |
 | 화면 | `psd/web/index.html` (API가 `/`에서 그대로 제공) |
+| PDF 보고서 | `psd/report_pdf.py` |
 
-## 설치
-
-1. Python 3.10 이상, MySQL 8.0이 설치돼 있어야 한다.
-2. 패키지 설치:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. `.env` 파일을 만든다(저장소에 커밋되지 않음, `.gitignore` 등록):
-
-   ```
-   KMA_AUTH_KEY=<기상청 API허브 인증키>
-
-   DB_HOST=localhost
-   DB_PORT=3306
-   DB_NAME=psd
-   DB_USER=psd_app
-   DB_PASSWORD=<비밀번호>
-   ```
-
-   `DB_USER`/`DB_PASSWORD`는 MySQL에 미리 만들어 둔 전용 계정이다(루트 계정을 그대로 쓰지 않는다):
-
-   ```sql
-   CREATE DATABASE IF NOT EXISTS psd CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-   CREATE USER IF NOT EXISTS 'psd_app'@'localhost' IDENTIFIED BY '<비밀번호>';
-   GRANT ALL PRIVILEGES ON psd.* TO 'psd_app'@'localhost';
-   FLUSH PRIVILEGES;
-   ```
-
-## 날씨 데이터 (이미 받아 둔 결과가 `data/processed/`에 있어 다시 하지 않아도 됨)
+## 날씨 데이터 다시 받기 (보통은 필요 없음)
 
 **AWS(실제 계산에 쓰는 것, 수동):** API허브 AWS 엔드포인트가 아직 미승인(403)이라, 기상자료
 개방포털(data.kma.go.kr) 웹 화면에 무료 회원가입으로 로그인해 "방재기상관측(AWS) → 파일셋"
@@ -76,61 +147,53 @@
 
 ```bash
 python scripts/preprocess_aws_weather.py   # 시간→일 평균 집계 → data/processed/aws_weather_daily.csv
+python scripts/compute_cycles.py           # 새 날씨로 주기 다시 계산
 ```
 
-**ASOS(DB 적재용, 자동 가능):**
+원본은 `data/raw/`(저장소에 올리지 않음), 집계 결과는 `data/processed/aws_weather_daily.csv`(저장소에 올림)에 있다.
+예전에 쓰던 ASOS(부산·울산 2곳) 자동 수집 스크립트와 자료는 계산에 쓰지 않아 2026-11-01에 지웠다.
+
+## DB 다시 만들기
+
+역/부품 구성 자체를 바꿨다면 `python scripts/init_db.py --reset`으로 표를 지우고 다시 만든다(교체 기록도
+모두 지워진다). 그다음 `compute_cycles.py`와, 필요하면 `load_initial_records.py`를 다시 실행한다.
+`init_db.py`·`compute_cycles.py`는 여러 번 실행해도 안전하다(있으면 지우고 새로 넣음, 없는 컬럼은 자동으로 추가).
+
+## 고장 기록 입력 (엑셀 업로드)
+
+실제 고장 기록은 화면의 "교체 기록" 탭에서 엑셀로 올리거나, API로 바로 올린다:
 
 ```bash
-python scripts/collect_weather.py --start 2016-01-01 --end 2025-12-31 --stations 152,159  # 최초 1회
-python scripts/daily_weather_update.py --recompute   # 이후 매일(작업 스케줄러 등록 권장)
-```
-
-`collect_weather.py`는 중간에 끊겨도 다시 실행하면 이어서 받는다. `daily_weather_update.py`는
-어제치 하루만 받아 이어 붙인다(상세 설명은 스크립트 docstring 참고 — "매일 자동화"가 실제로
-무엇을 바꾸고 무엇을 안 바꾸는지 적어 뒀다). 원본은 `data/raw/`(저장소에 올리지 않음), 전처리
-결과는 `data/processed/*.csv`(저장소에 올림)에 쌓인다.
-
-## DB 만들기
-
-```bash
-python scripts/init_db.py          # 표 생성 + 역·관측소·문·부품 종류·부품 초기 데이터 (기존 표에 없는 컬럼은 자동으로 ALTER)
-python scripts/load_weather.py     # ASOS 전처리 결과 적재(DB 보관용, 실제 계산엔 안 씀)
-python scripts/compute_cycles.py   # psd/cycle.py(AWS 기준)로 역 x 부품 7종 권장 주기 계산 후 저장
-```
-
-역/부품 구성 자체를 바꿨다면(표 구조가 아니라 데이터 초기화가 필요하면) `python scripts/init_db.py --reset`으로
-표를 지우고 다시 만든다. 세 스크립트는 이 순서로 다시 실행해도 안전하다(있으면 지우고 새로 넣음).
-
-## 고장 기록 입력 (엑셀 업로드 / 더미데이터)
-
-실제 고장 데이터가 없어서, 신뢰성 공식이 낸 권장 주기를 평균으로 한 와이블 분포로 "이미
-고장났을 법한" 부품을 뽑아 더미데이터를 만든다(자세한 설명은 스크립트 docstring 참고):
-
-```bash
-python scripts/generate_dummy_records.py --seed 1 --out data/dummy/replacement_records_dummy.xlsx
-```
-
-받은(또는 만든) 엑셀은 화면의 "고장(교체) 기록 엑셀 일괄 업로드"로 올리거나, API로 바로 올려도 된다:
-
-```bash
-curl -F "file=@data/dummy/replacement_records_dummy.xlsx" http://127.0.0.1:8000/api/replacement-records/upload
+curl -F "file=@data/dummy/정비기록_샘플_162건.xlsx" http://127.0.0.1:8000/api/replacement-records/upload
 ```
 
 열 형식은 `psd/excel_io.py` 상단 설명 참고(역, 방향, 문번호, 교체일, 사유, 부품, 입력자).
-한 행이라도 틀리면 전체를 저장하지 않는다(all-or-nothing).
+한 행이라도 틀리면 전체를 저장하지 않는다(all-or-nothing). 화면의 "빈 양식 내려받기"로 양식을 받을 수 있다.
+
+올린 기록은 예정일뿐 아니라 교체주기에도 반영된다(`psd/calibrate.py`): 날씨 공식 값을 사전값으로 두고,
+역 x 부품마다 고장 기록을 와이블(형상 2) + 베이지안으로 보정한다. 업로드하면 화면에 역·부품별로 주기와
+예정일이 어떻게 바뀌었는지 나오고, "이 업로드 되돌리기"로 원래대로 돌릴 수 있다.
+
+"점검(이상 없음)"은 부품을 바꾸지 않았다는 기록이라 설치일·교체주기는 그대로이고, 그 부품을 "기록이 관리되는
+부품"으로 표시해 예정일이 지나도 "확인 필요"가 아니라 교체 대상으로 본다. 엑셀 부품 칸에 "전체"라고 쓰면 그 문의
+부품 전부다.
+
+**데이터 파일 (`data/dummy/`)**
+
+| 파일 | 쓰는 곳 |
+| --- | --- |
+| `초기데이터_교체기록_1230건.xlsx` | 설치 6단계(선택). 더미 고장 기록 |
+| `정비기록_샘플_162건.xlsx` | "정비기록 시연" 탭의 입력. 몇 달치 정비 기록(고장·예방 교체·함께 교체 30건 + 2개 역 정기 점검 132건)을 모아 올린다고 가정 |
+
+다시 만들려면 `python scripts/make_sample_records.py`(샘플), `python scripts/generate_dummy_records.py --seed 1 --out FILE.xlsx`(더미)를
+쓴다. 둘 다 그때의 DB 상태를 보고 만들기 때문에 지금 파일과 똑같이 나오지는 않는다.
 
 ## 보고서 출력
 
-`GET /api/report`(전체 역) 또는 `GET /api/report?station_id=1`(역 하나)로 지금 상태를 엑셀로
-받는다. 화면에도 "보고서 내려받기" 링크로 연결돼 있다.
+- 엑셀: `GET /api/report`(전체 역) 또는 `GET /api/report?station_id=1`(역 하나)
+- PDF: `GET /api/stations/{역 번호}/report.pdf`
 
-## 실행
-
-```bash
-uvicorn psd.api:app --reload
-```
-
-브라우저에서 `http://127.0.0.1:8000/` 을 열면 화면이 나온다. API 문서는 `http://127.0.0.1:8000/docs`.
+화면에도 "보고서 내려받기" 버튼으로 연결돼 있다.
 
 ## 테스트
 
@@ -140,10 +203,10 @@ python -m pytest tests/ -v
 
 `tests/test_cycle.py`는 설계 문서 손계산 예시와 계산의 기본 성질(AWS 지점별 묶음 포함)을,
 `tests/test_status.py`는 경고 상태(빨강·노랑·초록·확인 필요) 판정 규칙을, `tests/test_excel_io.py`는
-엑셀 업로드 파싱을 검증한다. `tests/test_api.py`만 예외로 **실제 MySQL DB가 필요하다**
-(`init_db.py`·`compute_cycles.py`를 먼저 실행해 둔 DB).
+엑셀 업로드 파싱을, `tests/test_calibrate.py`는 고장 기록으로 주기를 보정하는 계산을 검증한다.
+`tests/test_api.py`만 예외로 **실제 MySQL DB가 필요하다**(설치 5단계까지 해 둔 DB).
 
 ## 코레일에서 받은 자료에 대하여
 
 `PSD_부품_리스트.png`, `증빙/`, `서식5_프롬프트기록부_학생배포본.xlsx` 등은 수업·코레일 제공 비공개 자료라
-이 저장소(공개)에 올리지 않는다(`.gitignore` 참고).
+이 저장소(공개)에 올리지 않는다(`.gitignore` 참고). `중간발표/`도 올리지 않는다.

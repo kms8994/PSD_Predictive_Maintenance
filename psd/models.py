@@ -10,7 +10,11 @@ from psd.db import Base
 
 
 class Observatory(Base):
-    """관측소: ASOS 관측소 2곳(부산 159, 울산 152). AWS 승인되면 역별 관측소로 교체."""
+    """관측소: ASOS 관측소 2곳(부산 159, 울산 152). 역이 이 표를 참조하는 연결로만 남아 있다.
+
+    2026-10-25부터 날씨 계산은 역마다 가장 가까운 AWS 지점(psd/cycle.py STATIONS의 aws_stn,
+    AWS_STATION_NAMES)을 쓰고, AWS 날씨는 DB가 아니라 data/processed/aws_weather_daily.csv에서 읽는다.
+    """
 
     __tablename__ = "observatories"
 
@@ -21,7 +25,6 @@ class Observatory(Base):
     lon: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     stations: Mapped[list["Station"]] = relationship(back_populates="observatory")
-    daily_weather: Mapped[list["DailyWeather"]] = relationship(back_populates="observatory")
 
 
 class Station(Base):
@@ -83,7 +86,7 @@ class Part(Base):
     station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"))
     door_id: Mapped[int | None] = mapped_column(ForeignKey("doors.id"), nullable=True)  # 역 단위 부품은 비움
     install_date: Mapped[dt.date] = mapped_column(Date)  # 마지막 교체일, 기록 없으면 역 개통일
-    has_record: Mapped[bool] = mapped_column(default=False)  # 교체 기록이 한 번이라도 있는지(확인 필요 판정용)
+    has_record: Mapped[bool] = mapped_column(default=False)  # 교체·점검 기록이 한 번이라도 있는지(확인 필요 판정용)
 
     part_type: Mapped[PartType] = relationship(back_populates="parts")
     station: Mapped[Station] = relationship(back_populates="parts")
@@ -99,7 +102,7 @@ class ReplacementRecord(Base):
     replaced_on: Mapped[dt.date] = mapped_column(Date)
     station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"))
     door_id: Mapped[int | None] = mapped_column(ForeignKey("doors.id"), nullable=True)
-    reason: Mapped[str] = mapped_column(String(10))  # "fail" | "prev" | "with"
+    reason: Mapped[str] = mapped_column(String(10))  # "fail" | "prev" | "with" | "check"(점검 이상 없음 — 교체 아님)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
     created_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
@@ -119,24 +122,6 @@ class ReplacementPart(Base):
 
     record: Mapped[ReplacementRecord] = relationship(back_populates="parts")
     part_type: Mapped[PartType] = relationship()
-
-
-class DailyWeather(Base):
-    """일별 날씨: 기상청 ASOS 일자료 전처리 결과(`data/processed/weather_daily.csv`)."""
-
-    __tablename__ = "daily_weather"
-
-    observatory_id: Mapped[str] = mapped_column(ForeignKey("observatories.id"), primary_key=True)
-    date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
-    ta_avg: Mapped[float] = mapped_column(Float)
-    ta_max: Mapped[float] = mapped_column(Float)
-    ta_min: Mapped[float | None] = mapped_column(Float, nullable=True)  # 남은 결측 1일(울산)
-    hm_avg: Mapped[float] = mapped_column(Float)
-    dtr: Mapped[float | None] = mapped_column(Float, nullable=True)  # 일교차 = ta_max - ta_min
-    frost: Mapped[bool | None] = mapped_column(nullable=True)  # 결빙일(최저기온 < 0°C)
-    imputed: Mapped[bool] = mapped_column()  # 보간한 날인지
-
-    observatory: Mapped[Observatory] = relationship(back_populates="daily_weather")
 
 
 class CycleResult(Base):
