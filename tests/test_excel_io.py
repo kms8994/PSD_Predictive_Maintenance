@@ -71,6 +71,21 @@ def test_parse_upload_rejects_future_replaced_on():
         parse_upload(content)
 
 
+def test_parse_upload_rejects_blank_replaced_on():
+    """2026-11-02 QA: 빈 교체일이 NaT로 검사를 통과해 업로드가 500으로 죽었다."""
+    content = _xlsx([
+        {"역": "부전", "방향": "", "문번호": "", "교체일": None,
+         "사유": "고장", "부품": "종합제어반 릴레이", "입력자": ""},
+    ])
+    with pytest.raises(ExcelFormatError, match="교체일이 비어 있습니다"):
+        parse_upload(content)
+
+
+def test_parse_upload_rejects_non_excel_with_korean_message():
+    with pytest.raises(ExcelFormatError, match="엑셀 파일을 읽을 수 없습니다. .xlsx"):
+        parse_upload(b"not an excel file")
+
+
 def test_parse_upload_rejects_missing_columns():
     import pandas as pd
     from io import BytesIO

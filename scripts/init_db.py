@@ -40,6 +40,7 @@ _NEW_COLUMNS = [
     ("stations", "near_water", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ("stations", "in_service", "BOOLEAN NOT NULL DEFAULT TRUE"),
     ("replacement_records", "batch_id", "INT NULL"),  # 2026-11-01 업로드 이력(upload_batches)
+    ("upload_batches", "uploaded_by", "VARCHAR(50) NULL"),  # 2026-11-02 업로드 이력에 올린 사람
 ]
 
 

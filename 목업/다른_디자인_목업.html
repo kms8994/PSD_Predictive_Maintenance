@@ -1,0 +1,1151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>동해선 PSD 교체주기 관리</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 관리자용: 왼쪽 메뉴(작업 목록 · 역별 상세 · 노선 현황판 · 교체 계획 · 주기 근거) + 오른쪽 작업 영역.
+   부품 상세는 오른쪽에서 열리는 패널, 교체 기록은 가운데 창. 상태는 색 + 모양 + 글자로 함께 구분한다. */
+:root {
+  --bg: #f4f5f7; --surface: #ffffff; --surface2: #fafbfc; --ink: #161b22; --ink2: #39414d; --muted: #5f6874; --faint: #8c95a1;
+  --line: #e3e6ea; --line2: #eef0f3; --field: #d5d9df; --hover: #f5f8fc;
+  --accent: #1e4fa0; --accent-ink: #ffffff; --accent-soft: #eaf0fa;
+  --u: #b42318; --u-bg: #fdecea; --u-dot: #d92d20; --u-cell: #f4b9b2; --u-cell-ink: #7a1a10;
+  --w: #8a5300; --w-bg: #fef3d7; --w-dot: #c98400; --w-cell: #fad98a; --w-cell-ink: #5c3a00;
+  --c: #5536b0; --c-bg: #efeafd; --c-dot: #6d4fd8; --c-cell: #e4dcfb; --c-cell2: #cbbdf6; --c-cell-ink: #3e2490;
+  --o: #4b5563; --o-bg: #f1f3f5; --o-dot: #8c95a1;
+  --rail: #c9d6ea; --scrim: rgba(22, 27, 34, .36); --shadow: 0 16px 48px rgba(22, 27, 34, .2);
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --surface: #171d25; --surface2: #1b222b; --ink: #e6ebf1; --ink2: #c3cbd5; --muted: #9aa5b3; --faint: #6e7988;
+    --line: #2a333e; --line2: #232b35; --field: #3a4552; --hover: #1e2630;
+    --accent: #7fb0f0; --accent-ink: #0f141a; --accent-soft: #1c2a3d;
+    --u: #f59486; --u-bg: #3a1f1c; --u-dot: #f0705c; --u-cell: #7a2a22; --u-cell-ink: #ffd9d3;
+    --w: #f2c25b; --w-bg: #3a2f17; --w-dot: #e3a93a; --w-cell: #6b5216; --w-cell-ink: #ffe7ae;
+    --c: #bfaeff; --c-bg: #2a2342; --c-dot: #9c85f5; --c-cell: #3b3163; --c-cell2: #4d4180; --c-cell-ink: #e3dbff;
+    --o: #aab4c0; --o-bg: #232b35; --o-dot: #6e7988;
+    --rail: #334e73; --scrim: rgba(0, 0, 0, .55); --shadow: 0 16px 48px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --surface: #171d25; --surface2: #1b222b; --ink: #e6ebf1; --ink2: #c3cbd5; --muted: #9aa5b3; --faint: #6e7988;
+  --line: #2a333e; --line2: #232b35; --field: #3a4552; --hover: #1e2630;
+  --accent: #7fb0f0; --accent-ink: #0f141a; --accent-soft: #1c2a3d;
+  --u: #f59486; --u-bg: #3a1f1c; --u-dot: #f0705c; --u-cell: #7a2a22; --u-cell-ink: #ffd9d3;
+  --w: #f2c25b; --w-bg: #3a2f17; --w-dot: #e3a93a; --w-cell: #6b5216; --w-cell-ink: #ffe7ae;
+  --c: #bfaeff; --c-bg: #2a2342; --c-dot: #9c85f5; --c-cell: #3b3163; --c-cell2: #4d4180; --c-cell-ink: #e3dbff;
+  --o: #aab4c0; --o-bg: #232b35; --o-dot: #6e7988;
+  --rail: #334e73; --scrim: rgba(0, 0, 0, .55); --shadow: 0 16px 48px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; color: inherit; }
+h1, h2, h3 { margin: 0; line-height: 1.3; text-wrap: balance; }
+h1 { font-size: 22px; font-weight: 700; }
+h2 { font-size: 16px; font-weight: 700; }
+h3 { font-size: 14px; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); }
+b { font-weight: 600; }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 틀 */
+.shell { display: flex; min-height: 100vh; }
+.side { position: sticky; top: 0; height: 100vh; width: 224px; flex: none; background: var(--surface); border-right: 1px solid var(--line); padding: 20px 12px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
+.logo { width: 32px; height: 32px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; flex: none; }
+.brand b { display: block; font-size: 15px; line-height: 1.25; }
+.brand span { font-size: 12px; color: var(--muted); }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.navi { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--ink2); font-weight: 500; text-align: left; cursor: pointer; white-space: nowrap; }
+.navi:hover { background: var(--hover); color: var(--ink); }
+.navi[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.navi svg { flex: none; }
+.cnt { margin-left: auto; font-family: var(--font-data); font-size: 12px; background: var(--u-bg); color: var(--u); padding: 1px 7px; border-radius: 999px; }
+.side-foot { margin-top: auto; padding: 12px; border-radius: 8px; background: var(--bg); font-size: 12px; color: var(--muted); line-height: 1.6; }
+.main { flex: 1; min-width: 0; padding: 28px 32px 64px; display: flex; flex-direction: column; gap: 18px; max-width: 1260px; }
+@media (max-width: 900px) {
+  .shell { flex-direction: column; }
+  .side { position: sticky; z-index: 10; height: auto; width: auto; flex-direction: row; align-items: center; gap: 8px; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .brand > div:not(.logo), .side-foot, .cnt { display: none; }
+  .nav { flex-direction: row; }
+  .navi { width: auto; padding: 0 10px; }
+  .side .btn { order: 3; }
+  .main { padding: 20px 16px 56px; }
+}
+
+/* 공통 부품 */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; }
+.btn:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .45; cursor: default; filter: none; }
+.btn.ghost { background: var(--surface); color: var(--ink2); border-color: var(--field); }
+.btn.ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); filter: none; }
+.btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+.lnk { border: 0; background: none; padding: 4px 0; color: var(--accent); font-weight: 600; cursor: pointer; text-align: left; }
+.lnk:hover { text-decoration: underline; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 6px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.chip i { width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box; flex: none; }
+.s-urgent { color: var(--u); background: var(--u-bg); } .s-urgent i { background: var(--u-dot); }
+.s-warn { color: var(--w); background: var(--w-bg); } .s-warn i { border: 2px solid var(--w-dot); background: linear-gradient(90deg, var(--w-dot) 50%, transparent 50%); }
+.s-check { color: var(--c); background: var(--c-bg); } .s-check i { border: 2px dashed var(--c-dot); }
+.s-ok { color: var(--o); background: var(--o-bg); } .s-ok i { border: 1.5px solid var(--o-dot); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; flex: none; background: var(--surface); }
+.d-red { background: var(--u-dot); }
+.d-amber { border: 2px solid var(--w-dot); background: linear-gradient(90deg, var(--w-dot) 50%, var(--surface) 50%); }
+.d-check { border: 2px dashed var(--c-dot); }
+.d-green { border: 1.5px solid var(--o-dot); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--ink2); align-items: center; }
+.legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.panel-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 12px; flex-wrap: wrap; padding: 14px 16px; }
+.pad { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.head p { color: var(--muted); margin-top: 4px; }
+.ttl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; min-width: 0; }
+button.card { cursor: pointer; }
+button.card:hover { border-color: var(--field); }
+.card[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card .big { font-family: var(--font-data); font-size: 28px; font-weight: 500; line-height: 1.2; }
+.card .sub { font-size: 12.5px; color: var(--muted); }
+.callout { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); color: var(--ink2); line-height: 1.6; }
+.callout.soft { background: var(--hover); border-color: transparent; }
+.callout svg { flex: none; margin-top: 2px; }
+.callout b { color: var(--ink); }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.seg { display: inline-flex; border: 1px solid var(--field); border-radius: 8px; overflow: hidden; background: var(--surface); flex-wrap: wrap; }
+.seg button { border: 0; background: none; height: 36px; padding: 0 14px; font-size: 13.5px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.fi { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+select, input[type="date"], input[type="text"], input[type="search"] { height: 38px; border: 1px solid var(--field); border-radius: 8px; background: var(--surface); color: var(--ink); padding: 0 10px; font-size: 14px; max-width: 100%; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+.tbl th { font-size: 12.5px; font-weight: 600; color: var(--muted); text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface2); white-space: nowrap; }
+.tbl td { padding: 11px 14px; border-bottom: 1px solid var(--line2); white-space: nowrap; }
+.tbl th.r, .tbl td.r { text-align: right; }
+.tbl tbody tr:last-child td { border-bottom: 0; }
+.tbl tr.click { cursor: pointer; }
+.tbl tr.click:hover td, .tbl tr.click:focus-visible td { background: var(--hover); }
+.tbl tr.click:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.over { color: var(--u); font-weight: 600; }
+.of { color: var(--faint); }
+.foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line2); font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.empty { padding: 32px 16px; text-align: center; color: var(--muted); }
+
+/* 역별 상세 */
+.stv { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
+.stv > aside { position: sticky; top: 16px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; overflow: hidden; }
+.stv-detail { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+@media (max-width: 1120px) { .stv { grid-template-columns: minmax(0, 1fr); } .stv > aside { position: static; max-height: 420px; } }
+.route-wrap { overflow-y: auto; flex: 1; }
+.route { list-style: none; margin: 0; padding: 4px 0 10px; position: relative; }
+.route::before { content: ""; position: absolute; left: 21px; top: 22px; bottom: 28px; width: 2px; background: var(--rail); }
+.route li.hide { display: none; }
+.stn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 14px 8px 38px; border: 0; background: none; text-align: left; cursor: pointer; position: relative; color: var(--ink); }
+.stn:hover { background: var(--hover); }
+.stn[aria-current="true"] { background: var(--accent-soft); }
+.stn .dot { position: absolute; left: 17px; top: 50%; margin-top: -5px; }
+.stn .body { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+.stn .nm { font-weight: 600; }
+.stn .sb { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini { display: flex; width: 60px; height: 6px; border-radius: 3px; overflow: hidden; background: var(--line2); flex: none; }
+.mini span { display: block; height: 100%; }
+.b-check { background: var(--c-dot); } .b-red { background: var(--u-dot); } .b-amber { background: var(--w-dot); }
+.mx { border-collapse: separate; border-spacing: 0; width: auto; }
+.mx th { font-size: 11.5px; font-weight: 500; color: var(--muted); padding: 0 2px 4px; text-align: center; white-space: nowrap; }
+.mx th.pn { text-align: left; padding: 0 10px 0 0; font-size: 12.5px; color: var(--ink2); }
+.mx td { padding: 2px; }
+.mx .gap { padding-left: 12px; }
+.cell { display: block; width: 26px; height: 26px; border-radius: 5px; border: 0; padding: 0; cursor: pointer; }
+.cell:hover { box-shadow: inset 0 0 0 2px var(--ink); }
+.c-red { background: var(--u-cell); }
+.c-amber { background: var(--w-cell); }
+.c-check { background: repeating-linear-gradient(45deg, var(--c-cell) 0 4px, var(--c-cell2) 4px 7px); }
+.c-green { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--field); }
+.sw { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+
+/* 현황판 */
+.pats { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.pat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.pat .tag { font-size: 12.5px; font-weight: 600; }
+.pat b { font-size: 15px; }
+.pat p { font-size: 13px; color: var(--muted); line-height: 1.55; }
+.bd { border-collapse: separate; border-spacing: 4px; width: 100%; }
+.bd th { font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 4px 2px; text-align: center; white-space: nowrap; }
+.bd th.l { text-align: left; }
+.bd td { padding: 0; }
+.bd .stname { border: 0; background: none; padding: 0; font-weight: 600; font-size: 13.5px; cursor: pointer; color: var(--ink); white-space: nowrap; }
+.bd .stname:hover { color: var(--accent); }
+.k { display: flex; align-items: center; justify-content: center; width: 100%; min-width: 70px; height: 30px; border-radius: 5px; font-family: var(--font-data); font-size: 12.5px; border: 0; cursor: pointer; }
+.k:hover { outline: 2px solid var(--ink); outline-offset: -2px; }
+.k-red { background: var(--u-cell); color: var(--u-cell-ink); }
+.k-amber { background: var(--w-cell); color: var(--w-cell-ink); }
+.k-check { background: repeating-linear-gradient(45deg, var(--c-cell) 0 5px, var(--c-cell2) 5px 9px); color: var(--c-cell-ink); box-shadow: inset 0 0 0 1.5px var(--c-dot); }
+.k-green { background: var(--surface); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+.grp td { padding: 14px 2px 2px; font-size: 12px; font-weight: 600; color: var(--muted); }
+
+/* 교체 계획 */
+.bars { display: grid; gap: 8px; align-items: end; height: 220px; padding: 0 4px; border-bottom: 1px solid var(--field); }
+.barcol { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 100%; min-width: 0; }
+.barcol b { font-family: var(--font-data); font-size: 12px; font-weight: 400; color: var(--ink2); white-space: nowrap; }
+.barcol span { display: block; width: 100%; max-width: 44px; background: var(--accent); border-radius: 4px 4px 0 0; }
+.barcol.peak span { background: var(--u-dot); }
+.barcol.peak b { color: var(--u); font-weight: 600; }
+.barlab { display: grid; gap: 8px; padding: 6px 4px 0; text-align: center; font-size: 12px; color: var(--muted); line-height: 1.3; }
+.barlab small { display: block; font-size: 11px; color: var(--faint); }
+.mt th { font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--surface2); text-align: right; white-space: nowrap; }
+.mt td { padding: 9px 10px; border-bottom: 1px solid var(--line2); text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mt th.l, .mt td.l { text-align: left; font-family: var(--font-body); }
+.mt td.l { font-weight: 600; }
+.mt td.z { color: var(--faint); }
+.mt td.hot { background: var(--u-bg); color: var(--u); font-weight: 600; }
+.mt tr.tot td { font-weight: 600; border-top: 1px solid var(--field); border-bottom: 0; }
+.hb { display: grid; grid-template-columns: 92px minmax(0, 1fr) 44px; align-items: center; gap: 8px; font-size: 13px; }
+.hb .track { height: 10px; background: var(--line2); border-radius: 3px; }
+.hb .fill { height: 10px; background: var(--accent); border-radius: 3px; }
+.split { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+.split > .wide { flex: 999 1 560px; min-width: 0; }
+.split > .narrow { flex: 1 1 300px; min-width: 0; }
+
+/* 주기 근거(날씨) */
+.mk { display: block; overflow: visible; }
+.mk .axisl, .chart .grid { stroke: var(--line); stroke-width: 1; }
+.mk .refl, .chart .refl { stroke: var(--muted); stroke-width: 1; }
+.mk .dotc, .chart .dotc { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.mk .band { fill: var(--accent); opacity: .25; }
+.chart .whisker { stroke: var(--accent); stroke-width: 1.5; opacity: .45; }
+.chart text { fill: var(--muted); font-family: var(--font-data); font-size: 11px; }
+.chart text.lab { fill: var(--ink); font-family: var(--font-body); font-size: 11.5px; }
+.chart .hit { fill: transparent; }
+.chart .hit:focus-visible, .mk:focus-visible { outline: 2px solid var(--accent); }
+.rowchart th, .rowchart td { padding: 4px 8px; }
+.rowchart td.nm { font-weight: 500; white-space: nowrap; }
+.cap { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.charts2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.charts2 figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.charts2 figcaption { font-weight: 600; }
+.charts2 svg { width: 100%; height: auto; }
+.tip { position: fixed; z-index: 60; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 4px 16px rgba(0, 0, 0, .12); display: flex; flex-direction: column; gap: 2px; max-width: 240px; }
+.tip strong { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.tip span { color: var(--muted); }
+.sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 20px; }
+.sliders label { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; font-size: 13.5px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.delta-up { color: var(--o); } .delta-down { color: var(--u); }
+.st { font-size: 12.5px; color: var(--muted); }
+
+/* 오른쪽 패널 · 가운데 창 */
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 40; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--surface); box-shadow: -8px 0 32px rgba(0, 0, 0, .18); z-index: 41; display: flex; flex-direction: column; }
+.drawer-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px 10px 24px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.drawer-b { flex: 1; overflow-y: auto; padding: 20px 24px 32px; display: flex; flex-direction: column; gap: 24px; }
+.drawer-b section { display: flex; flex-direction: column; gap: 10px; }
+.x { width: 36px; height: 36px; border: 0; border-radius: 8px; background: none; cursor: pointer; display: grid; place-items: center; color: var(--ink2); flex: none; }
+.x:hover { background: var(--hover); }
+.sbox { border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--line); background: var(--surface2); }
+.sbox.check { background: var(--c-bg); border-color: transparent; }
+.sbox .when { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sbox .when .num { font-size: 20px; }
+.sbox p { font-size: 13.5px; line-height: 1.6; color: var(--ink2); }
+.bignum { font-family: var(--font-data); font-size: 32px; font-weight: 500; line-height: 1.2; }
+.rangebar { position: relative; height: 34px; }
+.rangebar .track { position: absolute; left: 0; right: 0; top: 15px; height: 4px; background: var(--line); border-radius: 2px; }
+.rangebar .band { position: absolute; top: 10px; height: 14px; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 7px; }
+.rangebar .tick { position: absolute; top: 2px; width: 2px; height: 30px; background: var(--ink); }
+.rangebar .base { position: absolute; top: 10px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--accent); }
+.rangeaxis { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); font-family: var(--font-data); }
+.formula { padding: 10px 12px; background: var(--bg); border-radius: 8px; font-size: 13px; color: var(--ink2); }
+.wt th { font-size: 12px; font-weight: 600; color: var(--muted); text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.wt td { padding: 8px 10px; border-bottom: 1px solid var(--line2); text-align: right; }
+.wt th.l, .wt td.l { text-align: left; }
+.lst { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; }
+.lst > div { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 12px; font-size: 13.5px; flex-wrap: wrap; }
+.lst > div + div { border-top: 1px solid var(--line2); }
+ol.src { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.modal { position: fixed; left: 50%; top: 4vh; transform: translateX(-50%); width: min(780px, calc(100% - 24px)); max-height: 92vh; background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); z-index: 41; display: flex; flex-direction: column; }
+.modal-h { padding: 14px 16px 0 24px; }
+.modal-h .row1 { display: flex; justify-content: space-between; align-items: center; }
+.tabs2 { display: flex; gap: 20px; border-bottom: 1px solid var(--line); margin-top: 2px; }
+.tab2 { border: 0; background: none; padding: 12px 2px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; cursor: pointer; }
+.tab2[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.modal-b { padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+.modal-f { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--line); background: var(--surface2); border-radius: 0 0 14px 14px; flex-wrap: wrap; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.fld { display: flex; flex-direction: column; gap: 6px; }
+.fld > span, .lg { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.lg .muted { font-weight: 400; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+legend { padding: 0; margin-bottom: 8px; }
+.segr { display: inline-flex; border: 1px solid var(--field); border-radius: 8px; overflow: hidden; align-self: flex-start; }
+.segr label { position: relative; display: flex; align-items: center; height: 38px; padding: 0 14px; font-size: 13.5px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.segr label + label { border-left: 1px solid var(--line); }
+.segr input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segr label:has(input:checked) { background: var(--ink); color: var(--surface); }
+.segr label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pcs { display: flex; flex-wrap: wrap; gap: 8px; }
+.pc { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border: 1px solid var(--field); border-radius: 8px; cursor: pointer; font-size: 13.5px; }
+.pc:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.pc input { accent-color: var(--accent); margin: 0; width: 16px; height: 16px; }
+.quick { display: flex; gap: 14px; flex-wrap: wrap; }
+.drs { display: flex; flex-direction: column; gap: 6px; }
+.drs .sd { font-size: 13px; font-weight: 600; color: var(--ink2); }
+.cars { display: flex; gap: 10px; flex-wrap: wrap; }
+.car { display: flex; gap: 3px; }
+.dr { position: relative; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid var(--field); border-radius: 6px; font-family: var(--font-data); font-size: 12.5px; cursor: pointer; }
+.dr input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.dr:has(input:checked) { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.dr:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.err { color: var(--u); font-size: 13px; font-weight: 600; }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 8px; font-size: 13.5px; z-index: 70; max-width: calc(100% - 32px); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="1"/><line x1="12" y1="3" x2="12" y2="21"/></svg></div>
+      <div><b>동해선 PSD</b><span>교체주기 관리 · 24개 역</span></div>
+    </div>
+    <button class="btn" type="button" data-act="rec" data-v=""><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>교체 기록 입력</button>
+    <nav class="nav" aria-label="메뉴">
+      <button class="navi" type="button" data-act="nav" data-v="work"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>작업 목록<span class="cnt num" id="nav-cnt"></span></button>
+      <button class="navi" type="button" data-act="nav" data-v="station"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><line x1="7" y1="3" x2="7" y2="21"/><circle cx="7" cy="7" r="2.5"/><circle cx="7" cy="17" r="2.5"/><path d="M12 7h8M12 17h8"/></svg>역별 상세</button>
+      <button class="navi" type="button" data-act="nav" data-v="board"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>노선 현황판</button>
+      <button class="navi" type="button" data-act="nav" data-v="plan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>교체 계획</button>
+      <button class="navi" type="button" data-act="nav" data-v="basis"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>주기 근거</button>
+    </nav>
+    <div class="side-foot">기준일 <b class="num" style="color: var(--ink)">2026-10-14</b><br>목업 · 날씨, 문 수(역당 32개), 교체 기록은 가정값입니다. 엑셀 업로드·내려받기는 실제로 동작하지 않습니다.</div>
+  </aside>
+  <main class="main" id="app"></main>
+</div>
+<div id="overlay"></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+  // ---------- 기준 데이터 (기존 목업과 같음) ----------
+  const TODAY = utc(2026, 10, 14);
+  const DAY = 86400000;
+  // [역명, 개통일, 관측소(가정), 기온, 습도, 일교차] 날씨는 모두 가정값
+  const ST = [
+    ["부전", "2016-12-30", "부산", 15.1, 64, 7.9], ["거제해맞이", "2016-12-30", "부산", 15.0, 63, 8.2],
+    ["거제", "2016-12-30", "부산", 15.0, 63, 8.3], ["교대", "2016-12-30", "부산", 15.0, 64, 8.1],
+    ["동래", "2016-12-30", "부산", 14.9, 63, 8.6], ["안락", "2016-12-30", "부산", 14.9, 64, 8.4],
+    ["부산원동", "2020-03-28", "부산", 15.0, 65, 8.0], ["재송", "2016-12-30", "부산", 15.0, 66, 7.6],
+    ["센텀", "2016-12-30", "부산", 15.2, 68, 6.9], ["벡스코", "2016-12-30", "부산", 15.2, 68, 6.8],
+    ["신해운대", "2016-12-30", "부산", 15.1, 70, 6.6], ["송정", "2016-12-30", "부산", 15.0, 72, 6.2],
+    ["오시리아", "2016-12-30", "부산", 14.8, 71, 6.5], ["기장", "2016-12-30", "부산", 14.7, 70, 7.0],
+    ["일광", "2016-12-30", "부산", 14.7, 71, 6.7], ["좌천", "2021-12-28", "부산", 14.5, 68, 7.6],
+    ["월내", "2021-12-28", "부산", 14.5, 71, 6.8], ["서생", "2021-12-28", "울산", 14.4, 72, 7.2],
+    ["남창", "2021-12-28", "울산", 14.2, 66, 9.0], ["망양", "2021-12-28", "울산", 14.2, 65, 9.2],
+    ["덕하", "2021-12-28", "울산", 14.3, 63, 9.5], ["개운포", "2021-12-28", "울산", 14.6, 69, 8.0],
+    ["태화강", "2021-12-28", "울산", 14.6, 66, 9.1], ["북울산", "2026-09-01", "울산", 14.1, 64, 9.6]
+  ].map((r, i) => ({ i, name: r[0] + "역", open: parseDate(r[1]), openLabel: i === 23 ? "2026년 9월(일자 미정)" : fmtDate(parseDate(r[1])), obs: r[2], T: r[3], RH: r[4], DT: r[5] }));
+
+  const PARTS = [
+    { code: "MOTOR", name: "모터", unit: "door", weather: true },
+    { code: "BELT", name: "타이밍벨트", unit: "door", weather: false },
+    { code: "PULLEY", name: "풀리", unit: "door", weather: false },
+    { code: "HANGER", name: "도어 행거", unit: "door", weather: false },
+    { code: "DCM", name: "DCM", unit: "door", weather: true },
+    { code: "IFM", name: "IFM 릴레이", unit: "door", weather: true },
+    { code: "PSC", name: "종합제어반 릴레이", unit: "station", weather: false }
+  ];
+  const DOOR_PARTS = PARTS.filter(p => p.unit === "door");
+  const PART = Object.fromEntries(PARTS.map(p => [p.code, p]));
+  const DOORS = [];
+  // 방향별 4량 × 문 4개 = 16개 (임시값). 번호는 "호차-문" (예: 1-1)
+  const SIDES = { U: "부전 방면", D: "북울산 방면" };
+  Object.entries(SIDES).forEach(([sid, side]) => { for (let n = 1; n <= 16; n++) { const car = Math.ceil(n / 4), pos = (n - 1) % 4 + 1; DOORS.push({ id: sid + String(n).padStart(2, "0"), sid, side, n, car, pos, no: car + "-" + pos, label: side + " " + car + "-" + pos }); } });
+  const DOOR = Object.fromEntries(DOORS.map(d => [d.id, d]));
+  const REASONS = { fail: "고장", prev: "예방 교체", with: "함께 교체" };
+
+  // 예시 교체 기록(가정)
+  let seq = 1;
+  const RECORDS = [
+    [0, "2023-02-11", "U03", ["DCM"], "fail"], [0, "2024-11-05", "D07", ["IFM"], "fail"],
+    [3, "2025-08-19", "D10", ["IFM"], "fail"], [8, "2024-07-02", "U05", ["MOTOR", "BELT"], "fail"],
+    [11, "2022-01-20", "U01", ["DCM", "IFM"], "prev"], [11, "2025-03-14", "D12", ["DCM"], "fail"],
+    [13, "2023-09-30", null, ["PSC"], "fail"], [4, "2026-06-02", "U08", ["HANGER", "PULLEY"], "fail"]
+  ].map(r => ({ id: seq++, st: r[0], date: parseDate(r[1]), door: r[2], parts: r[3], reason: r[4], example: true }));
+
+  // ---------- 계산 (설계 4단계, 기존 목업과 같음) ----------
+  const REF = { T: avg("T"), RH: avg("RH"), DT: avg("DT") };
+  const K = 8.617e-5, kel = t => t + 273.15;
+  function mech(s) {
+    const tmax = s.T + s.DT / 2, tmaxR = REF.T + REF.DT / 2;
+    return {
+      cap: Math.pow(2, (s.T - REF.T) / 10),
+      sol: Math.pow(s.DT / REF.DT, 1.9) * Math.exp(1414 * (1 / kel(tmaxR) - 1 / kel(tmax))),
+      hum: Math.pow(s.RH / REF.RH, 2.7) * Math.exp(0.79 / K * (1 / kel(REF.T) - 1 / kel(s.T))),
+      mot: Math.pow(10, 2357 * (1 / kel(REF.T) - 1 / kel(s.T)))
+    };
+  }
+  function judge(lo, hi) {
+    if (lo >= 9.5 && hi <= 10.5) return "same";
+    if (hi < 10) return "short";
+    if (lo > 10) return "long";
+    return "unsure";
+  }
+  const JUDGE = {
+    same: ["10년과 같음", "s-ok", "원인 비중을 어떻게 잡아도 10년과 0.5년 이내로 차이 납니다."],
+    short: ["10년보다 짧음 · 확실", "s-urgent", "원인 비중을 어떻게 잡아도 10년보다 짧습니다."],
+    long: ["10년보다 김 · 확실", "s-ok", "원인 비중을 어떻게 잡아도 10년보다 깁니다. 10년보다 늦은 교체는 권고하지 않고 참고로만 보여 줍니다."],
+    unsure: ["불확실", "s-warn", "원인 비중에 따라 10년보다 짧게도, 길게도 나옵니다."],
+    fixed: ["날씨 보정 없음", "s-ok", "날씨가 수명을 줄인다는 정량 근거를 찾지 못해 제조사 권장 10년을 씁니다."]
+  };
+  const JSHORT = { same: "10년과 같음", short: "10년보다 짧음", long: "10년보다 김", unsure: "불확실", fixed: "날씨 보정 없음" };
+  function cycleFor(s, code) {
+    const m = mech(s), p = PART[code];
+    if (!p.weather) return { base: 10, lo: 10, hi: 10, j: "fixed", m };
+    let base, vals = [];
+    if (code === "DCM") {
+      const steps = [0.1, 0.2, 0.3, 0.4, 0.5];
+      for (const a of steps) for (const b of steps) for (const c of steps) {
+        const o = 1 - a - b - c;
+        if (o >= 0.1 - 1e-9 && o <= 0.5 + 1e-9) vals.push(10 / (a * m.cap + b * m.sol + c * m.hum + o));
+      }
+      base = 10 / (0.25 * m.cap + 0.25 * m.sol + 0.25 * m.hum + 0.25);
+    } else {
+      const af = code === "IFM" ? m.hum : m.mot;
+      const [lo, hi, d] = code === "IFM" ? [0.2, 0.8, 0.5] : [0.1, 0.5, 0.3];
+      const f = w => 10 / (w * af + 1 - w);
+      vals = [f(lo), f(hi)]; base = f(d);
+    }
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    return { base, lo, hi, j: judge(lo, hi), m };
+  }
+  const CYC = ST.map(s => Object.fromEntries(PARTS.map(p => [p.code, cycleFor(s, p.code)])));
+
+  // "교체 안 함 — 긴급으로" 로 확정한 역·부품 (확인 필요 → 긴급)
+  const CONFIRMED = new Set();
+  function unitHistory(st, door, code) {
+    return RECORDS.filter(r => r.st === st && r.door === door && r.parts.includes(code) && r.date <= TODAY).sort((a, b) => b.date - a.date);
+  }
+  function unitState(st, door, code) {
+    const hist = unitHistory(st, door, code);
+    const install = hist.length ? hist[0].date : ST[st].open;
+    const c = CYC[st][code];
+    const due = new Date(install.getTime() + c.base * 365.25 * DAY);
+    const left = Math.round((due - TODAY) / DAY);
+    let s;
+    if (left < 0 && !hist.length) s = "check";
+    else if (left <= 182) s = "red";
+    else if (left <= 365) s = "amber";
+    else s = "green";
+    if (s === "check" && CONFIRMED.has(st + "|" + code)) s = "red";
+    return { st, door, code, hist, install, due, left, s, c };
+  }
+  function stationUnits(st) {
+    const out = [unitState(st, null, "PSC")];
+    DOORS.forEach(d => DOOR_PARTS.forEach(p => out.push(unitState(st, d.id, p.code))));
+    return out;
+  }
+  function counts(units) { const c = { red: 0, amber: 0, check: 0, green: 0 }; units.forEach(u => c[u.s]++); return c; }
+
+  // 상태: 확인 필요가 가장 먼저(기록 없이 이미 지남), 그다음 긴급 → 주의 → 정상
+  const RANK = { check: 0, red: 1, amber: 2, green: 3 };
+  const STATE = { check: ["확인 필요", "s-check"], red: ["긴급", "s-urgent"], amber: ["주의", "s-warn"], green: ["정상", "s-ok"] };
+
+  // 역 × 부품 × 상태로 묶은 작업 단위
+  let CACHE = null;
+  function data() {
+    if (CACHE) return CACHE;
+    const units = ST.map(s => stationUnits(s.i));
+    const map = new Map();
+    units.forEach(list => list.forEach(u => {
+      if (u.s === "green") return;
+      const k = u.st + "|" + u.code + "|" + u.s;
+      let g = map.get(k);
+      if (!g) { g = { k, st: u.st, code: u.code, s: u.s, units: [], due: u.due, end: u.due, left: u.left }; map.set(k, g); }
+      g.units.push(u);
+      if (u.due < g.due) { g.due = u.due; g.left = u.left; }
+      if (u.due > g.end) g.end = u.due;
+    }));
+    const pkgs = [...map.values()].sort((a, b) => RANK[a.s] - RANK[b.s] || a.due - b.due || a.st - b.st);
+    CACHE = { units, pkgs, all: units.flat() };
+    return CACHE;
+  }
+  function dirty() { CACHE = null; }
+  const totalOf = code => code === "PSC" ? 1 : DOORS.length;
+
+  // ---------- 유틸 ----------
+  function utc(y, m, d) { return new Date(Date.UTC(y, m - 1, d)); }
+  function parseDate(s) { const [y, m, d] = s.split("-").map(Number); return utc(y, m, d); }
+  function fmtDate(d) { return d.getUTCFullYear() + "년 " + (d.getUTCMonth() + 1) + "월 " + d.getUTCDate() + "일"; }
+  function ymK(d) { return d.getUTCFullYear() + "년 " + (d.getUTCMonth() + 1) + "월"; }
+  function ym(d) { return String(d.getUTCFullYear()).slice(2) + "." + String(d.getUTCMonth() + 1).padStart(2, "0"); }
+  function iso(d) { return d.toISOString().slice(0, 10); }
+  function avg(k) { return ST.reduce((a, s) => a + s[k], 0) / ST.length; }
+  function yr(x) { return x.toFixed(1) + "년"; }
+  function dur(days) {
+    const a = Math.abs(days), m = Math.round(a / 30.44);
+    const t = m >= 12 ? Math.floor(m / 12) + "년" + (m % 12 ? " " + (m % 12) + "개월" : "") : (m ? m + "개월" : a + "일");
+    return days < 0 ? t + " 지남" : t + " 남음";
+  }
+  function leftText(d) { return d < 0 ? Math.abs(d).toLocaleString() + "일 지남" : d === 0 ? "오늘" : d <= 90 ? "D-" + d : dur(d); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+  const short = n => n.replace(/역$/, "");
+  const fmt = n => n.toLocaleString();
+  function chip(s, label) { return `<span class="chip ${STATE[s][1]}"><i></i>${label || STATE[s][0]}</span>`; }
+  function jpill(j) { return `<span class="chip ${JUDGE[j][1]}"><i></i>${JUDGE[j][0]}</span>`; }
+  function where(u) { return u.door ? DOOR[u.door].label : "역 공통(종합제어반)"; }
+  function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => { t.hidden = true; }, 2600); }
+  const MOCK_DL = "목업이라 실제 다운로드는 안 됩니다 — 실제 화면(psd/web/index.html)에서 받을 수 있습니다.";
+  const ICON = {
+    cal: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    info: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
+    dl: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+    print: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2"/><rect x="6" y="14" width="12" height="7"/></svg>',
+    x: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+  };
+  const LEGEND_DOT = `<div class="legend"><span><i class="dot d-check"></i>확인 필요 · 기록 없이 지남</span><span><i class="dot d-red"></i>긴급 · 6개월 이내</span><span><i class="dot d-amber"></i>주의 · 1년 이내</span><span><i class="dot d-green"></i>정상</span></div>`;
+  const LEGEND_CELL = k => `<div class="legend"><span><i class="sw ${k}-check"></i>확인 필요</span><span><i class="sw ${k}-red"></i>긴급</span><span><i class="sw ${k}-amber"></i>주의</span><span><i class="sw ${k}-green"></i>정상</span></div>`;
+
+  // ---------- 화면 상태 ----------
+  const app = document.getElementById("app"), ovEl = document.getElementById("overlay");
+  let view = { name: "work" };
+  const ui = { filter: "all", st: "", part: "", shown: 15, range: "12m" };
+  let overlay = null, lastFocus = null;
+  function defaultSt() { const p = data().pkgs[0]; return p ? p.st : 0; }
+  function go(v) { view = v; render(); }
+  function render(keep) {
+    const d = data();
+    document.querySelectorAll(".navi[data-v]").forEach(b => { if (b.dataset.v === view.name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+    const urgent = d.pkgs.filter(p => p.s === "check" || p.s === "red").length;
+    const cnt = document.getElementById("nav-cnt"); cnt.textContent = urgent || ""; cnt.hidden = !urgent;
+    app.innerHTML = VIEWS[view.name]();
+    bindView();
+    if (!keep) window.scrollTo(0, 0);
+  }
+
+  // ---------- 작업 목록 ----------
+  function vWork() {
+    const { pkgs, all } = data();
+    const cu = counts(all), pc = { check: 0, red: 0, amber: 0 };
+    pkgs.forEach(p => pc[p.s]++);
+    const until = days => fmtDate(new Date(TODAY.getTime() + days * DAY));
+    const card = (s, label, n, unitTxt, sub) => `<button class="card" type="button" data-act="wf" data-v="${s}" aria-pressed="${ui.filter === s}">${chip(s, label)}<span><span class="big">${fmt(n)}</span> <span class="muted">${unitTxt}</span></span><span class="sub">${sub}</span></button>`;
+    const cards = `<section class="cards" aria-label="상태 요약">
+      ${card("check", "확인 필요", pc.check, `건 · 부품 ${fmt(cu.check)}개`, "기록 없이 예정일 지남 · 교체 여부부터 확인")}
+      ${card("red", "긴급 · 6개월 이내", pc.red, `건 · 부품 ${fmt(cu.red)}개`, until(182) + "까지 교체")}
+      ${card("amber", "주의 · 1년 이내", pc.amber, `건 · 부품 ${fmt(cu.amber)}개`, until(365) + "까지 교체")}
+      <div class="card">${chip("green")}<span><span class="big">${fmt(cu.green)}</span> <span class="muted">개</span></span><span class="sub">1년 넘게 남음</span></div>
+    </section>`;
+
+    // 몰리는 시기 알림
+    const pl = planData("12m");
+    const pk = pl.tot.indexOf(Math.max(...pl.tot));
+    let insight = "";
+    if (pl.total && pl.tot[pk] >= pl.total * 0.3) {
+      const b = pl.bs[pk], day = new Map();
+      all.forEach(u => { if (u.s !== "check" && u.left >= 0 && u.due >= b.s && u.due < b.e) { const k = iso(u.due); const g = day.get(k) || { n: 0, st: new Set() }; g.n++; g.st.add(u.st); day.set(k, g); } });
+      const top = [...day.entries()].sort((a, b2) => b2[1].n - a[1].n)[0];
+      insight = `<div class="callout"><span style="color: var(--u)">${ICON.cal}</span><p><b>${b.long}에 부품 ${fmt(pl.tot[pk])}개가 몰립니다.</b> 앞으로 12개월 물량의 ${Math.round(pl.tot[pk] / pl.total * 100)}%입니다.${top ? ` 특히 <b class="num">${top[0]}</b> 하루에 ${top[1].st.size}개 역 부품 ${fmt(top[1].n)}개의 예정일이 겹칩니다.` : ""} <button class="lnk" type="button" data-act="nav" data-v="plan">교체 계획 보기 ›</button></p></div>`;
+    }
+
+    const rows = pkgs.filter(p => (ui.filter === "all" || p.s === ui.filter) && (ui.st === "" || p.st === Number(ui.st)) && (!ui.part || p.code === ui.part));
+    const segBtn = (v, label, n) => `<button type="button" data-act="wf" data-v="${v}" aria-pressed="${ui.filter === v}">${label} <span class="num">${n}</span></button>`;
+    const toolbar = `<div class="toolbar">
+        <div class="seg" role="group" aria-label="상태로 거르기">${segBtn("all", "전체", pkgs.length)}${segBtn("check", "확인 필요", pc.check)}${segBtn("red", "긴급", pc.red)}${segBtn("amber", "주의", pc.amber)}</div>
+        <label class="fi">역 <select id="f-st"><option value="">전체 24개 역</option>${ST.map(s => `<option value="${s.i}" ${String(s.i) === ui.st ? "selected" : ""}>${s.name}</option>`).join("")}</select></label>
+        <label class="fi">부품 <select id="f-part"><option value="">전체 부품</option>${PARTS.map(p => `<option value="${p.code}" ${p.code === ui.part ? "selected" : ""}>${p.name}</option>`).join("")}</select></label>
+        <span class="small muted" style="margin-left: auto">확인 필요 → 긴급 → 주의, 같은 상태는 예정일 빠른 순</span>
+      </div>`;
+    const tr = p => {
+      const c = CYC[p.st][p.code], doors = p.units.map(u => u.door).filter(Boolean).join(",");
+      return `<tr class="click" data-act="sp" data-v="${p.st}|${p.code}|${p.s}" tabindex="0">
+        <td>${chip(p.s)}</td><td><b>${ST[p.st].name}</b></td><td>${PART[p.code].name}</td>
+        <td class="r num">${p.units.length}<span class="of"> / ${totalOf(p.code)}</span></td>
+        <td class="num">${iso(p.due)}${p.end > p.due ? '<span class="of"> 부터</span>' : ""}</td>
+        <td class="num ${p.left < 0 ? "over" : ""}">${leftText(p.left)}</td>
+        <td><span class="num">${yr(c.base)}</span> <span class="small muted">${JSHORT[c.j]}</span></td>
+        <td class="r"><button class="btn ghost sm" type="button" data-act="rec" data-v="${p.st}|${p.code}|${doors}">기록 입력</button></td>
+      </tr>`;
+    };
+    const shown = rows.slice(0, ui.shown);
+    return `<div class="head">
+        <div><h1>작업 목록</h1><p>교체할 부품을 <b style="color: var(--ink)">역 × 부품</b>으로 묶었습니다. 같은 날 설치된 문은 한 줄에 모입니다.</p></div>
+        <div class="actions"><button class="btn ghost" type="button" data-act="toast" data-msg="${esc(MOCK_DL)}">${ICON.dl}엑셀 내려받기</button></div>
+      </div>
+      ${cards}
+      ${insight}
+      <section class="panel">
+        ${toolbar}
+        <div class="scroll"><table class="tbl">
+          <thead><tr><th>상태</th><th>역</th><th>부품</th><th class="r">대상</th><th>예정일</th><th>남은 기간</th><th>권장 주기</th><th class="r"><span class="sr">작업</span></th></tr></thead>
+          <tbody>${shown.length ? shown.map(tr).join("") : `<tr><td colspan="8" class="empty">조건에 맞는 작업이 없습니다.</td></tr>`}</tbody>
+        </table></div>
+        <div class="foot"><span>${fmt(rows.length)}건 중 ${fmt(shown.length)}건 · 줄을 누르면 근거와 이력이 열립니다</span>${rows.length > shown.length ? `<button class="btn ghost sm" type="button" data-act="more">15건 더 보기</button>` : ""}</div>
+      </section>`;
+  }
+
+  // ---------- 역별 상세 ----------
+  function vStation() {
+    const { units } = data();
+    const si = view.st ?? defaultSt(), s = ST[si], us = units[si], c = counts(us);
+    const item = x => {
+      const cc = counts(units[x.i]), worst = ["check", "red", "amber"].find(k => cc[k]) || "green";
+      const parts = [["check", "확인"], ["red", "긴급"], ["amber", "주의"]].filter(([k]) => cc[k]).map(([k, l]) => l + " " + cc[k]).join(" · ");
+      const next = units[x.i].reduce((a, u) => u.due < a ? u.due : a, units[x.i][0].due);
+      const tot = units[x.i].length, w = k => (cc[k] / tot * 100).toFixed(1);
+      return `<li><button class="stn" type="button" data-act="st" data-v="${x.i}" aria-current="${x.i === si}"><i class="dot d-${worst}"></i><span class="body"><span class="nm">${x.name}</span><span class="sb">${parts || "다음 교체 " + ymK(next)}</span></span><span class="mini" aria-hidden="true"><span class="b-check" style="width:${w("check")}%"></span><span class="b-red" style="width:${w("red")}%"></span><span class="b-amber" style="width:${w("amber")}%"></span></span></button></li>`;
+    };
+    const side = `<aside class="panel" aria-label="역 목록">
+        <div class="pad" style="gap: 10px; padding-bottom: 10px">
+          <h2 style="font-size: 15px">노선 · 24개 역</h2>
+          <label><span class="sr">역 이름으로 찾기</span><input type="search" id="st-search" placeholder="역 이름으로 찾기" style="width: 100%"></label>
+          ${LEGEND_DOT.replace(' · 기록 없이 지남', '').replace(' · 6개월 이내', '').replace(' · 1년 이내', '')}
+        </div>
+        <div class="route-wrap"><ul class="route" id="route-list">${ST.map(item).join("")}</ul><p class="empty" id="route-empty" hidden>찾는 역이 없습니다.</p></div>
+      </aside>`;
+
+    const prow = PARTS.map(p => {
+      const xs = us.filter(u => u.code === p.code);
+      const worst = xs.reduce((a, u) => RANK[u.s] < RANK[a] ? u.s : a, "green");
+      const ws = xs.filter(u => u.s === worst), first = ws.reduce((a, u) => u.due < a.due ? u : a);
+      return { p, worst, n: ws.length, tot: xs.length, first, cy: CYC[si][p.code] };
+    }).sort((a, b) => RANK[a.worst] - RANK[b.worst] || a.first.due - b.first.due);
+    const partTable = `<section class="panel">
+        <div class="panel-h"><h2>부품별 상태</h2><span class="small muted">대상 = 그 상태인 문 수 / 전체</span></div>
+        <div class="scroll"><table class="tbl">
+          <thead><tr><th>부품</th><th>상태</th><th class="r">대상</th><th>다음 교체</th><th>남은 기간</th><th>권장 주기</th></tr></thead>
+          <tbody>${prow.map(r => `<tr class="click" data-act="sp" data-v="${si}|${r.p.code}|${r.worst}" tabindex="0"><td><b>${r.p.name}</b></td><td>${chip(r.worst)}</td><td class="r num">${r.n}<span class="of"> / ${r.tot}</span></td><td class="num">${iso(r.first.due)}</td><td class="num ${r.first.left < 0 ? "over" : ""}">${leftText(r.first.left)}</td><td><span class="num">${yr(r.cy.base)}</span> <span class="small muted">${r.p.code === "PSC" ? "실내 설비" : JSHORT[r.cy.j]}</span></td></tr>`).join("")}</tbody>
+        </table></div>
+      </section>`;
+
+    const recs = RECORDS.filter(r => r.st === si && r.date <= TODAY).sort((a, b) => a.date - b.date);
+    const exc = recs.length
+      ? `<div class="callout soft"><span style="color: var(--accent)">${ICON.info}</span><p><b>이력이 다른 곳 ${new Set(recs.map(r => r.door ?? "PSC")).size}곳</b> — ${recs.map(r => `${r.door ? DOOR[r.door].label : "종합제어반"}(${iso(r.date)} ${REASONS[r.reason]}: ${r.parts.map(x => PART[x].name).join("·")})`).join(", ")}. 나머지는 개통일에 설치되어 상태가 같습니다.</p></div>`
+      : `<div class="callout soft"><span style="color: var(--accent)">${ICON.info}</span><p>교체 기록이 없어 모든 문이 개통일 기준으로 같은 상태입니다.</p></div>`;
+    const mx = sid => {
+      const ds = DOORS.filter(d => d.sid === sid), gap = d => d.pos === 1 && d.n > 1 ? "gap" : "";
+      return `<div style="display: flex; flex-direction: column; gap: 6px"><h3 style="font-size: 13.5px; color: var(--ink2)">${SIDES[sid]}</h3>
+        <div class="scroll"><table class="mx"><thead><tr><th></th>${ds.map(d => `<th class="${gap(d)}" scope="col">${d.no}</th>`).join("")}</tr></thead>
+        <tbody>${DOOR_PARTS.map(p => `<tr><th class="pn" scope="row">${p.name}</th>${ds.map(d => { const u = us.find(x => x.door === d.id && x.code === p.code); return `<td class="${gap(d)}"><button class="cell c-${u.s}" type="button" data-act="unit" data-v="${si}|${p.code}|${d.id}" aria-label="${esc(d.label + " " + p.name + " " + STATE[u.s][0])}" title="${esc(d.no + " · " + p.name + " · " + STATE[u.s][0] + " · " + iso(u.due))}"></button></td>`; }).join("")}</tr>`).join("")}</tbody></table></div></div>`;
+    };
+    const prev = ST[si - 1], next = ST[si + 1];
+    const chips = ["check", "red", "amber"].filter(k => c[k]).map(k => chip(k, STATE[k][0] + " " + c[k])).join("") || chip("green", "경고 없음");
+    return `<div class="stv">
+      ${side}
+      <div class="stv-detail">
+        <div class="head">
+          <div><div class="ttl"><h1>${s.name}</h1>${chips}</div><p>${s.openLabel} 개통 · 관측소 ${s.obs}(가정) · 문 32개(방향별 16개, 임시값) · 종합제어반 1개</p></div>
+          <div class="actions">
+            <button class="btn ghost" type="button" ${prev ? `data-act="st" data-v="${si - 1}"` : "disabled"}>‹ ${prev ? short(prev.name) : "처음"}</button>
+            <button class="btn ghost" type="button" ${next ? `data-act="st" data-v="${si + 1}"` : "disabled"}>${next ? short(next.name) : "끝"} ›</button>
+            <button class="btn ghost" type="button" data-act="toast" data-msg="${esc(MOCK_DL)}">${ICON.dl}보고서</button>
+            <button class="btn" type="button" data-act="rec" data-v="${si}||">교체 기록 입력</button>
+          </div>
+        </div>
+        ${partTable}
+        <section class="panel pad">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap"><h2>문별 상태</h2>${LEGEND_CELL("c")}</div>
+          ${exc}
+          ${mx("U")}${mx("D")}
+          <p class="small muted">칸을 누르면 그 문 그 부품의 상세가 열립니다.</p>
+        </section>
+      </div>
+    </div>`;
+  }
+
+  // ---------- 노선 현황판 ----------
+  function vBoard() {
+    const { units, pkgs, all } = data();
+    const pats = [];
+    const chk = pkgs.filter(p => p.s === "check");
+    if (chk.length) {
+      const sts = [...new Set(chk.map(p => p.st))], pn = [...new Set(chk.map(p => PART[p.code].name))];
+      pats.push(`<div class="pat"><span class="tag" style="color: var(--c)">확인 필요 · ${sts.length}개 역</span><b>${pn.join(" · ")}</b><p>${sts.map(i => short(ST[i].name)).join("·")} — 기록 없이 예정일이 지났습니다. 교체 여부부터 확인하세요.</p></div>`);
+    }
+    const day = new Map();
+    all.forEach(u => { if (u.s !== "check" && u.left >= 0 && u.left <= 365) { const k = iso(u.due); const g = day.get(k) || { n: 0, st: new Set(), p: new Set(), d: u.due, hist: 0, s: u.s }; g.n++; g.st.add(u.st); g.p.add(u.code); if (u.hist.length) g.hist++; day.set(k, g); } });
+    const top = [...day.values()].sort((a, b) => b.n - a.n)[0];
+    if (top) pats.push(`<div class="pat"><span class="tag" style="color: ${top.s === "red" ? "var(--u)" : "var(--w)"}">${STATE[top.s][0]} · ${fmtDate(top.d)}</span><b>${top.st.size}개 역 부품 ${fmt(top.n)}개가 같은 날</b><p>${[...top.p].map(c => PART[c].name).join("·")}의 예정일이 겹칩니다.${top.hist ? "" : " 모두 개통일에 설치된 부품입니다."}</p></div>`);
+    const calm = ST.filter(s => units[s.i].every(u => u.s === "green"));
+    if (calm.length) {
+      let first = null; calm.forEach(s => units[s.i].forEach(u => { if (!first || u.due < first.due) first = u; }));
+      pats.push(`<div class="pat"><span class="tag" style="color: var(--o)">정상 · ${calm.length}개 역</span><b>1년 안에 교체할 부품 없음</b><p>이 중 가장 빠른 교체는 ${ymK(first.due)} ${ST[first.st].name} ${PART[first.code].name}입니다.</p></div>`);
+    }
+    const groups = [];
+    [...ST].sort((a, b) => a.open - b.open || a.i - b.i).forEach(s => { const k = iso(s.open); let g = groups.find(x => x.k === k); if (!g) { g = { k, list: [] }; groups.push(g); } g.list.push(s); });
+    const cell = (si, code) => {
+      const xs = units[si].filter(u => u.code === code), w = xs.reduce((a, u) => RANK[u.s] < RANK[a] ? u.s : a, "green");
+      const f = xs.filter(u => u.s === w).reduce((a, u) => u.due < a.due ? u : a);
+      const t = `${ST[si].name} · ${PART[code].name} · ${STATE[w][0]} · ${iso(f.due)}`;
+      return `<td><button class="k k-${w}" type="button" data-act="sp" data-v="${si}|${code}|${w}" title="${esc(t)}" aria-label="${esc(t)}">${ym(f.due)}</button></td>`;
+    };
+    return `<div class="head">
+        <div><h1>노선 현황판</h1><p>칸마다 그 역·부품에서 <b style="color: var(--ink)">가장 급한 상태</b>와 그 교체 시점(연.월)입니다. 칸을 누르면 상세가 열립니다.</p></div>
+        <div class="actions"><button class="btn ghost" type="button" data-act="print">${ICON.print}인쇄</button></div>
+      </div>
+      <section class="pats" aria-label="눈에 띄는 패턴">${pats.join("")}</section>
+      <section class="panel pad" style="gap: 6px">
+        ${LEGEND_CELL("k")}
+        <div class="scroll"><table class="bd">
+          <thead><tr><th class="l" style="width: 116px">역</th>${PARTS.map(p => `<th scope="col">${p.code === "PSC" ? "종합제어반" : p.name}</th>`).join("")}</tr></thead>
+          <tbody>${groups.map(g => `<tr class="grp"><td colspan="${PARTS.length + 1}">${g.list[0].openLabel} 개통${g.list.length > 1 ? ` · ${short(g.list[0].name)}–${short(g.list[g.list.length - 1].name)} (${g.list.length}개 역)` : ""}</td></tr>${g.list.map(s => `<tr><th class="l" scope="row"><button class="stname" type="button" data-act="st" data-v="${s.i}">${s.name}</button></th>${PARTS.map(p => cell(s.i, p.code)).join("")}</tr>`).join("")}`).join("")}</tbody>
+        </table></div>
+      </section>`;
+  }
+
+  // ---------- 교체 계획 ----------
+  const RANGES = { "12m": "12개월", "3y": "3년", "5y": "5년" };
+  function buckets(range) {
+    const y0 = TODAY.getUTCFullYear(), m0 = TODAY.getUTCMonth(), d0 = (y, m) => new Date(Date.UTC(y, m, 1)), out = [];
+    if (range === "12m") for (let k = 0; k < 12; k++) { const s = d0(y0, m0 + k); out.push({ s, e: d0(y0, m0 + k + 1), lab: (s.getUTCMonth() + 1) + "월", sub: k === 0 || s.getUTCMonth() === 0 ? String(s.getUTCFullYear()) : "", long: ymK(s) }); }
+    else if (range === "3y") { const q0 = Math.floor(m0 / 3); for (let k = 0; k < 12; k++) { const s = d0(y0, (q0 + k) * 3), q = Math.floor(s.getUTCMonth() / 3) + 1; out.push({ s, e: d0(y0, (q0 + k + 1) * 3), lab: q + "분기", sub: k === 0 || q === 1 ? String(s.getUTCFullYear()) : "", long: s.getUTCFullYear() + "년 " + q + "분기" }); } }
+    else for (let k = 0; k < 5; k++) out.push({ s: d0(y0 + k, 0), e: d0(y0 + k + 1, 0), lab: (y0 + k) + "년", sub: k === 0 ? (m0 + 1) + "월부터" : "", long: (y0 + k) + "년" + (k === 0 ? `(${m0 + 1}월부터)` : "") });
+    return out;
+  }
+  function planData(range) {
+    const bs = buckets(range), end = bs[bs.length - 1].e;
+    const byPart = Object.fromEntries(PARTS.map(p => [p.code, bs.map(() => 0)]));
+    const tot = bs.map(() => 0), bySt = bs.map(() => ({}));
+    let check = 0;
+    data().all.forEach(u => {
+      if (u.s === "check") { check++; return; }
+      let d = u.left < 0 ? TODAY : u.due;
+      while (d < end) {
+        const k = bs.findIndex(b => d >= b.s && d < b.e);
+        if (k >= 0) { byPart[u.code][k]++; tot[k]++; bySt[k][u.st] = (bySt[k][u.st] || 0) + 1; }
+        d = new Date(d.getTime() + u.c.base * 365.25 * DAY);
+      }
+    });
+    return { bs, byPart, tot, bySt, check, total: tot.reduce((a, b) => a + b, 0) };
+  }
+  function vPlan() {
+    const P = planData(ui.range), n = P.bs.length, max = Math.max(...P.tot, 1), pk = P.tot.indexOf(max);
+    const pb = P.bs[pk], cols = `grid-template-columns: repeat(${n}, minmax(0, 1fr))`;
+    const topParts = PARTS.map(p => [p.name, P.byPart[p.code][pk]]).filter(x => x[1]).sort((a, b) => b[1] - a[1]).slice(0, 3).map(x => x[0]).join("·");
+    const span = `${P.bs[0].long} – ${P.bs[n - 1].long}`;
+    const cellMax = Math.max(...PARTS.flatMap(p => P.byPart[p.code]), 1);
+    const td = x => `<td class="${!x ? "z" : x >= cellMax * 0.5 ? "hot" : ""}">${x ? fmt(x) : "·"}</td>`;
+    const stRows = Object.entries(P.bySt[pk]).sort((a, b) => b[1] - a[1]);
+    const stMax = stRows.length ? stRows[0][1] : 1;
+    const others = P.tot.filter((_, k) => k !== pk);
+    return `<div class="head">
+        <div><h1>교체 계획</h1><p>기간마다 교체 예정일이 오는 부품 수입니다(교체 후 다음 주기까지 포함). 자재 발주와 작업 배분에 씁니다.</p></div>
+        <div class="actions"><div class="seg" role="group" aria-label="기간">${Object.entries(RANGES).map(([k, v]) => `<button type="button" data-act="range" data-v="${k}" aria-pressed="${ui.range === k}">${v}</button>`).join("")}</div><button class="btn ghost" type="button" data-act="toast" data-msg="${esc(MOCK_DL)}">${ICON.dl}엑셀</button></div>
+      </div>
+      <section class="cards">
+        <div class="card"><span class="sub">앞으로 ${RANGES[ui.range]}</span><span><span class="big">${fmt(P.total)}</span> <span class="muted">개</span></span><span class="sub">${span}</span></div>
+        <div class="card" style="border-color: var(--u-cell)"><span class="sub" style="color: var(--u); font-weight: 600">가장 몰리는 때 · ${pb.long}</span><span><span class="big">${fmt(max)}</span> <span class="muted">개 (${P.total ? Math.round(max / P.total * 100) : 0}%)</span></span><span class="sub">${topParts || "—"}</span></div>
+        <div class="card"><span class="sub" style="color: var(--c); font-weight: 600">날짜 미정 · 확인 필요</span><span><span class="big">${fmt(P.check)}</span> <span class="muted">개</span></span><span class="sub">교체 여부를 확인한 뒤 반영됩니다</span></div>
+      </section>
+      <section class="panel pad">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap"><h2>${ui.range === "12m" ? "월별" : ui.range === "3y" ? "분기별" : "연도별"} 교체 물량</h2><span class="small muted">막대 위 숫자 = 부품 수</span></div>
+        <div class="bars" style="${cols}" role="img" aria-label="${esc(`${pb.long}에 ${fmt(max)}개로 가장 많고, 나머지는 ${fmt(Math.max(0, ...others))}개 이하`)}">${P.tot.map((v, k) => `<div class="barcol ${k === pk && v ? "peak" : ""}"><b>${v ? fmt(v) : "–"}</b><span style="height: ${(v / max * 100).toFixed(1)}%; min-height: ${v ? 3 : 0}px"></span></div>`).join("")}</div>
+        <div class="barlab" style="${cols}">${P.bs.map(b => `<span>${b.lab}<small>${b.sub || "&nbsp;"}</small></span>`).join("")}</div>
+      </section>
+      <div class="split">
+        <section class="panel pad wide">
+          <h2>부품별</h2>
+          <div class="scroll"><table class="mt">
+            <thead><tr><th class="l">부품</th>${P.bs.map(b => `<th>${ui.range !== "5y" && b.sub ? b.sub.slice(2) + "." : ""}${b.lab}</th>`).join("")}<th>합계</th></tr></thead>
+            <tbody>${PARTS.map(p => `<tr><td class="l">${p.name}</td>${P.byPart[p.code].map(td).join("")}<td>${fmt(P.byPart[p.code].reduce((a, b) => a + b, 0))}</td></tr>`).join("")}
+            <tr class="tot"><td class="l">합계</td>${P.tot.map(x => `<td class="${x ? "" : "z"}">${x ? fmt(x) : "·"}</td>`).join("")}<td>${fmt(P.total)}</td></tr></tbody>
+          </table></div>
+        </section>
+        <section class="panel pad narrow">
+          <div><h2>${pb.long} 역별 물량</h2><p class="small muted">앞당겨 나눌 역을 고를 때 참고</p></div>
+          <div style="display: flex; flex-direction: column; gap: 7px">${stRows.length ? stRows.map(([i, v]) => `<div class="hb"><button class="lnk" type="button" data-act="st" data-v="${i}" style="font-weight: 500; padding: 0; color: var(--ink)">${ST[i].name}</button><span class="track"><span class="fill" style="display: block; width: ${(v / stMax * 100).toFixed(1)}%"></span></span><span class="num" style="text-align: right">${fmt(v)}</span></div>`).join("") : `<p class="muted">이 기간에는 물량이 없습니다.</p>`}</div>
+        </section>
+      </div>`;
+  }
+
+  // ---------- 주기 근거(날씨 영향) ----------
+  const WPARTS = ["DCM", "IFM", "MOTOR"];
+  function niceTicks(lo, hi, n) {
+    const span = hi - lo, mag = Math.pow(10, Math.floor(Math.log10(span / n)));
+    const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => span / x <= n) || mag * 10;
+    const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6));
+    return out;
+  }
+  const tipAttr = (t, r) => `data-tip="${esc(JSON.stringify({ t, r }))}"`;
+  function dotCell(v, lo, hi, ref, tipT, tipR, label) {
+    const W = 120, H = 22, x = t => (6 + (t - lo) / (hi - lo) * (W - 12)).toFixed(1);
+    return `<svg class="mk" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" tabindex="0" role="img" aria-label="${esc(label)}" ${tipAttr(tipT, tipR)}><line class="axisl" x1="0" x2="${W}" y1="11" y2="11"/><line class="refl" x1="${x(ref)}" x2="${x(ref)}" y1="3" y2="19"/><circle class="dotc" cx="${x(v)}" cy="11" r="4.5"/></svg>`;
+  }
+  function rangeCell(c, lo, hi, tipT, tipR, label) {
+    const W = 120, H = 22, x = t => 6 + (t - lo) / (hi - lo) * (W - 12);
+    return `<svg class="mk" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" tabindex="0" role="img" aria-label="${esc(label)}" ${tipAttr(tipT, tipR)}><line class="axisl" x1="0" x2="${W}" y1="11" y2="11"/><rect class="band" x="${x(c.lo).toFixed(1)}" y="8" width="${Math.max(2, x(c.hi) - x(c.lo)).toFixed(1)}" height="6" rx="3"/><line class="refl" x1="${x(10).toFixed(1)}" x2="${x(10).toFixed(1)}" y1="3" y2="19"/><circle class="dotc" cx="${x(c.base).toFixed(1)}" cy="11" r="4.5"/></svg>`;
+  }
+  function scatter(title, key, xLabel, code, fmtX) {
+    const W = 440, H = 280, m = { l: 44, r: 16, t: 26, b: 44 };
+    const pts = ST.map(s => ({ s, x: s[key], c: CYC[s.i][code] }));
+    const xs = pts.map(p => p.x), pad = (Math.max(...xs) - Math.min(...xs)) * 0.08 || 1;
+    const xlo = Math.min(...xs) - pad, xhi = Math.max(...xs) + pad;
+    const ylo = Math.min(9.5, Math.floor(Math.min(...pts.map(p => p.c.lo)) * 2) / 2), yhi = Math.max(10.5, Math.ceil(Math.max(...pts.map(p => p.c.hi)) * 2) / 2);
+    const X = v => m.l + (v - xlo) / (xhi - xlo) * (W - m.l - m.r), Y = v => H - m.b - (v - ylo) / (yhi - ylo) * (H - m.t - m.b);
+    const f = v => v.toFixed(1);
+    const minP = pts.reduce((a, b) => b.c.base < a.c.base ? b : a), maxP = pts.reduce((a, b) => b.c.base > a.c.base ? b : a);
+    const lab = p => { const x = X(p.x), right = x > W / 2; return `<text class="lab" x="${f(right ? x - 9 : x + 9)}" y="${f(Y(p.c.base) - 7)}" text-anchor="${right ? "end" : "start"}">${esc(p.s.name)}</text>`; };
+    return `<figure><figcaption>${title}</figcaption>
+      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">
+        ${niceTicks(ylo, yhi, 5).map(v => `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${f(Y(v))}" y2="${f(Y(v))}"/><text x="${m.l - 6}" y="${f(Y(v) + 4)}" text-anchor="end">${v}</text>`).join("")}
+        ${niceTicks(xlo, xhi, 5).map(v => `<text x="${f(X(v))}" y="${H - m.b + 16}" text-anchor="middle">${v}</text>`).join("")}
+        <text x="${(m.l + W - m.r) / 2}" y="${H - 8}" text-anchor="middle">${xLabel}</text>
+        <text x="${m.l - 6}" y="14" text-anchor="end">년</text>
+        <line class="refl" x1="${m.l}" x2="${W - m.r}" y1="${f(Y(10))}" y2="${f(Y(10))}"/><text x="${W - m.r}" y="${f(Y(10) - 5)}" text-anchor="end">10년</text>
+        ${pts.map(p => `<line class="whisker" x1="${f(X(p.x))}" x2="${f(X(p.x))}" y1="${f(Y(p.c.lo))}" y2="${f(Y(p.c.hi))}"/>`).join("")}
+        ${pts.map(p => `<circle class="dotc" cx="${f(X(p.x))}" cy="${f(Y(p.c.base))}" r="4.5"/>`).join("")}
+        ${lab(minP)}${minP !== maxP ? lab(maxP) : ""}
+        ${pts.map(p => `<circle class="hit" cx="${f(X(p.x))}" cy="${f(Y(p.c.base))}" r="12" tabindex="0" ${tipAttr(p.s.name, [[xLabel, fmtX(p.x)], ["기본 비중 주기", yr(p.c.base)], ["범위", f(p.c.lo) + "–" + f(p.c.hi) + "년"], ["판정", JSHORT[p.c.j]]])}/>`).join("")}
+      </svg></figure>`;
+  }
+  function vBasis() {
+    const rh = ST.map(s => s.RH), dt = ST.map(s => s.DT);
+    const rhLo = Math.min(...rh) - 1, rhHi = Math.max(...rh) + 1, dtLo = Math.min(...dt) - 0.5, dtHi = Math.max(...dt) + 0.5;
+    const allC = ST.flatMap(s => WPARTS.map(k => CYC[s.i][k]));
+    const cyLo = Math.min(9.5, Math.floor(Math.min(...allC.map(c => c.lo)) * 2) / 2), cyHi = Math.max(10.5, Math.ceil(Math.max(...allC.map(c => c.hi)) * 2) / 2);
+    const rows = ST.map(s => `<tr><td class="nm"><button class="lnk" type="button" data-act="st" data-v="${s.i}" style="color: var(--ink); font-weight: 500; padding: 0">${s.name}</button></td>
+        <td>${dotCell(s.RH, rhLo, rhHi, REF.RH, s.name, [["습도", s.RH + "%"], ["24개 역 평균", REF.RH.toFixed(1) + "%"]], s.name + " 습도 " + s.RH + "%")}</td>
+        <td>${dotCell(s.DT, dtLo, dtHi, REF.DT, s.name, [["일교차", s.DT.toFixed(1) + "°C"], ["24개 역 평균", REF.DT.toFixed(1) + "°C"]], s.name + " 일교차 " + s.DT.toFixed(1) + "°C")}</td>
+        ${WPARTS.map(k => { const c = CYC[s.i][k]; return `<td>${rangeCell(c, cyLo, cyHi, s.name + " · " + PART[k].name, [["기본 비중", yr(c.base)], ["범위", c.lo.toFixed(1) + "–" + c.hi.toFixed(1) + "년"], ["판정", JSHORT[c.j]]], s.name + " " + PART[k].name + " " + yr(c.base))}</td>`; }).join("")}</tr>`).join("");
+    const numRows = ST.map(s => `<tr><td>${s.name}</td><td class="num">${s.T.toFixed(1)}</td><td class="num">${s.RH}</td><td class="num">${s.DT.toFixed(1)}</td>${WPARTS.map(k => { const c = CYC[s.i][k]; return `<td class="num">${c.base.toFixed(1)} (${c.lo.toFixed(1)}–${c.hi.toFixed(1)})</td>`; }).join("")}</tr>`).join("");
+    const method = [
+      ["모터", "기온", "권선 절연 노화 30%(10–50%) + 그 외 70%", "NSWC-98 식 14-4"],
+      ["DCM", "기온 · 일교차 · 습도", "콘덴서 · 납땜 피로 · 습도 부식 · 그 외 각 25%(10–50%)", "Nichicon · Norris-Landzberg · Peck"],
+      ["IFM 릴레이", "습도 · 기온", "접점 부식 50%(20–80%) + 그 외 50%", "Peck 온습도 모델"],
+      ["타이밍벨트 · 풀리 · 도어 행거", "—", "날씨가 수명을 줄인다는 정량 근거가 없어 10년", "NSWC-98"],
+      ["종합제어반 릴레이", "—", "실내 설비라 10년", "—"]
+    ];
+    return `<div class="head"><div><h1>주기 근거</h1><p>날씨 때문에 역마다 권장 주기가 어떻게 달라지는지 보여 줍니다. 날씨 값은 모두 가정값입니다.</p></div></div>
+      <section class="panel">
+        <div class="panel-h"><h2>계산 방법</h2><span class="small muted">권장 주기 = 10년 ÷ (원인별 열화 속도 × 비중의 합), 열화 속도는 24개 역 평균 대비</span></div>
+        <div class="scroll"><table class="tbl"><thead><tr><th>부품</th><th>쓰는 날씨</th><th>원인과 비중(범위)</th><th>근거</th></tr></thead>
+        <tbody>${method.map(r => `<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td style="white-space: normal">${r[2]}</td><td class="small muted">${r[3]}</td></tr>`).join("")}</tbody></table></div>
+      </section>
+      <section class="panel pad">
+        <h2>노선을 따라 본 날씨와 교체주기</h2>
+        <p class="small muted">왼쪽 두 칸은 역의 날씨(세로선 = 24개 역 평균), 오른쪽 세 칸은 그 날씨로 계산한 권장 주기입니다(점 = 기본 비중, 띠 = 원인 비중을 바꿨을 때의 범위, 세로선 = 10년). 점이나 띠에 마우스를 올리면 값이 나옵니다.</p>
+        <div class="scroll"><table class="rowchart">
+          <tr><th class="st" style="text-align: left">역</th><th class="st" style="text-align: left">습도<span class="cap">${rhLo}–${rhHi}%</span></th><th class="st" style="text-align: left">일교차<span class="cap">${dtLo.toFixed(1)}–${dtHi.toFixed(1)}°C</span></th>${WPARTS.map(k => `<th class="st" style="text-align: left">${PART[k].name} 주기<span class="cap">${cyLo}–${cyHi}년</span></th>`).join("")}</tr>
+          ${rows}
+        </table></div>
+        <button class="lnk" type="button" id="tbltoggle">숫자 표로 보기</button>
+        <div class="scroll" id="numtbl" hidden><table class="tbl"><thead><tr><th>역</th><th>기온 °C</th><th>습도 %</th><th>일교차 °C</th>${WPARTS.map(k => `<th>${PART[k].name} 주기(년)</th>`).join("")}</tr></thead><tbody>${numRows}</tbody></table></div>
+      </section>
+      <section class="panel pad">
+        <h2>날씨와 주기의 관계</h2>
+        <p class="small muted">점 하나가 역 하나입니다. 세로 막대는 원인 비중을 바꿨을 때의 범위입니다.</p>
+        <div class="charts2">
+          ${scatter("습도와 IFM 릴레이 주기", "RH", "평균 습도(%)", "IFM", v => v + "%")}
+          ${scatter("일교차와 DCM 주기", "DT", "평균 일교차(°C)", "DCM", v => v.toFixed(1) + "°C")}
+        </div>
+        <p class="small muted">IFM 릴레이는 원인이 습도 하나라 점들이 한 줄로 늘어섭니다. DCM은 기온·일교차·습도가 함께 작용해서, 일교차 하나만 놓고 보면 관계가 덜 뚜렷합니다.</p>
+      </section>
+      ${simPanel(view.simSt ?? 11)}`;
+  }
+  function simPanel(st) {
+    return `<section class="panel pad" id="sim">
+      <h2>날씨가 바뀌면</h2>
+      <p class="small muted">한 역의 날씨를 바꿨을 때 권장 주기가 어떻게 달라지는지 계산합니다. 비교 기준(24개 역 평균)은 그대로 둡니다.</p>
+      <label class="fld" style="max-width: 280px"><span>역</span><select id="sim-st">${ST.map(x => `<option value="${x.i}" ${x.i === st ? "selected" : ""}>${x.i + 1}. ${x.name}</option>`).join("")}</select></label>
+      <div class="sliders">
+        <div class="fld"><label for="sim-rh">습도 변화 <b class="num" id="sim-rh-v">0%p</b></label><input type="range" id="sim-rh" min="-10" max="10" step="1" value="0"></div>
+        <div class="fld"><label for="sim-dt">일교차 변화 <b class="num" id="sim-dt-v">0.0°C</b></label><input type="range" id="sim-dt" min="-3" max="3" step="0.5" value="0"></div>
+        <div class="fld"><label for="sim-t">기온 변화 <b class="num" id="sim-t-v">0.0°C</b></label><input type="range" id="sim-t" min="-2" max="2" step="0.5" value="0"></div>
+      </div>
+      <div id="sim-out"></div>
+      <button class="lnk" type="button" id="sim-reset">변화 없음으로 되돌리기</button>
+    </section>`;
+  }
+  function setupSim() {
+    const g = id => app.querySelector("#" + id);
+    const sign = (v, d) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(d);
+    const upd = () => {
+      const s = ST[Number(g("sim-st").value)], dRH = Number(g("sim-rh").value), dDT = Number(g("sim-dt").value), dT = Number(g("sim-t").value);
+      g("sim-rh-v").textContent = sign(dRH, 0) + "%p";
+      g("sim-dt-v").textContent = sign(dDT, 1) + "°C";
+      g("sim-t-v").textContent = sign(dT, 1) + "°C";
+      const s2 = { T: s.T + dT, RH: Math.min(100, s.RH + dRH), DT: Math.max(0.5, s.DT + dDT) };
+      const rows = WPARTS.map(k => {
+        const a = CYC[s.i][k], b = cycleFor(s2, k), d = b.base - a.base;
+        const cls = Math.abs(d) < 0.05 ? "muted" : d > 0 ? "delta-up" : "delta-down";
+        return `<tr><td><b>${PART[k].name}</b></td><td class="num">${yr(a.base)} <span class="muted small">(${a.lo.toFixed(1)}–${a.hi.toFixed(1)})</span></td><td class="num">${yr(b.base)} <span class="muted small">(${b.lo.toFixed(1)}–${b.hi.toFixed(1)})</span></td><td class="num ${cls}">${sign(d, 1)}년</td><td>${jpill(b.j)}</td></tr>`;
+      }).join("");
+      g("sim-out").innerHTML = `<div class="scroll"><table class="tbl"><thead><tr><th>부품</th><th>지금 날씨</th><th>바꾼 날씨</th><th>차이</th><th>바꾼 날씨 판정</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <p class="small muted" style="margin-top: 8px">바꾼 날씨: 기온 ${s2.T.toFixed(1)}°C, 습도 ${s2.RH}%, 일교차 ${s2.DT.toFixed(1)}°C. 타이밍벨트·풀리·도어 행거·종합제어반 릴레이는 날씨와 상관없이 10년입니다.</p>`;
+    };
+    ["sim-st", "sim-rh", "sim-dt", "sim-t"].forEach(id => g(id).addEventListener("input", upd));
+    g("sim-reset").addEventListener("click", () => { g("sim-rh").value = 0; g("sim-dt").value = 0; g("sim-t").value = 0; upd(); });
+    upd();
+  }
+
+  const VIEWS = { work: vWork, station: vStation, board: vBoard, plan: vPlan, basis: vBasis };
+  function bindView() {
+    const q = app.querySelector("#st-search");
+    if (q) q.addEventListener("input", () => {
+      const v = q.value.trim(); let n = 0;
+      app.querySelectorAll("#route-list > li").forEach(li => { const hit = !v || li.querySelector(".nm").textContent.includes(v); li.classList.toggle("hide", !hit); if (hit) n++; });
+      app.querySelector("#route-empty").hidden = n > 0;
+    });
+    const tt = app.querySelector("#tbltoggle");
+    if (tt) tt.addEventListener("click", () => { const t = app.querySelector("#numtbl"); t.hidden = !t.hidden; tt.textContent = t.hidden ? "숫자 표로 보기" : "숫자 표 닫기"; });
+    if (app.querySelector("#sim")) setupSim();
+  }
+
+  // ---------- 부품 상세 패널 ----------
+  function whyHTML(si, code) {
+    const s = ST[si], c = CYC[si][code], m = c.m, p = PART[code];
+    const speed = f => Math.abs(f - 1) < 0.005 ? "평균과 같은 속도로" : f > 1 ? `평균보다 <b>${f.toFixed(2)}배 빠르게</b>` : `평균보다 <b>${(1 / f).toFixed(2)}배 느리게</b>`;
+    const hl = (v, r) => v > r ? "높아" : v < r ? "낮아" : "같아";
+    if (!p.weather) {
+      return `<p style="line-height: 1.7; color: var(--ink2)">${JUDGE.fixed[2]}${code === "PSC" ? " 종합제어반은 실내 설비입니다." : ""}</p>
+        ${code === "HANGER" || code === "PULLEY" ? `<p class="small muted">참고 지표(데이터 연결 후 표시): 결빙일 수, 습윤 시간(습도 80% 초과이면서 0°C 초과인 시간)</p>` : ""}
+        <ol class="src"><li>NSWC-98 기계부품 신뢰성 핸드북: 벨트 장 없음, 베어링 계수에 날씨 입력 없음 — <a href="https://everyspec.com/USN/NSWC/NSWC-98_RELIABILITY_HDBK_SEP1998_55321/" target="_blank" rel="noopener">EverySpec</a></li></ol>`;
+    }
+    let body = "", src = [];
+    if (code === "IFM") {
+      body = `<p style="line-height: 1.7; color: var(--ink2)">${s.name}은 평균 습도가 <b>${s.RH}%</b>로 24개 역 평균(${REF.RH.toFixed(1)}%)보다 ${hl(s.RH, REF.RH)}, 릴레이 접점 부식이 ${speed(m.hum)} 진행된다고 계산했습니다.</p>
+        <div class="formula num">10년 ÷ (부식 50% × ${m.hum.toFixed(2)} + 그 외 50% × 1.00) = ${yr(c.base)}</div>
+        <p class="small muted">부식 비중을 20–80%로 바꾸면 ${c.lo.toFixed(1)}–${c.hi.toFixed(1)}년입니다.</p>`;
+      src = [["Peck 온습도 가속 모델", "https://metricgate.com/docs/peck-temperature-humidity-bias/"]];
+    } else if (code === "MOTOR") {
+      body = `<p style="line-height: 1.7; color: var(--ink2)">${s.name}은 연평균 기온이 <b>${s.T.toFixed(1)}°C</b>로 24개 역 평균(${REF.T.toFixed(1)}°C)보다 ${hl(s.T, REF.T)}, 모터 권선 절연이 ${speed(m.mot)} 노화한다고 계산했습니다.</p>
+        <div class="formula num">10년 ÷ (절연 노화 30% × ${m.mot.toFixed(2)} + 그 외 70% × 1.00) = ${yr(c.base)}</div>
+        <p class="small muted">절연 노화 비중을 10–50%로 바꾸면 ${c.lo.toFixed(1)}–${c.hi.toFixed(1)}년입니다.</p>`;
+      src = [["NSWC-98 식 14-4 권선 온도 계수", "https://everyspec.com/USN/NSWC/NSWC-98_RELIABILITY_HDBK_SEP1998_55321/"]];
+    } else {
+      body = `<p style="line-height: 1.7; color: var(--ink2)">DCM은 고장 원인 세 가지가 함께 작용합니다. 원인마다 이 역의 날씨로 열화 속도를 구해 합쳤습니다.</p>
+        <div class="scroll"><table class="wt"><thead><tr><th class="l">고장 원인</th><th class="l">날씨</th><th>열화 속도</th></tr></thead><tbody>
+          <tr><td class="l">콘덴서 노화</td><td class="l">기온</td><td class="num">${m.cap.toFixed(2)}배</td></tr>
+          <tr><td class="l">납땜 열피로</td><td class="l">일교차</td><td class="num">${m.sol.toFixed(2)}배</td></tr>
+          <tr><td class="l">습도 부식</td><td class="l">습도·기온</td><td class="num">${m.hum.toFixed(2)}배</td></tr>
+        </tbody></table></div>
+        <div class="formula num">10년 ÷ (25% × ${m.cap.toFixed(2)} + 25% × ${m.sol.toFixed(2)} + 25% × ${m.hum.toFixed(2)} + 25% × 1.00) = ${yr(c.base)}</div>
+        <p class="small muted">각 비중을 10–50%로 바꾸면 ${c.lo.toFixed(1)}–${c.hi.toFixed(1)}년입니다.</p>`;
+      src = [["Nichicon 콘덴서 수명 계산기", "https://www.nichicon.com/en-us/design-support/lifetime-calculator/"], ["Norris-Landzberg 납땜 피로", "https://accendoreliability.com/norris-landzberg-solder-joint-fatigue/"], ["Peck 온습도 가속 모델", "https://metricgate.com/docs/peck-temperature-humidity-bias/"]];
+    }
+    return body + `<table class="wt"><thead><tr><th class="l">날씨(가정값)</th><th>${s.name}</th><th>24개 역 평균</th></tr></thead><tbody>
+        <tr><td class="l">평균 습도</td><td class="num">${s.RH}%</td><td class="num">${REF.RH.toFixed(1)}%</td></tr>
+        <tr><td class="l">연평균 기온</td><td class="num">${s.T.toFixed(1)}°C</td><td class="num">${REF.T.toFixed(1)}°C</td></tr>
+        <tr><td class="l">평균 일교차</td><td class="num">${s.DT.toFixed(1)}°C</td><td class="num">${REF.DT.toFixed(1)}°C</td></tr></tbody></table>
+      <button class="lnk" type="button" data-act="sim" data-v="${si}">이 역 날씨를 바꿔 보기 ›</button>
+      <ol class="src">${src.map(x => `<li><a href="${x[1]}" target="_blank" rel="noopener">${x[0]}</a></li>`).join("")}</ol>`;
+  }
+  function drawerHTML(o) {
+    const si = o.st, s = ST[si], p = PART[o.code], c = CYC[si][o.code];
+    const unitLevel = o.door !== undefined && o.code !== "PSC";
+    const us = data().units[si].filter(u => u.code === o.code && (!unitLevel || u.door === o.door));
+    const worst = us.reduce((a, u) => RANK[u.s] < RANK[a] ? u.s : a, "green");
+    const ms = o.s && us.some(u => u.s === o.s) ? o.s : worst;
+    const main = us.filter(u => u.s === ms), first = main.reduce((a, u) => u.due < a.due ? u : a);
+    const installs = [...new Set(main.map(u => iso(u.install)))];
+    const doorsArg = main.map(u => u.door).filter(Boolean).join(",");
+    const recV = `${si}|${o.code}|${unitLevel ? o.door : doorsArg}`;
+    const loc = unitLevel ? DOOR[o.door].label : o.code === "PSC" ? "역 공통(종합제어반)" : `대상 문 <b class="num" style="color: var(--ink)">${main.length}</b> / ${us.length}`;
+    const confirmed = CONFIRMED.has(si + "|" + o.code);
+    let box;
+    if (ms === "check") {
+      box = `<div class="sbox check">
+        <div class="when"><span class="small" style="color: var(--c); font-weight: 600">예정일</span><b class="num" style="font-weight: 500">${iso(first.due)}</b><span class="num over">${leftText(first.left)}</span></div>
+        <p>교체 기록 없이 예정일이 지났습니다. 이미 교체했다면 기록을 입력해 주세요. 교체하지 않았다면 긴급 교체 대상으로 바꿉니다.</p>
+        <div class="actions"><button class="btn" type="button" data-act="rec" data-v="${recV}">이미 교체함 — 기록 입력</button><button class="btn ghost" type="button" data-act="confirm" data-v="${si}|${o.code}">교체 안 함 — 긴급으로</button></div>
+      </div>`;
+    } else {
+      const hint = { red: "6개월 안에 교체해야 합니다.", amber: "1년 안에 교체해야 합니다.", green: "아직 여유가 있습니다." }[ms];
+      box = `<div class="sbox">
+        <div class="when"><span class="small muted" style="font-weight: 600">다음 교체</span><b class="num" style="font-weight: 500">${iso(first.due)}</b><span class="num ${first.left < 0 ? "over" : ""}">${leftText(first.left)}</span></div>
+        <p>${hint}${confirmed ? " 확인 결과 교체하지 않은 것으로 표시했습니다." : ""}</p>
+        <div class="actions"><button class="btn ${ms === "green" ? "ghost" : ""}" type="button" data-act="rec" data-v="${recV}">교체 기록 입력</button>${confirmed ? `<button class="btn ghost" type="button" data-act="unconfirm" data-v="${si}|${o.code}">확인 필요로 되돌리기</button>` : ""}</div>
+      </div>`;
+    }
+    const pos = x => ((Math.min(Math.max(x, 7), 13) - 7) / 6 * 100).toFixed(2) + "%";
+    const range = c.j === "fixed" ? "" : `<div class="rangebar" role="img" aria-label="${esc(`권장 주기 ${yr(c.base)}, 원인 비중을 바꾸면 ${c.lo.toFixed(1)}–${c.hi.toFixed(1)}년, 제조사 권장 10년`)}"><div class="track"></div><div class="band" style="left:${pos(c.lo)};width:calc(${pos(c.hi)} - ${pos(c.lo)})"></div><div class="tick" style="left:${pos(10)}"></div><div class="base" style="left:${pos(c.base)}"></div></div>
+      <div class="rangeaxis"><span>7년</span><span>10년 (제조사 권장)</span><span>13년</span></div>
+      <p class="small muted">점 = 기본 계산 · 띠 = 원인 비중을 바꿨을 때 ${c.lo.toFixed(1)}–${c.hi.toFixed(1)}년</p>`;
+    const others = unitLevel ? [] : us.filter(u => u.s !== ms).sort((a, b) => RANK[a.s] - RANK[b.s] || a.due - b.due);
+    const otherHTML = others.length ? `<section><h3>다른 상태인 문 <span class="muted num" style="font-weight: 400">${others.length}</span></h3><div class="lst">${others.slice(0, 8).map(u => `<div><span><b>${where(u)}</b> ${chip(u.s)}</span><span class="num small muted">다음 ${iso(u.due)}</span></div>`).join("")}${others.length > 8 ? `<div><span class="small muted">외 ${others.length - 8}개</span></div>` : ""}</div></section>` : "";
+    const hist = RECORDS.filter(r => r.st === si && r.parts.includes(o.code) && r.date <= TODAY && (!unitLevel || r.door === o.door)).sort((a, b) => b.date - a.date);
+    const histHTML = hist.length ? `<div class="lst">${hist.map(r => `<div><span><b class="num">${iso(r.date)}</b> · ${REASONS[r.reason]} · ${r.door ? DOOR[r.door].label : "종합제어반"}${r.parts.length > 1 ? ` <span class="small muted">(함께: ${r.parts.filter(x => x !== o.code).map(x => PART[x].name).join(", ")})</span>` : ""}</span><span class="small muted">${r.example ? "예시 기록" : "입력한 기록"}</span></div>`).join("")}</div>` : `<p class="muted">교체 기록이 없습니다. 개통일(${iso(s.open)})을 설치일로 봅니다.</p>`;
+    return `<aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="dw-title">
+      <div class="drawer-h"><span><button class="lnk" type="button" data-act="st" data-v="${si}" style="font-weight: 500">${s.name}</button> › 부품 상세</span><button class="x" type="button" data-act="close" aria-label="닫기">${ICON.x}</button></div>
+      <div class="drawer-b">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div class="ttl"><h1 id="dw-title" style="font-size: 22px">${p.name}</h1>${chip(ms)}</div>
+          <p class="small muted" style="font-size: 13.5px">${s.name} · ${loc} · 설치 ${installs.length === 1 ? `<span class="num">${installs[0]}</span> ${main[0].hist.length ? "(마지막 교체)" : "(개통일)"}` : "문마다 다름"}</p>
+        </div>
+        ${box}
+        <section><h3>이 역의 권장 주기</h3><div class="ttl"><span class="bignum">${yr(c.base)}</span>${jpill(c.j)}</div><p class="small muted">${JUDGE[c.j][2]}</p>${range}</section>
+        <section><h3>${c.j === "fixed" ? "왜 10년인가" : c.j === "short" ? "왜 짧은가" : c.j === "long" ? "왜 긴가" : "어떻게 계산했나"}</h3>${whyHTML(si, o.code)}</section>
+        ${otherHTML}
+        <section><h3>교체 이력</h3>${histHTML}</section>
+      </div>
+    </aside>`;
+  }
+
+  // ---------- 교체 기록 입력 ----------
+  function modalHTML(o) {
+    const tab = o.tab || "direct";
+    const head = `<div class="modal-h"><div class="row1"><h1 id="m-title" style="font-size: 19px">교체 기록 입력</h1><button class="x" type="button" data-act="close" aria-label="닫기">${ICON.x}</button></div>
+      <div class="tabs2" role="tablist"><button class="tab2" type="button" role="tab" aria-selected="${tab === "direct"}" data-act="mtab" data-v="direct">직접 입력</button><button class="tab2" type="button" role="tab" aria-selected="${tab === "xlsx"}" data-act="mtab" data-v="xlsx">엑셀 일괄 업로드</button></div></div>`;
+    if (tab === "xlsx") {
+      return `<form class="modal" id="xlsxform" role="dialog" aria-modal="true" aria-labelledby="m-title" novalidate>${head}
+        <div class="modal-b">
+          <p style="color: var(--ink2); line-height: 1.6">열: <b>역, 방향, 문번호, 교체일, 사유, 부품, 입력자</b>. 한 행이라도 틀리면 전체를 저장하지 않습니다.</p>
+          <label class="fld"><span>파일(.xlsx)</span><input type="file" accept=".xlsx" style="padding: 8px 0"></label>
+          <p class="small muted">목업이라 실제로 파일을 읽지는 않습니다.</p>
+        </div>
+        <div class="modal-f"><span></span><div class="actions"><button class="btn ghost" type="button" data-act="close">취소</button><button class="btn" type="submit">업로드</button></div></div></form>`;
+    }
+    const doors = new Set(o.doors || []), chosen = new Set(o.parts || []);
+    const excluded = o.parts && o.parts.length && doors.size && doors.size < DOORS.length && o.parts[0] !== "PSC" ? DOORS.filter(d => !doors.has(d.id)) : [];
+    const sideRow = sid => `<div class="drs"><span class="sd">${SIDES[sid]}</span><div class="cars">${[1, 2, 3, 4].map(car => `<div class="car" role="group" aria-label="${car}호차">${DOORS.filter(d => d.sid === sid && d.car === car).map(d => `<label class="dr"><input type="checkbox" name="door" value="${d.id}" ${doors.has(d.id) ? "checked" : ""} aria-label="${esc(d.label)}">${d.no}</label>`).join("")}</div>`).join("")}</div></div>`;
+    return `<form class="modal" id="recform" role="dialog" aria-modal="true" aria-labelledby="m-title" novalidate>${head}
+      <div class="modal-b">
+        <div class="grid3">
+          <label class="fld"><span>역</span><select id="m-st">${ST.map(x => `<option value="${x.i}" ${x.i === o.st ? "selected" : ""}>${x.i + 1}. ${x.name}</option>`).join("")}</select></label>
+          <label class="fld"><span>교체일</span><input type="date" id="m-date" class="num" value="${iso(TODAY)}" max="${iso(TODAY)}"></label>
+          <label class="fld"><span>입력자</span><input type="text" id="m-who" placeholder="이름" autocomplete="name"></label>
+        </div>
+        <fieldset><legend class="lg">교체 사유</legend><div class="segr">${Object.entries(REASONS).map(([k, v]) => `<label><input type="radio" name="reason" value="${k}" ${k === (o.reason || "prev") ? "checked" : ""}>${v}</label>`).join("")}</div></fieldset>
+        <fieldset><legend class="lg">교체한 부품 <span class="muted">· 여러 개 선택</span></legend><div class="pcs">${PARTS.map(p => `<label class="pc"><input type="checkbox" name="part" value="${p.code}" ${chosen.has(p.code) ? "checked" : ""}>${p.name}</label>`).join("")}</div>
+          <p class="small muted">종합제어반 릴레이는 문과 상관없이 역에 1개입니다.</p></fieldset>
+        <fieldset><legend class="lg">문 선택 <span class="muted">· 문 부품을 고른 경우</span></legend>
+          <div class="quick"><button class="lnk" type="button" data-act="dsel" data-v="all">전체 선택</button><button class="lnk" type="button" data-act="dsel" data-v="U">부전 방면 전체</button><button class="lnk" type="button" data-act="dsel" data-v="D">북울산 방면 전체</button><button class="lnk" type="button" data-act="dsel" data-v="none" style="color: var(--muted)">선택 해제</button></div>
+          ${sideRow("U")}${sideRow("D")}
+          ${excluded.length && excluded.length <= 6 ? `<p class="small muted">${excluded.map(d => d.label).join(", ")}은(는) 이 부품의 상태가 달라 기본 선택에서 뺐습니다.</p>` : ""}
+        </fieldset>
+        <p class="err" id="m-err" role="alert" hidden></p>
+      </div>
+      <div class="modal-f"><span id="m-sum"></span><div class="actions"><button class="btn ghost" type="button" data-act="close">취소</button><button class="btn" type="submit" id="m-save">저장</button></div></div>
+    </form>`;
+  }
+  function modalPick() {
+    const f = ovEl.querySelector("#recform");
+    const parts = [...f.querySelectorAll("input[name=part]:checked")].map(x => x.value);
+    const doorParts = parts.filter(c => c !== "PSC"), psc = parts.includes("PSC");
+    const doors = [...f.querySelectorAll("input[name=door]:checked")].map(x => x.value);
+    return { f, parts, doorParts, psc, doors, n: (doorParts.length ? doors.length * doorParts.length : 0) + (psc ? 1 : 0) };
+  }
+  function updateSum() {
+    if (!ovEl.querySelector("#recform")) return;
+    const m = modalPick();
+    const bits = [];
+    if (m.doorParts.length) bits.push(`문 <b class="num">${m.doors.length}</b>개 × 부품 <b class="num">${m.doorParts.length}</b>개`);
+    if (m.psc) bits.push("종합제어반 1개");
+    ovEl.querySelector("#m-sum").innerHTML = bits.length ? `${bits.join(" + ")} = 교체 <b class="num" style="color: var(--accent)">${m.n}</b>건` : `<span class="muted">부품을 고르세요</span>`;
+    ovEl.querySelector("#m-save").textContent = m.n ? m.n + "건 저장" : "저장";
+  }
+  function saveRecords(e) {
+    e.preventDefault();
+    const m = modalPick(), err = ovEl.querySelector("#m-err");
+    const st = Number(ovEl.querySelector("#m-st").value), d = ovEl.querySelector("#m-date").value;
+    const msg = !d ? "교체일을 입력하세요." : parseDate(d) > TODAY ? `교체일은 기준일(${iso(TODAY)}) 이후일 수 없습니다.` : !m.parts.length ? "교체한 부품을 하나 이상 고르세요." : m.doorParts.length && !m.doors.length ? "문을 하나 이상 고르세요." : "";
+    if (msg) { err.textContent = msg; err.hidden = false; return; }
+    const reason = m.f.querySelector("input[name=reason]:checked").value, date = parseDate(d);
+    if (m.doorParts.length) m.doors.forEach(door => RECORDS.push({ id: seq++, st, date, door, parts: m.doorParts, reason, example: false }));
+    if (m.psc) RECORDS.push({ id: seq++, st, date, door: null, parts: ["PSC"], reason, example: false });
+    m.parts.forEach(c => CONFIRMED.delete(st + "|" + c));
+    dirty();
+    closeOverlay();
+    render(true);
+    toast(`${ST[st].name} 교체 ${m.n}건을 저장하고 예정일을 다시 계산했습니다.`);
+  }
+
+  // ---------- 겹쳐 뜨는 화면 열기·닫기 ----------
+  function openOverlay(o) {
+    if (!overlay) lastFocus = document.activeElement;
+    overlay = o;
+    renderOverlay();
+  }
+  function renderOverlay() {
+    if (!overlay) { ovEl.innerHTML = ""; document.body.style.overflow = ""; return; }
+    ovEl.innerHTML = `<div class="scrim" data-act="close"></div>` + (overlay.type === "drawer" ? drawerHTML(overlay) : modalHTML(overlay));
+    document.body.style.overflow = "hidden";
+    const f = ovEl.querySelector("#recform");
+    if (f) { f.addEventListener("submit", saveRecords); f.addEventListener("change", updateSum); updateSum(); }
+    const xf = ovEl.querySelector("#xlsxform");
+    if (xf) xf.addEventListener("submit", e => { e.preventDefault(); toast("목업이라 실제로 업로드하지는 않습니다."); });
+    const first = ovEl.querySelector(overlay.type === "drawer" ? ".x" : "#m-st, .tab2[aria-selected=true]");
+    if (first) first.focus();
+  }
+  function closeOverlay() {
+    overlay = null; renderOverlay();
+    if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
+  }
+  function parseRec(v) {
+    if (!v) return { type: "modal", st: view.name === "station" ? (view.st ?? defaultSt()) : 0, parts: [], doors: [] };
+    const [st, code, doors] = v.split("|");
+    return { type: "modal", st: Number(st), parts: code ? [code] : [], doors: code === "PSC" ? [] : doors ? doors.split(",") : (code ? DOORS.map(d => d.id) : []) };
+  }
+
+  // ---------- 이벤트 ----------
+  document.addEventListener("click", e => {
+    const el = e.target.closest("[data-act]");
+    if (!el || el.disabled) return;
+    const a = el.dataset.act, v = el.dataset.v;
+    if (a === "nav") { closeOverlayQuiet(); go(v === "station" ? { name: "station", st: view.st } : { name: v }); }
+    else if (a === "wf") { ui.filter = ui.filter === v && v !== "all" ? "all" : v; ui.shown = 15; render(true); }
+    else if (a === "more") { ui.shown += 15; render(true); }
+    else if (a === "range") { ui.range = v; render(true); }
+    else if (a === "st") { closeOverlayQuiet(); go({ name: "station", st: Number(v) }); }
+    else if (a === "sp") { const [st, code, s] = v.split("|"); openOverlay({ type: "drawer", st: Number(st), code, s }); }
+    else if (a === "unit") { const [st, code, door] = v.split("|"); openOverlay({ type: "drawer", st: Number(st), code, door }); }
+    else if (a === "rec") { openOverlay(parseRec(v)); }
+    else if (a === "mtab") { if (overlay) { overlay.tab = v; renderOverlay(); } }
+    else if (a === "dsel") { ovEl.querySelectorAll("input[name=door]").forEach(x => { x.checked = v === "all" || (v !== "none" && x.value[0] === v) || (v !== "none" && v !== "all" && x.checked); }); updateSum(); }
+    else if (a === "confirm") { CONFIRMED.add(v); dirty(); render(true); renderOverlay(); toast("긴급 교체 대상으로 바꿨습니다."); }
+    else if (a === "unconfirm") { CONFIRMED.delete(v); dirty(); render(true); renderOverlay(); toast("확인 필요로 되돌렸습니다."); }
+    else if (a === "sim") { closeOverlayQuiet(); go({ name: "basis", simSt: Number(v) }); setTimeout(() => { const s = app.querySelector("#sim"); if (s) s.scrollIntoView({ block: "start" }); }, 0); }
+    else if (a === "close") { closeOverlay(); }
+    else if (a === "toast") { toast(el.dataset.msg); }
+    else if (a === "print") { window.print(); }
+  });
+  function closeOverlayQuiet() { if (overlay) { overlay = null; renderOverlay(); } }
+  document.addEventListener("change", e => {
+    if (e.target.id === "f-st") { ui.st = e.target.value; ui.shown = 15; render(true); }
+    else if (e.target.id === "f-part") { ui.part = e.target.value; ui.shown = 15; render(true); }
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && overlay) { closeOverlay(); return; }
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("tr[data-act]")) { e.preventDefault(); e.target.click(); }
+  });
+
+  // 그래프 툴팁: 값이 먼저, 이름은 뒤에. 라벨은 textContent로 넣는다
+  const tipEl = document.getElementById("tip");
+  function showTip(el) {
+    const d = JSON.parse(el.dataset.tip);
+    tipEl.replaceChildren();
+    const t = document.createElement("b"); t.textContent = d.t; tipEl.append(t);
+    d.r.forEach(([k, v]) => { const row = document.createElement("div"), vv = document.createElement("strong"), kk = document.createElement("span"); vv.textContent = v; kk.textContent = " " + k; row.append(vv, kk); tipEl.append(row); });
+    tipEl.hidden = false;
+  }
+  function placeTip(x, y) {
+    const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    tipEl.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x + 14)) + "px";
+    tipEl.style.top = Math.max(8, y - h - 12) + "px";
+  }
+  app.addEventListener("pointermove", e => { const el = e.target.closest && e.target.closest("[data-tip]"); if (!el) { tipEl.hidden = true; return; } showTip(el); placeTip(e.clientX, e.clientY); });
+  app.addEventListener("pointerleave", () => { tipEl.hidden = true; });
+  app.addEventListener("focusin", e => { const el = e.target.closest && e.target.closest("[data-tip]"); if (!el) return; showTip(el); const r = el.getBoundingClientRect(); placeTip(r.left + r.width / 2, r.top); });
+  app.addEventListener("focusout", () => { tipEl.hidden = true; });
+
+  render();
+})();
+</script>
+</body>
+</html>

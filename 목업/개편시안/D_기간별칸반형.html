@@ -1,0 +1,61 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>개편 시안 D · 기간별 칸반형</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --blue: #0065b3; --blue-soft: #e9f2fa; --bg: #f5f7f9; --card: #fff; --ink: #14181d; --muted: #616a75; --faint: #9aa2ac; --line: #e4e8ec;
+  --red: #e0352b; --red-soft: #fdecea; --amber: #f2a900; --amber-ink: #946600; --amber-soft: #fdf4dc; --gray: #7d8590; --gray-soft: #eef0f3;
+}
+body { width: 1280px; background: var(--bg); color: var(--ink); font-family: Pretendard, sans-serif; font-size: 14px; line-height: 1.5; }
+.num { font-variant-numeric: tabular-nums; }
+/* 상단: 흰 바탕 + 위쪽 파란 띠. 탭은 밑줄 하나로 */
+.top { background: #fff; border-top: 4px solid var(--blue); border-bottom: 1px solid var(--line); }
+.top .in { width: 1200px; margin: 0 auto; height: 60px; display: flex; align-items: center; gap: 40px; }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 800; letter-spacing: -0.4px; }
+.brand i { width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
+nav { display: flex; gap: 28px; height: 100%; }
+nav a { display: flex; align-items: center; font-size: 15px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+nav a.on { color: var(--ink); font-weight: 800; border-color: var(--blue); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 13px; }
+.iconbtn { width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); }
+.page { width: 1200px; margin: 0 auto; padding: 28px 0 40px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+h2 { font-size: 16px; font-weight: 800; letter-spacing: -0.3px; }
+.muted { color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.c-red { color: var(--red); background: var(--red-soft); }
+.c-amber { color: var(--amber-ink); background: var(--amber-soft); }
+.c-gray { color: var(--gray); background: var(--gray-soft); }
+.c-blue { color: var(--blue); background: var(--blue-soft); }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border-radius: 6px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.btn.pri { background: var(--blue); color: #fff; }
+.btn.sec { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+.note { text-align: center; color: var(--faint); font-size: 12px; margin-top: 18px; }
+
+.hello { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; }
+.hello h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.8px; line-height: 1.3; }
+.hello h1 em { font-style: normal; color: var(--red); }
+.hello p { color: var(--muted); font-size: 15px; margin-top: 4px; }
+
+.board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; align-items: start; }
+.col { background: #eceff3; border-radius: 12px; padding: 12px; }
+.col .h { display: flex; align-items: center; gap: 8px; padding: 4px 4px 12px; font-size: 15px; font-weight: 800; }
+.col .h i { width: 10px; height: 10px; border-radius: 50%; }
+.col .h span { margin-left: auto; font-size: 12.5px; color: var(--muted); font-weight: 700; }
+.kc { background: #fff; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(20,24,29,.08); border-left: 4px solid transparent; }
+.kc .t { display: flex; justify-content: space-between; align-items: baseline; }
+.kc .t b { font-size: 16px; font-weight: 800; }
+.kc .t span { font-size: 13.5px; font-weight: 800; }
+.kc .p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.kc.r { border-left-color: var(--red); } .kc.r .t span { color: var(--red); }
+.kc.y { border-left-color: var(--amber); } .kc.y .t span { color: var(--amber-ink); }
+.kc.g .t b { font-size: 15px; } .kc.g { padding: 9px 14px; }
+.more { text-align: center; font-size: 12.5px; color: var(--muted); padding: 4px 0 2px; }
+</style></head><body><header class="top"><div class="in">
+  <div class="brand"><i>동해</i>스크린도어 교체 관리</div>
+  <nav><a class="on">현황</a><a class="">역</a><a class="">교체 기록</a><a class="">분석</a></nav>
+  <div class="right"><span>2026년 11월 1일 기준</span><span class="iconbtn" title="어둡게"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></div>
+</div></header><main class="page"><div class="hello"><div><h1>6개월 안에 바꿀 부품이 <em>38개</em> 있어요</h1>
+<p>역마다 가장 먼저 오는 교체를 기간별로 나눴어요. 왼쪽 칸부터 처리하면 됩니다.</p></div><span class="btn pri">+ 교체 기록 입력</span></div>
+<div class="board"><section class="col"><div class="h"><i style="background:var(--red)"></i>6개월 안<span>3곳 · 38개</span></div><div class="kc r"><div class="t"><b>오시리아</b><span class="num">D-84</span></div><div class="p num">IFM 릴레이 12개 · 2027.01.24</div></div><div class="kc r"><div class="t"><b>벡스코</b><span class="num">D-144</span></div><div class="p num">IFM 릴레이 13개 · 2027.03.25</div></div><div class="kc r"><div class="t"><b>월내</b><span class="num">D-146</span></div><div class="p num">IFM 릴레이 13개 · 2027.03.27</div></div></section><section class="col"><div class="h"><i style="background:var(--amber)"></i>1년 안<span>7곳 · 102개</span></div><div class="kc y"><div class="t"><b>송정</b><span class="num">D-186</span></div><div class="p num">IFM 릴레이 13개 · 2027.05.06</div></div><div class="kc y"><div class="t"><b>센텀</b><span class="num">D-188</span></div><div class="p num">IFM 릴레이 14개 · 2027.05.08</div></div><div class="kc y"><div class="t"><b>신해운대</b><span class="num">D-209</span></div><div class="p num">IFM 릴레이 14개 · 2027.05.29</div></div><div class="kc y"><div class="t"><b>일광</b><span class="num">D-231</span></div><div class="p num">IFM 릴레이 15개 · 2027.06.20</div></div><div class="kc y"><div class="t"><b>부산원동</b><span class="num">D-308</span></div><div class="p num">DCM 14개 · 2027.09.05</div></div><div class="kc y"><div class="t"><b>덕하</b><span class="num">D-328</span></div><div class="p num">IFM 릴레이 15개 · 2027.09.25</div></div><div class="kc y"><div class="t"><b>좌천</b><span class="num">D-334</span></div><div class="p num">IFM 릴레이 17개 · 2027.10.01</div></div></section><section class="col"><div class="h"><i style="background:var(--blue)"></i>2년 안<span>10곳</span></div><div class="kc g"><div class="t"><b>재송</b><span class="num">1년 1개월</span></div><div class="p num">IFM 릴레이 · 2027.11.20</div></div><div class="kc g"><div class="t"><b>동래</b><span class="num">1년 2개월</span></div><div class="p num">IFM 릴레이 · 2027.12.22</div></div><div class="kc g"><div class="t"><b>남창</b><span class="num">1년 4개월</span></div><div class="p num">IFM 릴레이 · 2028.03.08</div></div><div class="kc g"><div class="t"><b>교대</b><span class="num">1년 5개월</span></div><div class="p num">IFM 릴레이 · 2028.03.22</div></div><div class="kc g"><div class="t"><b>거제해맞이</b><span class="num">1년 5개월</span></div><div class="p num">DCM · 2028.03.25</div></div><div class="kc g"><div class="t"><b>서생</b><span class="num">1년 6개월</span></div><div class="p num">IFM 릴레이 · 2028.05.09</div></div><div class="kc g"><div class="t"><b>부전</b><span class="num">1년 7개월</span></div><div class="p num">IFM 릴레이 · 2028.06.11</div></div><div class="kc g"><div class="t"><b>태화강</b><span class="num">1년 10개월</span></div><div class="p num">DCM · 2028.08.16</div></div><div class="kc g"><div class="t"><b>망양</b><span class="num">1년 10개월</span></div><div class="p num">DCM · 2028.09.15</div></div><div class="kc g"><div class="t"><b>안락</b><span class="num">1년 11개월</span></div><div class="p num">IFM 릴레이 · 2028.10.09</div></div></section><section class="col"><div class="h"><i style="background:var(--faint)"></i>그 뒤<span>3곳</span></div><div class="kc g"><div class="t"><b>기장</b><span class="num">2년 1개월</span></div><div class="p num">IFM 릴레이 · 2028.11.19</div></div><div class="kc g"><div class="t"><b>개운포</b><span class="num">2년 8개월</span></div><div class="p num">DCM · 2029.07.05</div></div><div class="kc g"><div class="t"><b>거제</b><span class="num">2년 11개월</span></div><div class="p num">IFM 릴레이 · 2029.09.27</div></div></section></div>
+<p class="note">개편 시안 D · 기간별 칸반형 — 실제 2026.11.01 데이터 기준(월내 주의 2개는 위험 카드에 포함)</p></main></body></html>

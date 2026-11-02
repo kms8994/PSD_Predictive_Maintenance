@@ -35,15 +35,15 @@ def test_action_table_lists_warning_parts_most_urgent_first():
     statuses = [_unit(i, 1, code, 2000) for i, code in enumerate(DOOR_CODES)]
     statuses += [_unit(100 + i, 2, code, 2000) for i, code in enumerate(DOOR_CODES)]
     statuses[0] = _unit(0, 1, DOOR_CODES[0], 300)  # 주의
-    statuses[7] = _unit(107, 2, DOOR_CODES[1], 30)  # 위험
+    statuses[7] = _unit(107, 2, DOOR_CODES[1], 30)  # 교체 임박
     statuses.append(_unit(999, None, "PSC", -40))  # 확인 필요(기록 없이 지남)
     records = [RecordInfo(date(2026, 10, 1), "부전 방면 1-1", ["DCM", "IFM"], "fail", "정비1팀")]
 
     text = "".join(p.extract_text() for p in PdfReader(io.BytesIO(_build(statuses, doors, records))).pages)
 
-    assert "조치가 필요한 부품이 없습니다" not in text
-    first, second, third = text.index("위험"), text.index("확인 필요"), text.index("주의")
-    assert first < second < third  # 표 머리(상태 요약)에서 위험·확인 필요·주의 순서
+    assert "교체할 부품이 없습니다" not in text
+    first, second, third = text.index("교체 임박"), text.index("확인 필요"), text.index("주의")
+    assert first < second < third  # 표 머리(상태 요약)에서 교체 임박·확인 필요·주의 순서
     assert "40일 지남" in text
     assert "DCM, IFM 릴레이" in text
 
@@ -54,5 +54,20 @@ def test_no_warning_parts_says_so_and_shows_soonest():
 
     text = PdfReader(io.BytesIO(_build(statuses, doors))).pages[0].extract_text()
 
-    assert "조치가 필요한 부품이 없습니다" in text
-    assert "교체 기록 없음" in text
+    assert "1년 안에 교체할 부품이 없습니다" in text
+
+
+def test_work_list_groups_doors_and_order_table_counts_by_period():
+    """2026-11-02: 같은 부품·예정일인 문은 한 줄로 묶어 문 번호를 나열하고(수량 = 문 수), 주문 수량은 기간별로 센다."""
+    doors = [DoorInfo(i, "U" if i <= 2 else "D", 1, (i - 1) % 2 + 1, "") for i in range(1, 5)]
+    statuses = [_unit(10 * i + k, i, code, 2000) for i in range(1, 5) for k, code in enumerate(DOOR_CODES)]
+    ifm = DOOR_CODES.index("IFM")
+    for i in (1, 2, 3):  # 문 세 개의 IFM이 같은 날 교체 임박
+        statuses[(i - 1) * len(DOOR_CODES) + ifm] = _unit(10 * i + ifm, i, "IFM", 60)
+    statuses.append(_unit(999, None, "PSC", 3000))
+
+    text = PdfReader(io.BytesIO(_build(statuses, doors))).pages[0].extract_text()
+
+    assert "3개" in text  # 한 줄로 묶인 수량
+    assert "부전 방면 1-1, 1-2" in text and "북울산 방면 1-1" in text
+    assert "자재 주문 수량" in text and "지난 1년 고장" in text

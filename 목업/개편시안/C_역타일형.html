@@ -1,0 +1,67 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>개편 시안 C · 역 타일형</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --blue: #0065b3; --blue-soft: #e9f2fa; --bg: #f5f7f9; --card: #fff; --ink: #14181d; --muted: #616a75; --faint: #9aa2ac; --line: #e4e8ec;
+  --red: #e0352b; --red-soft: #fdecea; --amber: #f2a900; --amber-ink: #946600; --amber-soft: #fdf4dc; --gray: #7d8590; --gray-soft: #eef0f3;
+}
+body { width: 1280px; background: var(--bg); color: var(--ink); font-family: Pretendard, sans-serif; font-size: 14px; line-height: 1.5; }
+.num { font-variant-numeric: tabular-nums; }
+/* 상단: 흰 바탕 + 위쪽 파란 띠. 탭은 밑줄 하나로 */
+.top { background: #fff; border-top: 4px solid var(--blue); border-bottom: 1px solid var(--line); }
+.top .in { width: 1200px; margin: 0 auto; height: 60px; display: flex; align-items: center; gap: 40px; }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 800; letter-spacing: -0.4px; }
+.brand i { width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
+nav { display: flex; gap: 28px; height: 100%; }
+nav a { display: flex; align-items: center; font-size: 15px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+nav a.on { color: var(--ink); font-weight: 800; border-color: var(--blue); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 13px; }
+.iconbtn { width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); }
+.page { width: 1200px; margin: 0 auto; padding: 28px 0 40px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+h2 { font-size: 16px; font-weight: 800; letter-spacing: -0.3px; }
+.muted { color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.c-red { color: var(--red); background: var(--red-soft); }
+.c-amber { color: var(--amber-ink); background: var(--amber-soft); }
+.c-gray { color: var(--gray); background: var(--gray-soft); }
+.c-blue { color: var(--blue); background: var(--blue-soft); }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border-radius: 6px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.btn.pri { background: var(--blue); color: #fff; }
+.btn.sec { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+.note { text-align: center; color: var(--faint); font-size: 12px; margin-top: 18px; }
+
+.hello { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; }
+.hello h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.8px; line-height: 1.3; }
+.hello h1 em { font-style: normal; color: var(--red); }
+.hello p { color: var(--muted); font-size: 15px; margin-top: 4px; }
+
+.filters { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; }
+.f { padding: 6px 14px; border-radius: 99px; border: 1px solid var(--line); background: #fff; font-size: 13.5px; font-weight: 700; color: var(--muted); }
+.f.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.f b { margin-left: 4px; }
+.filters .r { margin-left: auto; font-size: 13px; color: var(--muted); }
+.grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+.tile { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 14px; position: relative; min-height: 128px; display: flex; flex-direction: column; }
+.tile .no { font-size: 11.5px; color: var(--faint); font-weight: 700; }
+.tile .nm { font-size: 18px; font-weight: 800; letter-spacing: -0.4px; margin: 1px 0 8px; }
+.tile .big { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin-top: auto; }
+.tile .big small { font-size: 13px; font-weight: 700; margin-left: 2px; }
+.tile .nx { font-size: 12.5px; color: var(--muted); }
+.tile.r { border-color: #f3b4ae; background: linear-gradient(var(--red-soft), #fff 70%); box-shadow: inset 0 4px 0 var(--red); }
+.tile.y { border-color: #f0d58a; background: linear-gradient(var(--amber-soft), #fff 70%); box-shadow: inset 0 4px 0 var(--amber); }
+.tile.r .big { color: var(--red); } .tile.y .big { color: var(--amber-ink); }
+.tile.g .big { font-size: 15px; color: var(--muted); font-weight: 700; }
+.tile.x { background: transparent; border-style: dashed; color: var(--faint); }
+.tile .arrow { position: absolute; right: -11px; top: 50%; width: 10px; height: 2px; background: var(--blue); }
+</style></head><body><header class="top"><div class="in">
+  <div class="brand"><i>동해</i>스크린도어 교체 관리</div>
+  <nav><a class="on">현황</a><a class="">역</a><a class="">교체 기록</a><a class="">분석</a></nav>
+  <div class="right"><span>2026년 11월 1일 기준</span><span class="iconbtn" title="어둡게"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></div>
+</div></header><main class="page"><div class="hello"><div><h1>6개월 안에 바꿀 부품이 <em>38개</em> 있어요</h1>
+<p>역을 노선 순서대로 놓았어요. 색이 있는 칸부터 보면 됩니다.</p></div><span class="btn pri">+ 교체 기록 입력</span></div>
+<div class="filters"><span class="f on">전체 <b>23</b></span><span class="f">위험 <b style="color:var(--red)">3</b></span><span class="f">주의 <b style="color:var(--amber-ink)">7</b></span><span class="f">안전 <b>13</b></span>
+<span class="r">부전 → 북울산 순서 · 카드를 누르면 역 상세</span></div>
+<div class="grid"><div class="tile g"><div class="no">01</div><div class="nm">부전</div><div class="big num">안전</div><div class="nx num">다음 IFM 릴레이 · 1년 7개월</div></div><div class="tile g"><div class="no">02</div><div class="nm">거제해맞이</div><div class="big num">안전</div><div class="nx num">다음 DCM · 1년 5개월</div></div><div class="tile g"><div class="no">03</div><div class="nm">거제</div><div class="big num">안전</div><div class="nx num">다음 IFM 릴레이 · 2년 11개월</div></div><div class="tile g"><div class="no">04</div><div class="nm">교대</div><div class="big num">안전</div><div class="nx num">다음 IFM 릴레이 · 1년 5개월</div></div><div class="tile g"><div class="no">05</div><div class="nm">동래</div><div class="big num">안전</div><div class="nx num">다음 IFM 릴레이 · 1년 2개월</div></div><div class="tile g"><div class="no">06</div><div class="nm">안락</div><div class="big num">안전</div><div class="nx num">다음 IFM 릴레이 · 1년 11개월</div></div><div class="tile y"><div class="no">07</div><div class="nm">부산원동</div><div class="big num">14<small>개 주의</small></div><div class="nx num">다음 DCM · D-308</div></div><div class="tile g"><div class="no">08</div><div class="nm">재송</div><div class="big num">안전</div><div class="nx num">다음 IFM 릴레이 · 1년 1개월</div></div><div class="tile y"><div class="no">09</div><div class="nm">센텀</div><div class="big num">14<small>개 주의</small></div><div class="nx num">다음 IFM 릴레이 · D-188</div></div><div class="tile r"><div class="no">10</div><div class="nm">벡스코</div><div class="big num">13<small>개 위험</small></div><div class="nx num">다음 IFM 릴레이 · D-144</div></div><div class="tile y"><div class="no">11</div><div class="nm">신해운대</div><div class="big num">14<small>개 주의</small></div><div class="nx num">다음 IFM 릴레이 · D-209</div></div><div class="tile y"><div class="no">12</div><div class="nm">송정</div><div class="big num">13<small>개 주의</small></div><div class="nx num">다음 IFM 릴레이 · D-186</div></div><div class="tile r"><div class="no">13</div><div class="nm">오시리아</div><div class="big num">12<small>개 위험</small></div><div class="nx num">다음 IFM 릴레이 · D-84</div></div><div class="tile g"><div class="no">14</div><div class="nm">기장</div><div class="big num">안전</div><div class="nx num">다음 IFM 릴레이 · 2년 1개월</div></div><div class="tile y"><div class="no">15</div><div class="nm">일광</div><div class="big num">15<small>개 주의</small></div><div class="nx num">다음 IFM 릴레이 · D-231</div></div><div class="tile y"><div class="no">16</div><div class="nm">좌천</div><div class="big num">17<small>개 주의</small></div><div class="nx num">다음 IFM 릴레이 · D-334</div></div><div class="tile r"><div class="no">17</div><div class="nm">월내</div><div class="big num">13<small>개 위험</small><small style="color:var(--amber-ink)"> · 주의 2</small></div><div class="nx num">다음 IFM 릴레이 · D-146</div></div><div class="tile g"><div class="no">18</div><div class="nm">서생</div><div class="big num">안전</div><div class="nx num">다음 IFM 릴레이 · 1년 6개월</div></div><div class="tile g"><div class="no">19</div><div class="nm">남창</div><div class="big num">안전</div><div class="nx num">다음 IFM 릴레이 · 1년 4개월</div></div><div class="tile g"><div class="no">20</div><div class="nm">망양</div><div class="big num">안전</div><div class="nx num">다음 DCM · 1년 10개월</div></div><div class="tile y"><div class="no">21</div><div class="nm">덕하</div><div class="big num">15<small>개 주의</small></div><div class="nx num">다음 IFM 릴레이 · D-328</div></div><div class="tile g"><div class="no">22</div><div class="nm">개운포</div><div class="big num">안전</div><div class="nx num">다음 DCM · 2년 8개월</div></div><div class="tile g"><div class="no">23</div><div class="nm">태화강</div><div class="big num">안전</div><div class="nx num">다음 DCM · 1년 10개월</div></div><div class="tile x"><div class="no">24</div><div class="nm">북울산</div><div class="nx" style="margin-top:auto">개통 전</div></div></div>
+<p class="note">개편 시안 C · 역 타일형 — 실제 2026.11.01 데이터 기준</p></main></body></html>

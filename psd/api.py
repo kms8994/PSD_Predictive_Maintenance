@@ -5,13 +5,13 @@
 from __future__ import annotations
 
 import io
+import math
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import case, func, select
@@ -60,7 +60,8 @@ from psd.status import (
 from psd.sync import RecordSig, diff_records
 
 app = FastAPI(title="동해선 PSD 교체주기 API")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# CORS는 열지 않는다: 화면(psd/web)은 같은 주소에서 나가서 필요 없고, allow_origins=["*"]로 두면 아무 웹사이트나
+# 이 API의 기록·보고서를 읽어 갈 수 있었다(2026-11-02 QA). 로그인은 아직 없다 — 배포 전에 넣는다
 
 NAME_BY_CODE = {p["code"]: p["name"] for p in PART_TYPES}
 WEATHER_PART_CODES = ["DCM", "IFM", "MOTOR"]
@@ -166,6 +167,12 @@ def _unit_dict(u: UnitStatus) -> dict:
     }
 
 
+@app.get("/api/today")
+def get_today():
+    """상태·예정일을 계산하는 기준일(서버의 오늘). 화면 위쪽에 "기준일"로 늘 보여 준다."""
+    return {"today": date.today()}
+
+
 @app.get("/api/part-types")
 def list_part_types():
     """부품 종류 목록(코드·이름·단위·날씨 계산 여부). 화면의 고정 표시용 — 계산값은 아님."""
@@ -200,6 +207,41 @@ def _part_cycle(part: Part, db: Session) -> CycleResult:
 # ---------- 4-1. 노선 ----------
 
 
+def _part_summary(units: list[UnitStatus], doors: dict[int, Door] | None = None) -> dict[str, dict]:
+    """부품 종류마다 가장 급한 상태와 그 예정일, 상태별 개수. 역 화면의 "부품별 상태" 표와 노선 격자에 쓴다.
+
+    doors(문 id → Door)를 주면 부품 하나하나(어느 문인지·상태·예정일)도 급한 순으로 넣는다 — 역 화면에서
+    "위험 12개가 어느 문인지" 작업 지시서에 옮겨 적으려고(2026-11-02). 노선 목록(24개 역)에는 안 넣는다.
+    """
+    by_code: dict[str, list[UnitStatus]] = {}
+    for u in units:
+        by_code.setdefault(u.part_type_code, []).append(u)
+    out = {}
+    for code, us in by_code.items():
+        w = worst(us)
+        out[code] = {
+            "status": w.status,
+            "due": w.due,
+            "days_left": w.days_left,
+            "part_id": w.part_id,
+            "total": len(us),
+            "counts": counts(us),
+        }
+        if doors is not None:
+            out[code]["units"] = [
+                {
+                    "part_id": u.part_id,
+                    "side": doors[u.door_id].side if u.door_id else None,
+                    "no": f"{doors[u.door_id].car}-{doors[u.door_id].position}" if u.door_id else None,
+                    "status": u.status,
+                    "due": u.due,
+                    "days_left": u.days_left,
+                }
+                for u in sorted(us, key=lambda u: (RANK[u.status], u.days_left, u.door_id or 0))
+            ]
+    return out
+
+
 @app.get("/api/stations")
 def list_stations(db: Session = Depends(get_db)):
     by_station: dict[int, list[UnitStatus]] = {}
@@ -231,6 +273,7 @@ def list_stations(db: Session = Depends(get_db)):
                     "days_left": soonest.days_left,
                     "part_type_code": soonest.part_type_code,
                 } if soonest else None,
+                "parts": _part_summary(units),
             }
         )
     # 교체 기록이 한 번도 없는 부품은 예정일을 설치일(PSD 사용개시일)로 추정한다 — 관리자가 예정일을 얼마나 믿을지 보라고 비율을 같이 준다
@@ -305,6 +348,9 @@ def recent_replacement_records(
     order: str = "created",
     station_id: int | None = None,
     part: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    reason: str | None = None,
     db: Session = Depends(get_db),
 ):
     """교체 기록 목록(교체 기록 탭의 기록 찾기, 현황의 "최근 교체 기록").
@@ -312,10 +358,13 @@ def recent_replacement_records(
     order=created(기본): 입력 순서 최신부터. 업로드가 제대로 들어갔는지 확인하는 용도.
     한 번에 올린 기록은 입력 시각이 같아서, 그 안에서는 교체일 최신부터 늘어놓는다.
     order=replaced: 교체일 최신부터.
-    station_id·part(부품 종류 코드)로 거르고 offset으로 쪽을 넘긴다. total은 거른 뒤의 건수.
+    station_id·part(부품 종류 코드)·교체일 기간(date_from~date_to, 양 끝 포함)·reason(사유 코드)으로 거르고
+    offset으로 쪽을 넘긴다. total은 거른 뒤의 건수.
     """
     if order not in ("created", "replaced"):
         raise HTTPException(400, "order는 created 또는 replaced여야 함")
+    if reason is not None and reason not in REASON_CODE_TO_LABEL:
+        raise HTTPException(400, f"reason은 {', '.join(REASON_CODE_TO_LABEL)} 중 하나여야 함")
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
     newest_replaced = (ReplacementRecord.replaced_on.desc(), ReplacementRecord.id.desc())
@@ -325,6 +374,12 @@ def recent_replacement_records(
         where.append(ReplacementRecord.station_id == station_id)
     if part:
         where.append(ReplacementRecord.id.in_(select(ReplacementPart.record_id).where(ReplacementPart.part_type_code == part)))
+    if date_from:
+        where.append(ReplacementRecord.replaced_on >= date_from)
+    if date_to:
+        where.append(ReplacementRecord.replaced_on <= date_to)
+    if reason:
+        where.append(ReplacementRecord.reason == reason)
     records = (
         db.execute(
             select(ReplacementRecord)
@@ -407,11 +462,13 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
             "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[station.name]],
             "near_water": station.near_water,
             "in_service": station.in_service,
+            "psd_install_date": PSD_START[station.id],  # 역 화면에 개통일과 따로 보여 준다(개통 2016인데 PSD는 2022인 역이 있다)
             "service_interval_min": SERVICE_INTERVAL_MIN,  # 참고용, 계산에는 안 씀 — psd/cycle.py 주석 참고
         },
         "psc": _unit_dict(psc) if psc else None,
         "sides": {sid: {"label": label, "doors": sides[sid]} for sid, label in SIDES.items()},
         "counts": counts(statuses),
+        "parts": _part_summary(statuses, {d.id: d for d in doors}),
     }
 
 
@@ -542,11 +599,13 @@ def simulate_weather(station_id: int, d_temp: float = 0.0, d_rh: float = 0.0, d_
 
     실제 저장된 계산(기간 평균 가속 계수)과 같은 방식을 써야 "지금 날씨" 결과와 비교할 수 있다.
     """
+    if not all(math.isfinite(x) for x in (d_temp, d_rh, d_dt)):
+        raise HTTPException(400, "d_temp·d_rh·d_dt는 숫자여야 함(nan·inf 안 됨)")
     station = db.get(Station, station_id)
     if station is None:
         raise HTTPException(404, "역 없음")
     aws_stn = AWS_STN_BY_STATION[station.name]
-    to_dict = lambda c: {"base_years": round(c.base_years, 2), "lo_years": round(c.lo_years, 2), "hi_years": round(c.hi_years, 2), "judgment": c.judgment}
+    to_dict =lambda c: {"base_years": round(c.base_years, 2), "lo_years": round(c.lo_years, 2), "hi_years": round(c.hi_years, 2), "judgment": c.judgment}
     return {
         "station_id": station_id,
         "change": {"d_temp": d_temp, "d_rh": d_rh, "d_dt": d_dt},
@@ -599,13 +658,21 @@ def _next_quarter(yq: tuple[int, int], n: int) -> tuple[int, int]:
     return idx // 4, idx % 4 + 1
 
 
-@app.get("/api/replacement-volume")
-def replacement_volume(years_ahead: int = 5, db: Session = Depends(get_db)):
-    today = date.today()
-    start_q = _quarter(today)
-    window = {_next_quarter(start_q, i) for i in range(years_ahead * 4 + 1)}
+def _next_month(ym: tuple[int, int], n: int) -> tuple[int, int]:
+    idx = ym[0] * 12 + (ym[1] - 1) + n
+    return idx // 12, idx % 12 + 1
 
-    table: dict[tuple[int, int], dict[str, int]] = {q: {p["code"]: 0 for p in PART_TYPES} for q in window}
+
+def _plan_counts(db: Session, today: date, buckets: list, bucket_of) -> tuple[dict, dict, dict[str, int]]:
+    """앞으로의 교체 예정을 기간(buckets)마다 부품 종류별·역 x 부품 종류별로 센다.
+
+    교체한 뒤 다음 주기 예정일도 기간 안이면 다시 센다. 이미 지난(위험) 부품은 지금 기간에 넣는다.
+    확인 필요(기록 없이 예정일 지남)는 언제 바꿀지 알 수 없어 따로 센다.
+    역별은 {(역 id, 부품 코드): 개수}로 준다 — 역 합계만 주면 그 역에 무슨 부품을 챙겨 가야 할지 몰랐다(2026-11-02).
+    """
+    window = set(buckets)
+    by_part = {b: {p["code"]: 0 for p in PART_TYPES} for b in buckets}
+    by_station: dict = {b: {} for b in buckets}
     check: dict[str, int] = {p["code"]: 0 for p in PART_TYPES}
 
     cal_map = calibration_map(db, today)
@@ -620,13 +687,22 @@ def replacement_volume(years_ahead: int = 5, db: Session = Depends(get_db)):
         d = today if days_left < 0 else due
         cycle_days = max(1, round(years * 365.25))  # 0 이하면 무한 루프라 최소 1일
         while True:
-            q = _quarter(d)
-            if q not in table:
+            b = bucket_of(d)
+            if b not in window:
                 break
-            table[q][part.part_type_code] += 1
+            by_part[b][part.part_type_code] += 1
+            key = (part.station_id, part.part_type_code)
+            by_station[b][key] = by_station[b].get(key, 0) + 1
             d = d + timedelta(days=cycle_days)
+    return by_part, by_station, check
 
-    quarters = sorted(window)
+
+@app.get("/api/replacement-volume")
+def replacement_volume(years_ahead: int = 5, db: Session = Depends(get_db)):
+    today = date.today()
+    start_q = _quarter(today)
+    quarters = [_next_quarter(start_q, i) for i in range(years_ahead * 4 + 1)]
+    table, _, check = _plan_counts(db, today, quarters, _quarter)
     return {
         "current_quarter": _quarter_label(start_q),
         "check": {"counts": check, "total": sum(check.values())},
@@ -635,6 +711,124 @@ def replacement_volume(years_ahead: int = 5, db: Session = Depends(get_db)):
             for q in quarters
         ],
     }
+
+
+# 교체 계획 화면의 기간: 12개월은 월별, 3년은 분기별, 5년은 연도별. 지금 달·분기·해(남은 기간만)를 맨 앞에 넣는다
+PLAN_SPANS = ("12m", "3y", "5y")
+
+
+def _station_rows(by_key: dict[tuple[int, str], int], names: dict[int, str]) -> list[dict]:
+    """{(역 id, 부품 코드): 개수} → 역마다 합계와 부품별 개수, 많은 역부터."""
+    rows: dict[int, dict] = {}
+    for (sid, code), n in by_key.items():
+        r = rows.setdefault(sid, {"id": sid, "name": names[sid], "count": 0, "parts": {}})
+        r["count"] += n
+        r["parts"][code] = n
+    return sorted(rows.values(), key=lambda r: (-r["count"], r["id"]))
+
+
+@app.get("/api/replacement-plan")
+def replacement_plan(span: str = "12m", db: Session = Depends(get_db)):
+    """기간마다 교체 예정 부품 수(부품 종류별·역별). 자재 발주와 작업 배분, 몰리는 때 앞당겨 나눌 역 고르기에 쓴다."""
+    return _replacement_plan(span, db)
+
+
+def _replacement_plan(span: str, db: Session) -> dict:
+    if span not in PLAN_SPANS:
+        raise HTTPException(400, f"span은 {', '.join(PLAN_SPANS)} 중 하나여야 함")
+    today = date.today()
+    if span == "12m":
+        buckets = [_next_month((today.year, today.month), i) for i in range(13)]
+        bucket_of, label, unit = (lambda d: (d.year, d.month)), (lambda b: f"{b[0]}년 {b[1]}월"), "month"
+    elif span == "3y":
+        buckets = [_next_quarter(_quarter(today), i) for i in range(13)]
+        bucket_of, label, unit = _quarter, _quarter_label, "quarter"
+    else:
+        buckets = [(today.year + i, 0) for i in range(6)]
+        bucket_of, label, unit = (lambda d: (d.year, 0)), (lambda b: f"{b[0]}년"), "year"
+    by_part, by_station, check = _plan_counts(db, today, buckets, bucket_of)
+    names = {s.id: s.name for s in db.execute(select(Station)).scalars()}
+    # 계획은 예정 교체만 센다. 돌발 고장 대비 예비품은 지난 1년 고장 교체 수를 참고로 같이 준다 — 3년 계획에 타이밍벨트가
+    # 0개로 나와도 실제로는 고장이 나고 있어, 0만 보고 발주하면 예비품이 모자랐다(2026-11-02)
+    recent_failures = {p["code"]: 0 for p in PART_TYPES}
+    for (_sid, code), n in _recent_failures(db, today).items():
+        recent_failures[code] += n
+    return {
+        "today": today,
+        "span": span,
+        "unit": unit,
+        "check": {"counts": check, "total": sum(check.values())},
+        "recent_failures": recent_failures,
+        "buckets": [
+            {
+                "label": label(b),
+                "year": b[0],
+                "sub": b[1],
+                "counts": by_part[b],
+                "total": sum(by_part[b].values()),
+                "stations": _station_rows(by_station[b], names),
+            }
+            for b in buckets
+        ],
+    }
+
+
+@app.get("/api/replacement-plan/export")
+def export_replacement_plan(span: str = "12m", db: Session = Depends(get_db)):
+    """교체 계획을 엑셀로: "부품별"(부품 x 기간), "역별"(역 x 기간), "역x부품"(기간·역·부품·수량 한 줄씩 — 발주서에 거르기 좋게)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    plan = _replacement_plan(span, db)
+    B = plan["buckets"]
+    labels = [b["label"] for b in B]
+    wb = Workbook()
+
+    def sheet(ws, header: list[str], rows: list[list], widths: list[int]):
+        ws.append(header)
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="1D5EA8")
+        for r in rows:
+            ws.append(r)
+        ws.freeze_panes = "B2"
+        for i, w in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+    by_part = wb.active
+    by_part.title = "부품별"
+    rf = plan["recent_failures"]
+    part_rows = [[p["name"], *[b["counts"][p["code"]] for b in B], sum(b["counts"][p["code"]] for b in B), rf[p["code"]]] for p in PART_TYPES]
+    part_rows.append(["합계", *[b["total"] for b in B], sum(b["total"] for b in B), sum(rf.values())])
+    sheet(by_part, ["부품", *labels, "합계", "참고: 지난 1년 고장 교체(예비품)"], part_rows, [16, *[12] * len(B), 10, 18])
+    for cell in by_part[by_part.max_row]:
+        cell.font = Font(bold=True)
+
+    stations: dict[int, dict] = {}
+    for i, b in enumerate(B):
+        for s in b["stations"]:
+            stations.setdefault(s["id"], {"name": s["name"], "n": [0] * len(B)})["n"][i] = s["count"]
+    st_rows = [[v["name"], *v["n"], sum(v["n"])] for _sid, v in sorted(stations.items())]
+    sheet(wb.create_sheet("역별"), ["역", *labels, "합계"], st_rows, [12, *[12] * len(B), 10])
+
+    long_rows = [[b["label"], s["name"], NAME_BY_CODE[code], n]
+                 for b in B for s in sorted(b["stations"], key=lambda s: s["id"])
+                 for code in (p["code"] for p in PART_TYPES) if (n := s["parts"].get(code))]
+    ws = wb.create_sheet("역x부품")
+    sheet(ws, ["기간", "역", "부품", "수량"], long_rows, [14, 12, 16, 8])
+    ws.auto_filter.ref = ws.dimensions
+
+    if plan["check"]["total"]:
+        note = wb.create_sheet("확인 필요")
+        sheet(note, ["부품", "개수(계획에서 뺌 — 기록 없이 예정일이 지나 교체 여부부터 확인)"],
+              [[NAME_BY_CODE[c], n] for c, n in plan["check"]["counts"].items() if n], [16, 60])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    name = {"12m": "12개월", "3y": "3년", "5y": "5년"}[span]
+    today = plan["today"]
+    return _xlsx_response(buf.getvalue(), f"PSD_교체계획_{name}_{today:%Y%m%d}.xlsx", f"PSD_plan_{span}_{today:%Y%m%d}.xlsx")
 
 
 # ---------- 4-7. 교체 기록 올리기 (엑셀이 원본, psd/sync.py) ----------
@@ -661,6 +855,12 @@ def _resolve_rows(db: Session, parsed: list[ParsedRow]) -> list[tuple[ParsedRow,
         station = station_by_name.get(row.station_name)
         if station is None:
             errors.append(f"{row.row_no}행: 역 이름을 못 찾음: {row.station_name!r}")
+            continue
+        # PSD 사용개시 전 날짜(2026을 2016으로 치는 오타 등)가 들어가면 설치일이 그날로 바뀌어 부품이 수천 일 지난
+        # "위험"이 됐다 — 주기 보정(psd/calibrate.py part_lives)은 이런 날짜를 빼지만 설치일 계산은 안 뺐다(2026-11-02 QA)
+        if row.replaced_on < PSD_START[station.id]:
+            errors.append(f"{row.row_no}행: 교체일 {row.replaced_on}이 {station.name} PSD 사용개시일"
+                          f"({PSD_START[station.id]})보다 앞섭니다")
             continue
 
         door_id = None
@@ -772,7 +972,7 @@ SHOW_ROWS = 300  # 비교 결과에 줄 단위로 보여 줄 최대 수(건수�
 MISSING_WARN = 20  # 엑셀에서 빠진 기록이 이만큼 넘으면 "다른 파일을 고른 것 같다"고 경고
 
 
-def _sync(db: Session, content: bytes, file_name: str, delete_missing: bool) -> dict:
+def _sync(db: Session, content: bytes, file_name: str, delete_missing: bool, uploaded_by: str | None = None) -> dict:
     """엑셀을 DB와 비교하고 엑셀에 맞춘다(flush까지만). 커밋·롤백은 부르는 쪽이 정한다 —
     비교 화면·정비기록 시연은 롤백, "반영하기"는 커밋.
 
@@ -812,7 +1012,11 @@ def _sync(db: Session, content: bytes, file_name: str, delete_missing: bool) -> 
     old_row = lambda rid: labels.row(_sig_of(by_id[rid]), by_id[rid].created_by)  # noqa: E731
     result = {
         "file": file_name,
-        "scope": {"from": scope_from, "to": scope_to, "stations": len(station_ids)},
+        # 범위의 양 끝이 엑셀 몇 행인지도 준다 — 이번 달 파일에 옛날 정정 한 줄만 섞여도 범위가 몇 년으로 넓어져
+        # "엑셀에 없는 기록"이 수백 건 뜨는데, 왜 그런지 찾을 수 있게(2026-11-02)
+        "scope": {"from": scope_from, "to": scope_to, "stations": len(station_ids),
+                  "from_row": min(row.row_no for row, sig in resolved if sig.replaced_on == scope_from),
+                  "to_row": min(row.row_no for row, sig in resolved if sig.replaced_on == scope_to)},
         "counts": {"new": len(d.new), "changed": len(d.changed), "missing": len(d.missing), "db_duplicates": len(d.db_duplicates),
                    "same": d.same, "file_duplicates": d.file_duplicates},
         "delete_missing": delete_missing,
@@ -834,6 +1038,7 @@ def _sync(db: Session, content: bytes, file_name: str, delete_missing: bool) -> 
     batch = UploadBatch(
         file_name=file_name[:255], scope_from=scope_from, scope_to=scope_to, station_count=len(station_ids),
         inserted=len(d.new), updated=len(d.changed), deleted=result["deleted"], removed=[_record_dict(r) for r in to_delete],
+        uploaded_by=(uploaded_by or "").strip()[:50] or None,
     )
     db.add(batch)
     db.flush()
@@ -911,15 +1116,17 @@ async def compare_replacement_records(file: UploadFile, delete_missing: bool = F
 
 
 @app.post("/api/replacement-records/sync", status_code=201)
-async def sync_replacement_records(file: UploadFile, delete_missing: bool = Form(False), db: Session = Depends(get_db)):
-    """비교 화면의 "반영하기": 엑셀에 맞춰 DB를 고치고 업로드 이력을 남긴다(열 형식은 psd/excel_io.py)."""
-    result = _sync(db, await file.read(), file.filename or "업로드.xlsx", delete_missing)
+async def sync_replacement_records(file: UploadFile, delete_missing: bool = Form(False), uploaded_by: str | None = Form(None),
+                                   db: Session = Depends(get_db)):
+    """비교 화면의 "반영하기": 엑셀에 맞춰 DB를 고치고 업로드 이력을 남긴다(열 형식은 psd/excel_io.py).
+    uploaded_by는 화면에서 적은 올린 사람 이름(선택) — 이력에서 누가 올렸는지 보려고(2026-11-02)."""
+    result = _sync(db, await file.read(), file.filename or "업로드.xlsx", delete_missing, uploaded_by)
     db.commit()
     return result
 
 
 # 정비기록 시연 탭에서 쓰는 샘플(scripts/make_sample_records.py로 만든 파일)
-SAMPLE_RECORDS_PATH = Path(__file__).resolve().parent.parent / "data" / "dummy" / "정비기록_샘플_162건.xlsx"
+SAMPLE_RECORDS_PATH = Path(__file__).resolve().parent.parent / "data" / "dummy" / "정비기록_샘플_329건.xlsx"
 
 
 def _sample_bytes() -> bytes:
@@ -948,7 +1155,7 @@ def sample_records():
 @app.post("/api/sample-records/preview")
 def preview_sample_records(db: Session = Depends(get_db)):
     """샘플을 올렸다고 치고 결과만 계산한 뒤 롤백한다 — 몇 번을 눌러도 DB는 그대로다.
-    샘플은 한 정비팀의 기록이라 다른 기록(초기 데이터)은 지우지 않는다(delete_missing=False)."""
+    샘플엔 그 역·기간의 초기 데이터도 들어 있어 "엑셀에 없는 기록"이 없지만, 만에 하나 있어도 지우지 않는다(delete_missing=False)."""
     try:
         result = _sync(db, _sample_bytes(), SAMPLE_RECORDS_PATH.name, delete_missing=False)
     finally:
@@ -977,7 +1184,7 @@ def list_upload_batches(limit: int = 20, db: Session = Depends(get_db)):
                 "id": b.id, "file_name": b.file_name, "uploaded_at": b.uploaded_at,
                 "scope_from": b.scope_from, "scope_to": b.scope_to, "station_count": b.station_count,
                 "inserted": b.inserted, "updated": b.updated, "deleted": b.deleted,
-                "undone_at": b.undone_at, "can_undo": b.id == latest,
+                "undone_at": b.undone_at, "can_undo": b.id == latest, "uploaded_by": b.uploaded_by,
             }
             for b in batches
         ],
@@ -1070,87 +1277,47 @@ def _xlsx_response(content: bytes, filename: str, ascii_name: str) -> StreamingR
 # ---------- 4-8. 보고서 출력 (2026-10-25 사용자 지시) ----------
 
 
-# 보고서 색상·표시 이름은 psd/web/index.html의 .pill 색(--red/--amber/--green/--gray)과 맞췄다.
-_REPORT_COLUMNS = ["역", "문", "부품", "상태", "다음 교체 예정일", "남은 기간(일)", "권장 주기(년)", "주기 범위(년)", "판정", "설치일", "교체 기록 있음"]
-_REPORT_STATUS_LABEL = {"빨강": "빨강", "노랑": "노랑", "초록": "초록", "확인_필요": "확인 필요"}
-_REPORT_STATUS_FILL = {"빨강": "FBE8E4", "노랑": "FBF1DC", "초록": "E2F3E9", "확인_필요": "ECEFF3"}
-_REPORT_STATUS_FONT = {"빨강": "CF4430", "노랑": "C98A12", "초록": "2B9457", "확인_필요": "7D8796"}
-# 화면(psd/web/index.html의 JUDGE 객체)과 같은 표시 문구로 맞춘다
-_REPORT_JUDGMENT_LABEL = {"같음": "10년과 같음", "짧음_확실": "짧음 확실", "김_확실": "김 확실", "불확실": "불확실", "날씨무관": "날씨 보정 없음"}
+def _recent_failures(db: Session, today: date, station_id: int | None = None) -> dict[tuple[int, str], int]:
+    """(역, 부품) → 지난 1년 고장으로 바꾼 부품 수. 계획·보고서의 예비품 참고(예정 교체엔 돌발 고장이 없다)."""
+    q = (select(ReplacementRecord.station_id, ReplacementPart.part_type_code, func.count())
+         .join(ReplacementRecord, ReplacementRecord.id == ReplacementPart.record_id)
+         .where(ReplacementRecord.reason == "fail", ReplacementRecord.replaced_on > today - timedelta(days=365))
+         .group_by(ReplacementRecord.station_id, ReplacementPart.part_type_code))
+    if station_id is not None:
+        q = q.where(ReplacementRecord.station_id == station_id)
+    return {(sid, code): n for sid, code, n in db.execute(q)}
 
 
-def _report_workbook(statuses: list[UnitStatus], station_names: dict[int, str], door_labels: dict[int, str]):
-    """보기 쉬운 엑셀 보고서를 만든다: 상태별 색칠, 날짜는 진짜 날짜형, 머리글 고정, 자동 필터."""
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.utils import get_column_letter
+def _door_positions(db: Session, station_id: int | None = None) -> dict[int, "DoorPos"]:
+    from psd.report_common import DoorPos
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "PSD 보고서"
-    ws.append(_REPORT_COLUMNS)
-    for cell in ws[1]:
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill("solid", fgColor="1D5EA8")
-        cell.alignment = Alignment(horizontal="center")
-    ws.freeze_panes = "A2"
-
-    for u in sorted(statuses, key=lambda u: (station_names[u.station_id], u.door_id or 0, u.part_type_code)):
-        ws.append([
-            station_names[u.station_id],
-            door_labels.get(u.door_id, "역 공통(종합제어반)"),
-            NAME_BY_CODE[u.part_type_code],
-            _REPORT_STATUS_LABEL[u.status],
-            u.due,
-            u.days_left,
-            round(u.cycle_years, 2),  # 기록 반영 주기(예정일에 쓴 값). 범위·판정은 날씨 공식 기준
-            f"{u.cycle.lo_years:.1f}-{u.cycle.hi_years:.1f}",
-            _REPORT_JUDGMENT_LABEL[u.cycle.judgment],
-            u.install_date,
-            "예" if u.has_record else "아니오",
-        ])
-        r = ws.max_row
-        status_cell = ws.cell(row=r, column=4)
-        status_cell.fill = PatternFill("solid", fgColor=_REPORT_STATUS_FILL[u.status])
-        status_cell.font = Font(bold=True, color=_REPORT_STATUS_FONT[u.status])
-        for col in (5, 10):  # 다음 교체 예정일, 설치일
-            ws.cell(row=r, column=col).number_format = "yyyy-mm-dd"
-
-    ws.auto_filter.ref = ws.dimensions
-    for i, width in enumerate([10, 16, 12, 10, 14, 11, 12, 12, 10, 12, 12], start=1):
-        ws.column_dimensions[get_column_letter(i)].width = width
-    return wb
+    q = select(Door) if station_id is None else select(Door).where(Door.station_id == station_id)
+    return {d.id: DoorPos(d.side, d.car, d.position) for d in db.execute(q).scalars()}
 
 
 @app.get("/api/report")
 def download_report(station_id: int | None = None, db: Session = Depends(get_db)):
-    """지금 화면에 보이는 상태를 엑셀로 내려받는다. station_id 없으면 24개 역 전체."""
+    """교체 보고서(엑셀). station_id 없으면 운영 중인 역 전체. 시트 구성은 psd/report_excel.py."""
+    from psd.report_excel import build_report_workbook
+
+    today = date.today()
     if station_id is not None:
         station = db.get(Station, station_id)
         if station is None:
             raise HTTPException(404, "역 없음")
         statuses = station_unit_statuses(db, station_id)
-        filename = f"PSD_보고서_{station.name}_{date.today():%Y%m%d}.xlsx"
+        title, filename = f"{station.name}역 PSD 부품 교체 보고서", f"PSD_보고서_{station.name}_{today:%Y%m%d}.xlsx"
     else:
         statuses = all_unit_statuses(db)
-        filename = f"PSD_보고서_전체_{date.today():%Y%m%d}.xlsx"
+        title, filename = "동해선 PSD 부품 교체 보고서(전체 역)", f"PSD_보고서_전체_{today:%Y%m%d}.xlsx"
 
-    station_names = {s.id: s.name for s in db.execute(select(Station)).scalars()}
-    door_labels = {d.id: d.label for d in db.execute(select(Door)).scalars()}
-
+    station_names = {s.id: s.name for s in db.execute(select(Station)).scalars() if any(u.station_id == s.id for u in statuses)}
+    wb = build_report_workbook(statuses, station_names, _door_positions(db, station_id), PSD_START,
+                               _recent_failures(db, today, station_id), title, today)
     buf = io.BytesIO()
-    _report_workbook(statuses, station_names, door_labels).save(buf)
-    buf.seek(0)
-    # 코드 리뷰로 찾은 버그: HTTP 헤더는 latin-1만 되는데 파일명에 한글이 들어가면
-    # StreamingResponse 생성 자체가 UnicodeEncodeError로 죽는다. RFC 5987대로
-    # filename*=UTF-8''(퍼센트 인코딩)을 같이 주고, 예전 클라이언트용 filename=은
-    # ASCII만 남긴 이름으로 둔다.
-    ascii_name = "PSD_report.xlsx"
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"},
-    )
+    wb.save(buf)
+    # 한글 파일명은 filename*=UTF-8''(RFC 5987)로 준다 — HTTP 헤더는 latin-1만 돼서 그냥 넣으면 응답 생성이 죽었다
+    return _xlsx_response(buf.getvalue(), filename, "PSD_report.xlsx")
 
 
 def _station_pdf(db: Session, station: Station) -> bytes:
@@ -1167,7 +1334,7 @@ def _station_pdf(db: Session, station: Station) -> bytes:
             .options(joinedload(ReplacementRecord.door), joinedload(ReplacementRecord.parts))
             .where(ReplacementRecord.station_id == station.id)
             .order_by(ReplacementRecord.replaced_on.desc(), ReplacementRecord.id.desc())
-            .limit(12)
+            .limit(6)  # 2쪽 안에 들게(안전문 표 아래)
         )
         .unique()
         .scalars()
@@ -1186,6 +1353,7 @@ def _station_pdf(db: Session, station: Station) -> bytes:
             for r in recent
         ],
         record_total=total,
+        recent_failures={code: n for (_sid, code), n in _recent_failures(db, date.today(), station.id).items()},
     )
 
 
@@ -1226,4 +1394,16 @@ def download_all_stations_report_pdf(db: Session = Depends(get_db)):
 # 목업(목업/동해선_PSD_교체주기_목업.html)은 그대로 두고, 실제 API로 연결한 화면만 여기서 띄운다.
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
+
+
+@app.middleware("http")
+async def _revalidate_web(request, call_next):
+    """화면 파일은 매번 바뀌었는지 서버에 물어보게 한다(바뀌지 않았으면 304라 가볍다).
+    헤더가 없으면 브라우저가 옛 index.html을 그대로 써서, 코드를 고친 뒤에도 강력 새로고침 전까진 옛 화면이 떴다(2026-11-02)."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

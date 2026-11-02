@@ -64,8 +64,9 @@ def parse_upload(content: bytes) -> list[ParsedRow]:
     psd/api.py가 담당한다. 여기서는 엑셀 자체의 형식만 본다). 첫 시트만 읽는다(양식의 "작성 예시" 시트는 무시)."""
     try:
         df = pd.read_excel(BytesIO(content), sheet_name=0, dtype=str)
-    except Exception as e:
-        raise ExcelFormatError(0, f"엑셀 파일을 읽을 수 없습니다: {e}")
+    except Exception:
+        # pandas 오류 문구(영어, 예: "Excel file format cannot be determined")를 그대로 보여 주면 현장에서 알아보기 어렵다
+        raise ExcelFormatError(0, "엑셀 파일을 읽을 수 없습니다. .xlsx 파일인지, 다른 프로그램에서 열려 있거나 손상되지 않았는지 확인하세요")
 
     missing_cols = set(COLUMNS) - set(df.columns)
     if missing_cols:
@@ -82,6 +83,9 @@ def parse_upload(content: bytes) -> list[ParsedRow]:
             raise ExcelFormatError(row_no, "역 이름이 비어 있습니다")
 
         replaced_on_raw = r.get("교체일")
+        # 빈 칸은 pd.to_datetime이 에러 대신 NaT를 돌려줘 아래 검사를 모두 통과하고 DB에 넣을 때 500으로 죽었다(2026-11-02 QA)
+        if pd.isna(replaced_on_raw) or not str(replaced_on_raw).strip():
+            raise ExcelFormatError(row_no, "교체일이 비어 있습니다")
         try:
             replaced_on = pd.to_datetime(replaced_on_raw).date()
         except Exception:

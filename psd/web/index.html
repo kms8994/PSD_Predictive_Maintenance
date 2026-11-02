@@ -75,6 +75,9 @@ a { color: var(--accent); }
 .navbtn { appearance: none; border: 0; background: none; color: #fff; opacity: .7; font: inherit; font-size: 1.1rem; font-weight: 700; width: 30px; height: 30px; border-radius: 3px; cursor: pointer; }
 .navbtn:hover { opacity: 1; background: rgba(255, 255, 255, .12); }
 .tabs { display: flex; gap: 4px; margin-left: auto; }
+/* 상태·예정일을 계산한 기준일. 어느 화면에서든 보이게 제목 옆에 둔다(폰 폭에선 현황 노선도의 날짜로 갈음) */
+.asof { font-size: 0.75rem; opacity: .85; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .asof { display: none; } }
 /* 화면 밝기 스위치: 흰 글자를 스위치 위에 얹는다(바탕 없음). 어두울 때는 "DARK MODE" + 초록 트랙·오른쪽 짙은 손잡이,
    밝을 때는 "WHITE MODE" + 회색 트랙·왼쪽 흰 손잡이 */
 .themebtn { appearance: none; border: 0; font: inherit; font-size: 0.56rem; font-weight: 600; letter-spacing: 0.06em; line-height: 1; display: inline-flex; flex-direction: column; align-items: center; gap: 3px; padding: 2px; border-radius: 4px; cursor: pointer; white-space: nowrap; background: none; color: #fff; }
@@ -113,6 +116,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .s-green { color: var(--green); background: var(--green-soft); }
 .s-check { color: var(--gray); background: var(--gray-soft); }
 .s-info { color: var(--accent); background: var(--accent-soft); }
+/* 상태는 색만으로 구분하지 않게 모양도 붙인다(목업/다른_디자인_목업.html): 위험 ●, 확인 필요 점선 ○, 주의 ▲, 안전 ○ */
+.pill.stp::before { content: ""; width: 8px; height: 8px; flex: none; border-radius: 50%; }
+.pill.stp.s-red::before { background: currentColor; }
+.pill.stp.s-check::before { border: 1.5px dashed currentColor; }
+.pill.stp.s-amber::before { width: 0; height: 0; border-radius: 0; border-left: 4.5px solid transparent; border-right: 4.5px solid transparent; border-bottom: 8px solid currentColor; }
+.pill.stp.s-green::before { border: 1.5px solid currentColor; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.82rem; }
 .zero { opacity: 0.4; }  /* "확인 필요"처럼 지금 0건인 상태는 흐리게 — 없애진 않는다(실제 데이터에선 생길 수 있음) */
 
@@ -169,11 +178,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .items-empty { padding: 28px 12px; text-align: center; border-bottom: 1px solid var(--line); }
 .items-empty b, .items-empty span { display: block; }
 .items-empty span { margin-top: 4px; }
-.counts { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.counts div { padding: 12px 0; text-align: center; border-right: 1px solid var(--line); }
-.counts div:last-child { border-right: 0; }
-.counts b { display: block; font-size: 1.6rem; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.counts span { font-size: 0.78rem; color: var(--muted); }
+/* 요약 카드 세 장(교체 계획 위쪽, 역 탭 격자의 "눈에 띄는 패턴") */
+.scards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .scards { grid-template-columns: minmax(0, 1fr); } }
+.scard { appearance: none; font: inherit; color: inherit; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+button.scard { cursor: pointer; }
+button.scard:hover { border-color: var(--accent); }
+.scard .lab { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 0.8rem; color: var(--muted); }
+.scard .big { font-size: 1.6rem; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.scard .big small { font-size: 0.85rem; font-weight: 500; color: var(--muted); margin-left: 6px; }
+.scard .sub { font-size: 0.8rem; color: var(--muted); }
+/* 현황: 교체 예정 표 */
+.wtable tr[data-go] { cursor: pointer; }
+.wtable tr[data-go]:hover, .wtable tr[data-go]:focus-visible { background: var(--accent-soft); outline: none; }
+.wtable .late { color: var(--red); font-weight: 700; }
+/* 폰 폭에선 남은 기간이 화면 밖으로 밀리지 않게 대상·예정일 칸을 뺀다(예정일은 남은 기간에 마우스를 올리면 나옴) */
+@media (max-width: 640px) { .wtable .opt { display: none; } }
 .side { display: flex; flex-direction: column; gap: 18px; }
 /* 분기별 교체 물량(현황 오른쪽): 한 계열 막대. 위쪽 4px 둥글게, 막대 사이 간격, 바닥선·축 글자는 옅게 */
 .vchart svg { display: block; width: 100%; height: auto; overflow: visible; }
@@ -184,7 +204,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .vchart .hit:hover, .vchart .hit:focus-visible { fill: var(--surface-2); outline: none; }
 .vchart text { fill: var(--muted); font-size: 9px; font-family: var(--font-data); }
 .vchart text.top { fill: var(--ink); font-weight: 700; }
-.vchart-sum { font-size: 0.82rem; margin-top: 4px; }
 .recs { display: flex; flex-direction: column; }
 .recs .rec { font-size: 0.86rem; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .recs .rec b { font-weight: 700; } .recs .rec span { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
@@ -205,6 +224,28 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .st .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .st .badges { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .st .chev { color: var(--muted); }
+/* 역마다 위험·확인 필요·주의 부품이 차지하는 몫(나머지 회색 = 안전). 역 목록과 역 상세 왼쪽 목록에 쓴다 */
+.mbar { display: flex; width: 140px; max-width: 100%; height: 6px; border-radius: 3px; overflow: hidden; background: var(--line); margin-top: 5px; }
+.mbar i { display: block; height: 100%; }
+.mbar .r { background: var(--red); } .mbar .c { background: var(--gray); } .mbar .y { background: var(--amber-dot); }
+/* 역 상세: 넓은 화면에선 왼쪽에 역 목록을 붙여 역을 바로 바꾼다(좁으면 위쪽 이전/다음 버튼) */
+.stlayout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 24px; align-items: start; }
+.stnav { position: sticky; top: 76px; max-height: calc(100vh - 96px); overflow-y: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); display: flex; flex-direction: column; }
+.snav { appearance: none; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; padding: 8px 12px; display: flex; flex-direction: column; }
+.snav:last-child { border-bottom: 0; }
+.snav:hover { background: var(--surface-2); }
+.snav[aria-current="page"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.snav b { font-size: 0.9rem; font-weight: 700; }
+.snav span { font-size: 0.75rem; color: var(--muted); }
+.stmain { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+@media (min-width: 1001px) { .stlayout .switcher { display: none; } }
+@media (max-width: 1000px) { .stlayout { grid-template-columns: minmax(0, 1fr); } .stnav { display: none; } }
+/* 역 탭 격자: 역 x 부품마다 가장 급한 상태와 그 예정 연.월 */
+.hgrid td, .hgrid th { text-align: center; padding: 5px 6px; }
+.hgrid td:first-child, .hgrid th:first-child { text-align: left; }
+.hgrid tr[data-go] { cursor: pointer; }
+.hgrid tr[data-go]:hover td, .hgrid tr[data-go]:focus-visible td { background: var(--accent-soft); }
+.hgrid tr:focus-visible { outline: none; }
 
 .scroll {
   overflow-x: auto;
@@ -258,13 +299,46 @@ input.stfilter { width: 100%; max-width: none; padding-left: 34px; }
 .checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .checks label { font-weight: 400; display: flex; gap: 6px; align-items: center; }
 .err { color: var(--red); font-size: 0.88rem; }
-.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 3px; font-size: 0.9rem; z-index: 20; }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 3px; font-size: 0.9rem; z-index: 50; }
+/* 부품 상세: 오른쪽에서 열리는 패널. 보던 화면(현황·역 상세)은 뒤에 그대로 둔다 */
+html.noscroll { overflow: hidden; }
+.scrim { position: fixed; inset: 0; background: rgba(10, 15, 20, .42); z-index: 40; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(540px, 100vw); background: var(--bg); border-left: 1px solid var(--line); box-shadow: -12px 0 40px rgba(0, 0, 0, .25); z-index: 41; overflow-y: auto; overscroll-behavior: contain; }
+.drawer-h { position: sticky; top: 0; z-index: 1; background: var(--bg); border-bottom: 1px solid var(--line); padding: 14px 18px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.drawer-h h2 { margin: 2px 0 6px; }
+.drawer-b { padding: 16px 18px 40px; display: flex; flex-direction: column; gap: 16px; }
+.xbtn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 1.2rem; line-height: 1; width: 34px; height: 34px; border-radius: 3px; cursor: pointer; flex: none; }
+.xbtn:hover { border-color: var(--accent); color: var(--accent); }
+.duebox { background: var(--surface-2); border-radius: 4px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.duebox .big { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.duebox .big b { font-size: 1.1rem; margin-left: 10px; }
+.formula { font-family: var(--font-data); font-size: 0.82rem; background: var(--surface-2); padding: 8px 10px; border-radius: 3px; overflow-x: auto; white-space: nowrap; }
 
 .vol td.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; min-width: 52px; }
 .vol td.n:empty::before { content: "–"; color: var(--line); }
 .vol td.barcell { width: 30%; min-width: 120px; }
 .vbar { height: 10px; background: var(--accent); border-radius: 3px; }
 .vol tr.checkrow td { background: var(--gray-soft); }
+.vol th.pk, .vol td.pk { background: var(--amber-soft); }
+/* 교체 계획: 기간별 막대(가장 몰리는 때는 주황), 누르면 아래에 그 기간 역별 물량 */
+.pchart { overflow-x: auto; padding-top: 4px; }
+.pchart svg { display: block; width: 100%; min-width: 760px; height: auto; }  /* 폰 폭에선 글자가 읽히게 가로로 넘겨 본다 */
+.pchart .bar { fill: var(--rail); pointer-events: none; }
+.pchart .bar.pk { fill: var(--amber-dot); }
+.pchart .base { stroke: var(--line); stroke-width: 1; }
+.pchart .hit { fill: transparent; cursor: pointer; }
+.pchart .hit:hover, .pchart .hit:focus-visible, .pchart .hit.sel { fill: var(--surface-2); outline: none; }
+.pchart .hit.sel { stroke: var(--accent); stroke-width: 1; }
+.pchart text { fill: var(--muted); font-size: 10px; font-family: var(--font-data); pointer-events: none; }
+.pchart text.v { fill: var(--ink); font-weight: 700; }
+.sbars { display: flex; flex-direction: column; gap: 4px; }
+.sbars .headrow { margin-bottom: 6px; }
+.sbar { appearance: none; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; display: grid; grid-template-columns: 96px minmax(0, 1fr) 52px; gap: 10px; align-items: center; padding: 3px 4px; border-radius: 3px; text-align: left; font-size: 0.88rem; }
+.sbar:hover { background: var(--surface-2); }
+.sbar .trk { height: 10px; }
+.sbar .trk i { display: block; height: 100%; background: var(--accent); border-radius: 0 3px 3px 0; }
+.sbar b { text-align: right; }
+.sbar .kinds { grid-column: 2 / 4; margin-top: -10px; color: var(--muted); font-size: 0.78rem; line-height: 1.3; }
 ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; }
 
 .psdhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -319,6 +393,15 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
 .doorparts { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .ptable .prow { cursor: pointer; }
 .ptable .prow:hover, .ptable .prow:focus-visible { background: var(--accent-soft); outline: none; }
+/* 부품별 상태 표의 "문 목록": 그 부품이 위험·주의 등인 문을 상태·예정일별로 펼쳐 보이고 작업 지시서용으로 복사 */
+.ptable .plist > td { background: var(--surface-2); padding: 10px 12px; }
+.dgroup { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; padding: 4px 0; }
+.dgroup + .dgroup { border-top: 1px dashed var(--line); }
+.dgroup .dhead { min-width: 150px; font-size: 0.86rem; }
+.dgroup .dside { color: var(--muted); font-size: 0.8rem; margin-left: 4px; }
+.dchip { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 0.82rem; padding: 1px 7px; border-radius: 3px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.dchip:hover, .dchip:focus-visible { border-color: var(--accent); color: var(--accent); }
+.plist-foot { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-top: 6px; }
 
 .switcher { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .swbtn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 0.88rem; padding: 7px 12px; border-radius: 3px; cursor: pointer; }
@@ -420,12 +503,14 @@ details.more[open] > summary { margin-bottom: 10px; }
 <header class="top">
   <div class="top-inner">
     <span class="badge" aria-hidden="true">동해</span><h1>스크린도어 교체 관리</h1>
+    <span class="asof" id="asof"></span>
     <div class="navbtns"><button class="navbtn" id="nav-back" aria-label="이전 화면으로" title="이전 화면">‹</button><button class="navbtn" id="nav-fwd" aria-label="다음 화면으로" title="다음 화면">›</button></div>
     <nav class="tabs" role="tablist">
       <button class="tab" id="tab-home" role="tab" aria-selected="true">현황</button>
       <button class="tab" id="tab-route" role="tab" aria-selected="false">역</button>
+      <button class="tab" id="tab-plan" role="tab" aria-selected="false">교체 계획</button>
       <button class="tab" id="tab-records" role="tab" aria-selected="false">교체 기록</button>
-      <button class="tab" id="tab-lab" role="tab" aria-selected="false">분석·시연</button>
+      <button class="tab" id="tab-lab" role="tab" aria-selected="false">주기 근거</button>
     </nav>
     <button class="themebtn" id="theme-btn" type="button" role="switch" aria-checked="false"><span class="theme-label">WHITE MODE</span><span class="sw" aria-hidden="true"><span class="knob"></span></span></button>
   </div>
@@ -433,6 +518,8 @@ details.more[open] > summary { margin-bottom: 10px; }
 <main class="wrap" id="app"></main>
 <div class="toast" id="toast" hidden></div>
 <div class="tip" id="tip" hidden></div>
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dw-title" hidden></aside>
 
 <script>
 (function () {
@@ -441,7 +528,12 @@ details.more[open] > summary { margin-bottom: 10px; }
   // ---------- API ----------
   async function api(path) {
     const r = await fetch(path);
-    if (!r.ok) throw new Error((await r.text()) || (path + " 실패"));
+    if (!r.ok) {
+      // 서버 오류는 {"detail": "..."}로 온다 — 그 JSON을 그대로 보여 주지 않고 문구만 꺼낸다
+      const text = await r.text();
+      let d; try { d = JSON.parse(text).detail; } catch (e) { d = null; }
+      throw new Error(typeof d === "string" ? d : (r.status >= 500 ? "서버 오류가 났습니다. 잠시 뒤 다시 시도하세요." : (path + " 실패")));
+    }
     return r.json();
   }
   async function apiPost(path, body) {
@@ -467,7 +559,8 @@ details.more[open] > summary { margin-bottom: 10px; }
   let PART_TYPES = [], PART = {}, DOOR_PART_CODES = [], STATION_PART_CODES = [];
   async function loadPartTypes() {
     if (PART_TYPES.length) return;
-    const { part_types } = await api("/api/part-types");
+    const [{ part_types }, { today }] = await Promise.all([api("/api/part-types"), api("/api/today")]);
+    document.getElementById("asof").textContent = dotDate(today) + " 기준";
     PART_TYPES = part_types;
     PART = Object.fromEntries(PART_TYPES.map(p => [p.code, p]));
     DOOR_PART_CODES = PART_TYPES.filter(p => p.unit === "door").map(p => p.code);
@@ -475,14 +568,14 @@ details.more[open] > summary { margin-bottom: 10px; }
   }
 
   const REASONS = { fail: "고장", prev: "예방 교체", with: "함께 교체", check: "점검(이상 없음)" };
-  const STATE = { 빨강: ["위험", "s-red"], 노랑: ["주의", "s-amber"], 초록: ["안전", "s-green"], 확인_필요: ["확인 필요", "s-check"] };
+  const STATE = { 빨강: ["교체 임박", "s-red"], 노랑: ["주의", "s-amber"], 초록: ["안전", "s-green"], 확인_필요: ["확인 필요", "s-check"] };
   const RANK = { 빨강: 0, 확인_필요: 1, 노랑: 2, 초록: 3 };
-  // 판정은 주기 계산 결과라 상태색(빨강=위험, 노랑=주의, 초록=안전)을 쓰지 않는다. "안전" 옆에 빨간 "짧음 확실"이 붙어 위험처럼 보였다
+  // 판정은 주기 계산 결과라 상태색(빨강=교체 임박, 노랑=주의, 초록=안전)을 쓰지 않는다. "안전" 옆에 빨간 "짧음 확실"이 붙어 위험처럼 보였다
   const JUDGE = {
     같음: ["10년과 같음", "s-check", "비중을 어떻게 잡아도 10년과 0.5년 이내로 차이 납니다."],
-    짧음_확실: ["짧음 확실", "s-info", "원인 비중을 어떻게 잡아도 10년보다 짧습니다."],
-    김_확실: ["김 확실", "s-check", "원인 비중을 어떻게 잡아도 10년보다 깁니다. 10년보다 늦은 교체는 권고하지 않고 참고로만 보여 줍니다."],
-    불확실: ["불확실", "s-check", "원인 비중에 따라 10년보다 짧게도, 길게도 나옵니다."],
+    짧음_확실: ["10년보다 짧음", "s-info", "원인 비중을 어떻게 잡아도 10년보다 짧습니다."],
+    김_확실: ["10년보다 김", "s-check", "원인 비중을 어떻게 잡아도 10년보다 깁니다. 10년보다 늦은 교체는 권고하지 않고 참고로만 보여 줍니다."],
+    불확실: ["10년 안팎", "s-check", "원인 비중에 따라 10년보다 짧게도, 길게도 나옵니다."],
     날씨무관: ["날씨 보정 없음", "s-check", "날씨가 수명을 줄인다는 정량 근거를 찾지 못해 제조사 권장 10년을 씁니다."]
   };
   const SRC = {
@@ -499,15 +592,18 @@ details.more[open] > summary { margin-bottom: 10px; }
     const offpeakMin = SERVICE_SPAN_MIN - PEAK_MIN;
     return Math.round(PEAK_MIN / interval.peak + offpeakMin / interval.offpeak);
   }
-  function openLabel(station) { return station.id === 24 ? "2026년 9월(일자 미정)" : fmtDateKR(station.open_date); }
+  // 북울산(24)의 open_date는 임시값(psd/cycle.py _D4)이라 날짜로 보여 주지 않는다 — 임시값이 지나면 "9월 개통 예정"이 틀린 말이 됐다
+  function openLabel(station) { return station.id === 24 ? "미정" : fmtDateKR(station.open_date); }
+  function openPlan(station) { return station.id === 24 ? "개통일 미정" : fmtDateKR(station.open_date) + " 개통 예정"; }
   function yr(x) { return x.toFixed(1) + "년"; }
   function dur(days) {
-    const a = Math.abs(days), m = Math.round(a / 30.44);
+    // 개월은 버림: 반올림하면 185일(주의)도 170일(위험)도 "6개월"이 돼 상태 기준(6개월·1년)과 어긋나 보였다
+    const a = Math.abs(days), m = Math.floor(a / 30.44);
     const t = m >= 12 ? Math.floor(m / 12) + "년" + (m % 12 ? " " + (m % 12) + "개월" : "") : (m ? m + "개월" : a + "일");
     return days < 0 ? t + " 지남" : t + " 남음";
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
-  function pill(status) { return `<span class="pill ${STATE[status][1]}">${STATE[status][0]}</span>`; }
+  function pill(status) { return `<span class="pill stp ${STATE[status][1]}">${STATE[status][0]}</span>`; }
   function jpill(j) { return `<span class="pill ${JUDGE[j][1]}">${JUDGE[j][0]}</span>`; }
   function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => { t.hidden = true; }, 2400); }
   function worstDoor(doors) { return doors.reduce((a, d) => (RANK[d.worst_status] < RANK[a.worst_status] || (RANK[d.worst_status] === RANK[a.worst_status] && d.worst_days_left < a.worst_days_left)) ? d : a); }
@@ -543,6 +639,7 @@ details.more[open] > summary { margin-bottom: 10px; }
         path = `/station/${v.st}`;
         if (v.side) q.set("side", v.side);
         if (v.door != null) q.set("door", v.door);
+        if (v.plist) q.set("list", v.plist);  // 부품별 상태 표에서 펼쳐 둘 "문 목록"(부품 코드)
         break;
       case "part":
         path = `/part/${v.partId}`;
@@ -552,16 +649,21 @@ details.more[open] > summary { margin-bottom: 10px; }
         if (v.simSt != null) q.set("sim", v.simSt);
         if (v.wpart) q.set("part", v.wpart);
         break;
-      case "volume":
-        path = "/volume";
+      case "plan":
+        path = "/plan";
+        if (v.span && v.span !== "12m") q.set("span", v.span);
         break;
       case "route":
         path = "/route";
+        if (v.grid) q.set("v", "grid");
         break;
       case "records":
         path = "/records";
         if (v.rst) q.set("st", v.rst);
         if (v.rpart) q.set("part", v.rpart);
+        if (v.rfrom) q.set("from", v.rfrom);
+        if (v.rto) q.set("to", v.rto);
+        if (v.rreason) q.set("reason", v.rreason);
         if (v.rpage > 1) q.set("page", v.rpage);
         break;
       case "sample":
@@ -575,11 +677,22 @@ details.more[open] > summary { margin-bottom: 10px; }
         break;
       default:
         path = "/home";
+        if (v.hs) q.set("s", v.hs);
+        if (v.hst) q.set("st", v.hst);
+        if (v.hpart) q.set("part", v.hpart);
     }
+    if (v.open) q.set("open", v.open);
     const qs = q.toString();
     return "#" + path + (qs ? "?" + qs : "");
   }
   function decodeHash() {
+    const v = decodeBase();
+    const open = Number(new URLSearchParams(location.hash.split("?")[1] || "").get("open"));
+    if (open && v.name !== "part") v.open = open;
+    return v;
+  }
+  const baseKey = v => encodeView({ ...v, open: undefined });
+  function decodeBase() {
     const h = location.hash.slice(1) || "/home";
     const [path, qs] = h.split("?");
     const q = new URLSearchParams(qs || "");
@@ -587,8 +700,13 @@ details.more[open] > summary { margin-bottom: 10px; }
     if (parts[0] === "lab") parts = parts.slice(1); // 예전 주소(#/weather, #/volume)도 그대로 열리게
     try {
       switch (parts[0]) {
-        case "home":
-          return { name: "home" };
+        case "home": {
+          const v = { name: "home" };
+          if (STATE[q.get("s")]) v.hs = q.get("s");
+          if (q.get("st")) v.hst = Number(q.get("st"));
+          if (q.get("part")) v.hpart = q.get("part");
+          return v;
+        }
         case "work": {
           const v = { name: "work" };
           if (q.get("h")) v.h = Number(q.get("h"));
@@ -597,11 +715,14 @@ details.more[open] > summary { margin-bottom: 10px; }
           return v;
         }
         case "route":
-          return { name: "route" };
+          return q.get("v") === "grid" ? { name: "route", grid: true } : { name: "route" };
         case "records": {
           const v = { name: "records" };
           if (q.get("st")) v.rst = Number(q.get("st"));
           if (q.get("part")) v.rpart = q.get("part");
+          if (/^\d{4}-\d{2}-\d{2}$/.test(q.get("from") || "")) v.rfrom = q.get("from");
+          if (/^\d{4}-\d{2}-\d{2}$/.test(q.get("to") || "")) v.rto = q.get("to");
+          if (REASONS[q.get("reason")]) v.rreason = q.get("reason");
           if (q.get("page")) v.rpage = Number(q.get("page"));
           return v;
         }
@@ -613,6 +734,7 @@ details.more[open] > summary { margin-bottom: 10px; }
           const v = { name: "station", st };
           if (q.get("side")) v.side = q.get("side");
           if (q.get("door")) v.door = Number(q.get("door"));
+          if (q.get("list")) v.plist = q.get("list");
           return v;
         }
         case "part": {
@@ -626,14 +748,18 @@ details.more[open] > summary { margin-bottom: 10px; }
           if (q.get("part")) v.wpart = q.get("part");
           return v;
         }
-        case "volume":
-          return { name: "volume" };
+        case "plan":
+        case "volume": {  // 예전 주소(#/volume = 분기별 표)는 3년 보기로
+          const span = q.get("span") || (parts[0] === "volume" ? "3y" : "12m");
+          return { name: "plan", span: PLAN_SPANS.includes(span) ? span : "12m" };
+        }
       }
     } catch (e) { /* 잘못된 주소면 현황 화면으로 */ }
     return { name: "home" };
   }
   let view = { name: "home" }, suppressHash = false;
   function go(v) {
+    if (v.name === "part") { openPart(v.partId); return; }
     const keep = v.keep;
     view = v;
     render();
@@ -643,12 +769,19 @@ details.more[open] > summary { margin-bottom: 10px; }
   }
   window.addEventListener("hashchange", () => {
     if (suppressHash) { suppressHash = false; return; }
-    view = decodeHash();
+    const nv = decodeHash();
+    drawerPushed = false;
+    // 부품 상세만 열고 닫은 것이면(뒤로 가기 등) 뒤 화면은 다시 그리지 않는다
+    if (nv.name !== "part" && baseKey(nv) === baseKey(view)) { view = nv; syncDrawer(); return; }
+    // 같은 역 안에서 뒤로/앞으로(문·방향을 바꿨던 것)는 스크롤을 그대로 두고 다시 그린다
+    if (nv.name === "station" && view.name === "station" && nv.st === view.st) nv.keep = true;
+    view = nv;
     render();
-    window.scrollTo(0, 0);
+    if (!nv.keep) window.scrollTo(0, 0);
   });
   document.getElementById("tab-home").onclick = () => go({ name: "home" });
   document.getElementById("tab-route").onclick = () => go({ name: "route" });
+  document.getElementById("tab-plan").onclick = () => go({ name: "plan" });
   document.getElementById("tab-records").onclick = () => go({ name: "records" });
   document.getElementById("tab-lab").onclick = () => go({ name: "weather" });
   document.getElementById("nav-back").onclick = () => history.back();
@@ -673,18 +806,41 @@ details.more[open] > summary { margin-bottom: 10px; }
   systemDark.addEventListener("change", showTheme);
   showTheme();
 
-  const TAB_OF = { home: "home", work: "home", route: "route", station: "route", part: "route", records: "records", sample: "lab", weather: "lab", volume: "home" };
+  const TAB_OF = { home: "home", work: "home", route: "route", station: "route", part: "route", plan: "plan", records: "records", sample: "lab", weather: "lab" };
+  // 화면을 빨리 바꾸면 먼저 시작한 느린 화면이 나중에 끝나 새 화면을 덮었다. 가장 최근 것만 그린다
+  let renderSeq = 0;
   async function render() {
+    const my = ++renderSeq;
     const tab = TAB_OF[view.name];
-    ["home", "route", "records", "lab"].forEach(t => document.getElementById("tab-" + t).setAttribute("aria-selected", String(t === tab)));
+    ["home", "route", "plan", "records", "lab"].forEach(t => document.getElementById("tab-" + t).setAttribute("aria-selected", String(t === tab)));
     tipEl.hidden = true;
-    app.innerHTML = `<p class="muted" style="padding-top:18px">불러오는 중…</p>`;
+    // 같은 화면을 다시 그릴 때(keep: 방향 바꾸기·거르기·쪽 넘기기 등)는 "불러오는 중…"으로 비우지 않고, 다 그린 뒤
+    // 스크롤 위치(창·역 목록·문 줄 가로 스크롤)를 되돌린다 — 비웠다 채우면 화면이 위아래로 튀었다(2026-11-02)
+    const keep = view.keep, saved = keep && {
+      y: window.scrollY,
+      els: [".stnav", ".strip-wrap"].map(sel => { const el = app.querySelector(sel); return el && [sel, el.scrollLeft, el.scrollTop]; }).filter(Boolean),
+    };
+    if (!keep) app.innerHTML = `<p class="muted" style="padding-top:18px">불러오는 중…</p>`;
     try {
       await loadPartTypes();
-      const html = await ({ home: vHome, work: vWork, route: vRoute, records: vRecords, sample: vSample, station: vStation, part: vPart, volume: vVolume, weather: vWeather }[view.name])();
+      // 예전 주소(#/part/id)로 바로 들어오면 그 부품의 역 상세를 뒤에 깔고 패널로 연다
+      if (view.name === "part") {
+        const pp = await api(`/api/parts/${view.partId}`);
+        if (my !== renderSeq) return;
+        view = { name: "station", st: pp.part.station_id, ...(pp.part.door_id ? { door: pp.part.door_id } : {}), open: view.partId };
+        history.replaceState(null, "", encodeView(view));
+      }
+      const html = await ({ home: vHome, work: vWork, route: vRoute, records: vRecords, sample: vSample, station: vStation, plan: vPlan, weather: vWeather }[view.name])();
+      if (my !== renderSeq) return;
       app.innerHTML = html;
       bind();
+      if (saved) {
+        saved.els.forEach(([sel, l, t]) => { const el = app.querySelector(sel); if (el) { el.scrollLeft = l; el.scrollTop = t; } });
+        window.scrollTo(0, saved.y);
+      }
+      syncDrawer();
     } catch (e) {
+      if (my !== renderSeq) return;
       app.innerHTML = `<section class="view"><div class="panel"><h2>불러오지 못했습니다</h2><p class="small muted">${esc(e.message || String(e))}</p><button class="btn" id="retry">다시 시도</button></div></section>`;
       app.querySelector("#retry").addEventListener("click", render);
     }
@@ -714,15 +870,21 @@ details.more[open] > summary { margin-bottom: 10px; }
   window.addEventListener("keydown", e => { if (e.key === "Escape") tipEl.hidden = true; });
   const tipAttr = (t, r) => `data-tip="${esc(JSON.stringify({ t, r }))}"`;
 
-  function bind() {
-    app.querySelectorAll("[data-go]").forEach(el => {
+  function bindGo(root) {
+    root.querySelectorAll("[data-go]").forEach(el => {
       el.addEventListener("click", () => go(JSON.parse(el.dataset.go)));
       if (el.tagName !== "BUTTON") el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(JSON.parse(el.dataset.go)); } });
     });
+  }
+  function bind() {
+    bindGo(app);
+    app.querySelectorAll(".strip [data-door]").forEach(b => b.addEventListener("click", () => selectDoor(b)));
     const fst = app.querySelector("#w-st"), fpart = app.querySelector("#w-part");
     if (fst) fst.addEventListener("change", () => go({ ...view, fst: Number(fst.value) || undefined, keep: true }));
     if (fpart) fpart.addEventListener("change", () => go({ ...view, fpart: fpart.value || undefined, keep: true }));
     app.querySelectorAll(".repbox").forEach(setupReportBox);
+    const cur = app.querySelector(".stnav [aria-current]");
+    if (cur) { const nav = cur.parentElement; nav.scrollTop = cur.offsetTop - nav.clientHeight / 2 + cur.offsetHeight / 2; }
     const jump = app.querySelector("#st-jump");
     if (jump) jump.addEventListener("change", () => go({ name: "station", st: Number(jump.value) }));
     const filter = app.querySelector("#st-filter");
@@ -737,12 +899,25 @@ details.more[open] > summary { margin-bottom: 10px; }
     const tt = app.querySelector("#tbltoggle");
     if (tt) tt.addEventListener("click", () => { const t = app.querySelector("#numtbl"); t.hidden = !t.hidden; tt.textContent = t.hidden ? "숫자 표로 보기" : "숫자 표 닫기"; });
     if (app.querySelector("#sim")) setupSim();
+    const pl = app.querySelector("#plan");
+    if (pl) setupPlan(pl);
+    const hw = app.querySelector("#home-work");
+    if (hw) setupHomeWork(hw);
+    const ps = app.querySelector("#partsum");
+    if (ps) setupPartSummary(ps);
     const xf = app.querySelector("#xlsxform");
     if (xf) setupUploadForm(xf);
     app.querySelectorAll("[data-undo]").forEach(b => b.addEventListener("click", () => undoBatch(Number(b.dataset.undo), b)));
     const rfSt = app.querySelector("#rf-st"), rfPart = app.querySelector("#rf-part");
     if (rfSt) rfSt.addEventListener("change", () => go({ ...view, rst: Number(rfSt.value) || undefined, rpage: 1, keep: true }));
     if (rfPart) rfPart.addEventListener("change", () => go({ ...view, rpart: rfPart.value || undefined, rpage: 1, keep: true }));
+    // 기간·사유로 거르기(2026-11-02) — 41쪽짜리 목록에서 "지난달 고장만" 같은 걸 찾으려고
+    [["#rf-from", "rfrom"], ["#rf-to", "rto"], ["#rf-reason", "rreason"]].forEach(([sel, key]) => {
+      const el = app.querySelector(sel);
+      if (el) el.addEventListener("change", () => go({ ...view, [key]: el.value || undefined, rpage: 1, keep: true }));
+    });
+    const rfClear = app.querySelector("#rf-clear");
+    if (rfClear) rfClear.addEventListener("click", () => go({ name: "records", keep: true }));
     const spRun = app.querySelector("#sp-run");
     if (spRun) spRun.addEventListener("click", async () => {
       spRun.disabled = true; spRun.textContent = "계산하는 중...";
@@ -803,10 +978,11 @@ details.more[open] > summary { margin-bottom: 10px; }
     return c.빨강 ? "r" : c.확인_필요 ? "c" : c.노랑 ? "y" : "";
   }
   // 현황 오른쪽 "분기별 교체 물량": 앞으로 3년, 분기마다 교체 예정일이 오는 부품 수. 막대에 올리면 부품별 내역
+  const peakOf = qs => qs.reduce((a, q) => (q.total > a.total ? q : a), qs[0]);
   function volumeChart(vol) {
     const qs = vol.quarters, n = qs.length, BW = 24, H = 96, TOP = 14;
     const max = Math.max(...qs.map(q => q.total), 1);
-    const peak = qs.reduce((a, q) => (q.total > a.total ? q : a), qs[0]);
+    const peak = peakOf(qs);
     const bars = qs.map((q, i) => {
       const x = i * BW, h = q.total ? Math.max(3, q.total / max * (H - TOP)) : 0, y = H - h, w = BW - 4, r = Math.min(4, h, w / 2);
       const [yy, qq] = q.label.match(/\d+/g);
@@ -817,30 +993,84 @@ details.more[open] > summary { margin-bottom: 10px; }
       return `<rect class="hit" x="${x}" y="0" width="${BW}" height="${H}" rx="3" tabindex="0" aria-label="${esc(q.label)} ${q.total}개" ${tipAttr(q.label, rows)}/>${bar}${lab}${top}`;
     }).join("");
     return `<div class="vchart">
-        <div class="headrow"><h3>분기별 교체 물량</h3><span class="small muted">앞으로 3년</span></div>
+        <div class="headrow"><h3>분기별 교체 물량 <span class="small muted">앞으로 3년</span></h3><button class="linkbtn" style="padding:0" ${goAttr({ name: "plan", span: "3y" })}>교체 계획 ›</button></div>
         <svg viewBox="0 -2 ${n * BW} ${H + 16}" role="img" aria-label="분기별 교체 예정 부품 수"><line class="base" x1="0" x2="${n * BW}" y1="${H}" y2="${H}"/>${bars}</svg>
-        <p class="vchart-sum small muted">${peak.total ? `가장 몰리는 때는 <b style="color:var(--ink)">${esc(peak.label)}</b>, ${peak.total.toLocaleString()}개입니다. ` : "앞으로 3년 안에 교체 예정인 부품이 없습니다. "}<button class="linkbtn" style="padding:0" ${goAttr({ name: "volume" })}>부품별 표 ›</button></p>
       </div>`;
   }
+  // 여러 문이 묶인 줄은 그 역의 "문 목록"을 펼친 채로 연다(어느 문인지 바로 보이게)
+  const workTarget = x => x.part_id ? { name: "part", partId: x.part_id } : { name: "station", st: x.station_id, plist: x.part_type_code };
   function workRow(x) {
-    const target = x.part_id ? { name: "part", partId: x.part_id } : { name: "station", st: x.station_id };
+    const target = workTarget(x);
     const where = x.count > 1 ? `문 ${x.count}개` : esc(x.location);
     return `<button class="item ${ITEM_CLS[x.status]}" ${goAttr(target)}><i class="bar" aria-hidden="true"></i><span class="s">${esc(x.station_name)}</span><span class="p"><b>${esc(x.part_name)}</b><span>${where} · ${STATE[x.status][0]}</span></span><span class="d">${x.due.replaceAll("-", ".")}</span><span class="left" title="${dur(x.days_left)}">${dday(x.days_left)}</span></button>`;
   }
-  const HOME_ITEMS = 6;  // 현황에는 가장 급한 몇 줄만. 나머지는 "전체 보기"에서
+  // 현황 교체 예정 표: 위험·확인 필요·주의만(안전은 "기간별 전체 보기"에서). 거른 뒤 이만큼만 보여 준다
+  const HOME_ROWS = 20;
+  const HOME_STATUS = ["빨강", "확인_필요", "노랑"];
+  // 교체 예정 칩·버튼의 숫자는 줄 수가 아니라 부품 수다 — 역 목록·역 화면의 "위험 13"과 같은 단위로 맞춘다
+  // (전엔 "위험 3" = 3줄 = 부품 38개라 헷갈렸다, 2026-11-02)
+  const partsOf = xs => xs.reduce((a, x) => a + x.count, 0);
+  function homeRow(x) {
+    const target = workTarget(x);
+    const where = x.count > 1 ? `문 ${x.count}개` : esc(x.location);
+    const left = x.days_left < 0 ? `${-x.days_left}일 지남` : `D-${x.days_left}`;
+    return `<tr tabindex="0" data-s="${x.status}" data-st="${x.station_id}" data-p="${x.part_type_code}" ${goAttr(target)}><td>${pill(x.status)}</td><td><b>${esc(x.station_name)}</b></td><td>${esc(x.part_name)}</td><td class="opt">${where}</td><td class="num opt">${dotDate(x.due)}</td><td class="num ${x.days_left < 0 || x.status === "빨강" ? "late" : ""}" title="${dotDate(x.due)} · ${dur(x.days_left)}">${left}</td></tr>`;
+  }
+  // 상태·역·부품 거르기는 화면을 다시 받지 않고 줄만 숨긴다(노선도 아래라 다시 그리면 스크롤이 튄다).
+  // 고른 값은 주소에도 남겨 상세에 갔다가 뒤로 오면 그대로 보이게 한다
+  function setupHomeWork(box) {
+    const rows = [...box.querySelectorAll("tbody tr")];
+    const st = box.querySelector("#h-st"), part = box.querySelector("#h-part");
+    const apply = () => {
+      let n = 0;
+      rows.forEach(tr => {
+        const hit = (!view.hs || tr.dataset.s === view.hs) && (!view.hst || tr.dataset.st === String(view.hst)) && (!view.hpart || tr.dataset.p === view.hpart);
+        if (hit) n++;
+        tr.hidden = !hit || n > HOME_ROWS;
+      });
+      box.querySelector("#h-empty").hidden = n > 0;
+      const more = box.querySelector("#h-more");
+      more.hidden = n <= HOME_ROWS;
+      more.querySelector("span").textContent = `처음 ${HOME_ROWS}줄만 보여 줍니다(전체 ${n}줄). `;
+      box.querySelectorAll("[data-hs]").forEach(b => b.setAttribute("aria-pressed", String((b.dataset.hs || undefined) === view.hs)));
+      history.replaceState(null, "", encodeView(view));
+    };
+    box.querySelectorAll("[data-hs]").forEach(b => b.addEventListener("click", () => {
+      const s = b.dataset.hs || undefined;
+      view.hs = s;
+      apply();
+    }));
+    st.addEventListener("change", () => { view.hst = Number(st.value) || undefined; apply(); });
+    part.addEventListener("change", () => { view.hpart = part.value || undefined; apply(); });
+    apply();
+  }
   async function vHome() {
     const [wi, data, rec, vol] = await Promise.all([api("/api/work-items?within_days=1100"), api("/api/stations"), api("/api/replacement-records?limit=4&order=replaced"), api("/api/replacement-volume?years_ahead=3")]);
-    const t = data.totals;
-    const top = wi.items.slice(0, HOME_ITEMS);  // API가 급한 순서로 준다
+    const items = wi.items.filter(x => x.status !== "초록");  // API가 급한 순서(위험 → 확인 필요 → 주의, 같은 상태는 예정일 순)로 준다
+    const opened = data.stations.filter(s => s.in_service);
+    const segs = [["", "전체", items], ...HOME_STATUS.map(s => [s, STATE[s][0], items.filter(x => x.status === s)])]
+      .map(([s, l, xs]) => [s, l, partsOf(xs), xs.length]);
+    const work = `<div id="home-work" style="display:flex;flex-direction:column;gap:12px;min-width:0">
+        <div class="headrow"><h2>교체 예정</h2><button class="linkbtn" ${goAttr({ name: "work" })}>전체 보기 ›</button></div>
+        <div class="filters">
+          <div class="seg" role="group" aria-label="상태로 거르기">${segs.map(([s, l, n, rows]) => `<button type="button" class="segbtn ${s && !n ? "zero" : ""}" data-hs="${s}" aria-pressed="false" title="부품 ${n}개 · 표 ${rows}줄(역 x 부품 x 예정일로 묶음)">${l} <span class="num">${n.toLocaleString()}개</span></button>`).join("")}</div>
+          <select id="h-st" aria-label="역으로 거르기"><option value="">모든 역</option>${opened.map(s => `<option value="${s.id}" ${s.id === view.hst ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
+          <select id="h-part" aria-label="부품으로 거르기"><option value="">모든 부품</option>${PART_TYPES.map(p => `<option value="${p.code}" ${p.code === view.hpart ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
+        </div>
+        <div class="scroll"><table class="wtable"><thead><tr><th>상태</th><th>역</th><th>부품</th><th class="opt">대상</th><th class="opt">예정일</th><th>남은 기간</th></tr></thead>
+          <tbody>${items.map(homeRow).join("")}</tbody></table></div>
+        <div class="items-empty" id="h-empty" hidden><b>${items.length ? "고른 조건에 해당하는 부품이 없습니다." : "1년 안에 교체할 부품이 없습니다."}</b></div>
+        <p class="small muted" id="h-more" hidden><span></span><button class="linkbtn" style="padding:0" ${goAttr({ name: "work" })}>전체 보기 ›</button></p>
+      </div>`;
 
     const map = `<section class="map" aria-label="노선 상태">
         <div class="map-head"><h3>노선 상태</h3><span class="small muted">${fmtDateKR(wi.today)} 기준</span></div>
         <div class="map-scroll"><div class="rail">${data.stations.map(s => {
           const d = stationDot(s);
-          const label = !s.in_service ? "개통 전" : d === "r" ? "위험" : d === "c" ? "확인 필요" : d === "y" ? "주의" : "안전";
+          const label = !s.in_service ? "개통 전" : d === "r" ? "교체 임박" : d === "c" ? "확인 필요" : d === "y" ? "주의" : "안전";
           return `<button class="stn ${d && d !== "x" ? "hl" : ""}" ${goAttr({ name: "station", st: s.id })} aria-label="${esc(s.name + " · " + label)}" title="${esc(s.name + " · " + label)}"><span class="dot ${d}"></span><span class="nm">${esc(s.name)}</span></button>`;
         }).join("")}</div></div>
-        <div class="maplegend"><span><i style="background:var(--red)"></i>위험 6개월 안</span><span class="${zeroCls(data.totals.확인_필요)}"><i style="background:var(--gray)"></i>확인 필요</span><span><i style="background:var(--amber-dot)"></i>주의 1년 안</span><span><i style="border:3px solid var(--rail)"></i>안전</span><span><i style="border:2px dashed var(--line)"></i>개통 전</span></div>
+        <div class="maplegend"><span><i style="background:var(--red)"></i>교체 임박 6개월 안</span><span class="${zeroCls(data.totals.확인_필요)}"><i style="background:var(--gray)"></i>확인 필요</span><span><i style="background:var(--amber-dot)"></i>주의 1년 안</span><span><i style="border:3px solid var(--rail)"></i>안전</span><span><i style="border:2px dashed var(--line)"></i>개통 전</span></div>
       </section>`;
 
     const recs = rec.records.map(r => `<div class="rec"><b>${esc(r.station_name)}</b> ${r.parts.map(esc).join(", ")} · ${REASONS[r.reason] || esc(r.reason)}<span>${r.replaced_on.replaceAll("-", ".")} · ${esc(r.location)}${r.created_by ? " · " + esc(r.created_by) : ""}</span></div>`).join("");
@@ -848,16 +1078,11 @@ details.more[open] > summary { margin-bottom: 10px; }
     return `<section class="view">
       ${map}
       <div class="homegrid">
-        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
-          <div class="headrow"><h2>교체 예정</h2><button class="linkbtn" ${goAttr({ name: "work" })}>전체 보기 ›</button></div>
-          <div class="items">${top.length ? top.map(workRow).join("") : `<div class="items-empty"><b>교체할 부품이 없습니다.</b></div>`}</div>
-        </div>
+        ${work}
         <aside class="side">
-          <div><div class="counts"><div><b style="color:var(--red)">${t.빨강.toLocaleString()}</b><span>위험</span></div><div class="${zeroCls(t.확인_필요)}"><b style="color:var(--gray)">${t.확인_필요.toLocaleString()}</b><span>확인 필요</span></div><div><b style="color:var(--amber)">${t.노랑.toLocaleString()}</b><span>주의</span></div></div></div>
           ${volumeChart(vol)}
           <div><div class="headrow"><h3>최근 교체 기록</h3><button class="linkbtn" ${goAttr({ name: "records" })}>전체 ${rec.total.toLocaleString()}건 ›</button></div>
             <div class="recs">${recs || `<p class="small muted" style="padding:9px 0">입력된 교체 기록이 없습니다.</p>`}</div></div>
-          <div><h3>보고서 내려받기</h3>${reportBox(data.stations.filter(s => s.in_service))}</div>
         </aside>
       </div>
     </section>`;
@@ -882,8 +1107,8 @@ details.more[open] > summary { margin-bottom: 10px; }
 
     const filters = `<div class="filters">
         <div class="horizon"><div class="seg" role="group" aria-label="교체 예정일 기간">${HORIZONS.map(([d, l]) => {
-          const n = byFilter.filter(x => inHorizon(x, d)).length;
-          return `<button class="segbtn hbtn" aria-pressed="${d === h}" ${goAttr({ ...view, h: d, keep: true })}>${l} 안<small>${n}건</small></button>`;
+          const n = partsOf(byFilter.filter(x => inHorizon(x, d)));
+          return `<button class="segbtn hbtn" aria-pressed="${d === h}" ${goAttr({ ...view, h: d, keep: true })}>${l} 안<small>부품 ${n.toLocaleString()}개</small></button>`;
         }).join("")}</div></div>
         <select id="w-st" aria-label="역으로 거르기"><option value="">모든 역</option>${opened.map(s => `<option value="${s.id}" ${s.id === view.fst ? "selected" : ""}>${s.name}</option>`).join("")}</select>
         <select id="w-part" aria-label="부품으로 거르기"><option value="">모든 부품</option>${PART_TYPES.map(p => `<option value="${p.code}" ${p.code === view.fpart ? "selected" : ""}>${p.name}</option>`).join("")}</select>
@@ -899,22 +1124,66 @@ details.more[open] > summary { margin-bottom: 10px; }
   }
 
   // ---------- 역 목록 ----------
+  function miniBar(c) {
+    const all = c.빨강 + c.확인_필요 + c.노랑 + c.초록;
+    if (!all) return "";
+    const seg = (n, cls) => n ? `<i class="${cls}" style="width:${(n / all * 100).toFixed(1)}%"></i>` : "";
+    return `<span class="mbar" aria-hidden="true">${seg(c.빨강, "r")}${seg(c.확인_필요, "c")}${seg(c.노랑, "y")}</span>`;
+  }
+  // 역 x 부품 격자(목업의 노선 현황판): 칸마다 그 역·부품에서 가장 급한 상태와 그 예정 연.월
+  function routeGrid(stations) {
+    const head = `<tr><th>역</th>${PART_TYPES.map(p => `<th>${esc(p.name)}</th>`).join("")}</tr>`;
+    const rows = stations.map(s => {
+      if (!s.in_service) return `<tr><td><b>${esc(s.name)}</b></td><td colspan="${PART_TYPES.length}" class="muted small">${openPlan(s)}</td></tr>`;
+      const cells = PART_TYPES.map(p => {
+        const x = s.parts[p.code];
+        const tip = `${p.name} · ${STATE[x.status][0]} ${x.counts[x.status]}/${x.total} · ${dotDate(x.due)} (${dur(x.days_left)})`;
+        // 안전 칸은 글자만 — 칸이 다 칩이면 위험·주의가 묻힌다
+        const ym = dotDate(x.due).slice(0, 7);  // "30.02"는 30.02년으로 읽혀 연도를 다 쓴다(2026-11-02)
+        return `<td title="${esc(tip)}">${x.status === "초록" ? `<span class="num muted">${ym}</span>` : `<span class="pill stp ${STATE[x.status][1]} num">${ym}</span>`}</td>`;
+      }).join("");
+      return `<tr tabindex="0" aria-label="${esc(s.name)} 역 상세 열기" ${goAttr({ name: "station", st: s.id })}><td><b>${esc(s.name)}</b></td>${cells}</tr>`;
+    }).join("");
+    return `<div class="panel"><p class="small muted">칸마다 그 역·부품에서 가장 급한 상태와 그 예정 연.월(예: 2030.02 = 2030년 2월)입니다. 칸에 마우스를 올리면 그 상태인 부품 수와 남은 기간이, 줄을 누르면 역 상세가 열립니다.</p>
+      <div class="scroll"><table class="hgrid">${head}${rows}</table></div></div>`;
+  }
+  // 격자 위 "눈에 띄는 패턴" 세 장: 여러 역에 걸친 부품, 가장 급한 역, 1년 안 교체가 없는 역
+  function routePatterns(stations) {
+    const live = stations.filter(s => s.in_service);
+    const bad = s => s.counts.빨강 + s.counts.확인_필요 + s.counts.노랑;
+    const names = arr => arr.slice(0, 6).map(s => esc(s.name)).join("·") + (arr.length > 6 ? ` 외 ${arr.length - 6}곳` : "");
+    const top = PART_TYPES.map(p => ({ p, sts: live.filter(s => s.parts[p.code] && s.parts[p.code].status !== "초록") })).sort((a, b) => b.sts.length - a.sts.length)[0];
+    const worstSt = live.reduce((a, s) => (s.counts.빨강 > a.counts.빨강 || (s.counts.빨강 === a.counts.빨강 && bad(s) > bad(a)) ? s : a));
+    const calm = live.filter(s => !bad(s));
+    const c1 = top && top.sts.length
+      ? `<div class="scard"><span class="lab">여러 역에 걸친 부품</span><span class="big">${esc(top.p.name)}<small>${top.sts.length}개 역</small></span><span class="sub">${names(top.sts)} — 교체 임박·주의</span></div>`
+      : `<div class="scard"><span class="lab">여러 역에 걸친 부품</span><span class="big">없음</span><span class="sub">1년 안에 교체할 부품이 없습니다.</span></div>`;
+    const wc = worstSt.counts;
+    const c2 = bad(worstSt)
+      ? `<button type="button" class="scard" ${goAttr({ name: "station", st: worstSt.id })}><span class="lab">가장 급한 역</span><span class="big">${esc(worstSt.name)}<small>${[wc.빨강 && `교체 임박 ${wc.빨강}`, wc.확인_필요 && `확인 필요 ${wc.확인_필요}`, wc.노랑 && `주의 ${wc.노랑}`].filter(Boolean).join(" · ")}</small></span><span class="sub">다음 교체 ${dotDate(worstSt.next.due)} ${esc(PART[worstSt.next.part_type_code].name)} · 누르면 역 상세</span></button>`
+      : `<div class="scard"><span class="lab">가장 급한 역</span><span class="big">없음</span><span class="sub">교체 임박·주의인 역이 없습니다.</span></div>`;
+    const c3 = `<div class="scard"><span class="lab">1년 안 교체 없는 역</span><span class="big">${calm.length}곳<small>운영 중 ${live.length}곳 중</small></span><span class="sub">${calm.length ? names(calm) : "모든 역에 1년 안 교체할 부품이 있습니다."}</span></div>`;
+    return `<section class="scards" aria-label="눈에 띄는 패턴">${c1}${c2}${c3}</section>`;
+  }
   async function vRoute() {
     const data = await api("/api/stations");
     const item = s => {
       const c = s.counts;
-      const b = [c.빨강 ? `<span class="pill s-red">위험 ${c.빨강}</span>` : "", c.확인_필요 ? `<span class="pill s-check">확인 ${c.확인_필요}</span>` : "", c.노랑 ? `<span class="pill s-amber">주의 ${c.노랑}</span>` : ""].join("");
+      const b = [c.빨강 ? `<span class="pill stp s-red">임박 ${c.빨강}</span>` : "", c.확인_필요 ? `<span class="pill stp s-check">확인 ${c.확인_필요}</span>` : "", c.노랑 ? `<span class="pill stp s-amber">주의 ${c.노랑}</span>` : ""].join("");
       // in_service가 false면(지금은 북울산) 부품 자체가 없어 counts가 전부 0이다 — "안전"으로
       // 잘못 보여주면 안 된다(코드 리뷰로 찾은 버그). 운영 중 역만 그 fallback을 쓴다.
-      const fallback = s.in_service ? '<span class="pill s-green">안전</span>' : '<span class="pill s-check">개통 전</span>';
-      const meta = s.next ? `다음 교체 ${dotDate(s.next.due)} ${PART[s.next.part_type_code].name} · ${dur(s.next.days_left)}` : `${openLabel(s)} 개통 예정`;
-      return `<li data-name="${esc(s.name)}"><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${meta}</span></span><span class="badges">${b || fallback}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
+      const fallback = s.in_service ? '<span class="pill stp s-green">안전</span>' : '<span class="pill s-check">개통 전</span>';
+      const meta = s.next ? `다음 교체 ${dotDate(s.next.due)} ${PART[s.next.part_type_code].name} · ${dur(s.next.days_left)}` : openPlan(s);
+      return `<li data-name="${esc(s.name)}"><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${meta}</span>${miniBar(c)}</span><span class="badges">${b || fallback}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
     };
-    return `<section class="view">
-      ${legend(data.totals.확인_필요)}
+    const mode = `<div class="seg" role="group" aria-label="보기 방식">${[[false, "목록"], [true, "격자"]].map(([g, l]) => `<button type="button" class="segbtn" aria-pressed="${!!view.grid === g}" ${goAttr({ name: "route", grid: g || undefined, keep: true })}>${l}</button>`).join("")}</div>`;
+    const body = view.grid ? routePatterns(data.stations) + routeGrid(data.stations) : `
       <div class="stfilter-wrap"><input type="search" id="st-filter" class="stfilter" placeholder="역 이름으로 찾기 (예: 태화강)" aria-label="역 이름으로 찾기"></div>
       <ul class="route" id="route-list">${data.stations.map(item).join("")}</ul>
-      <p class="route-empty" id="route-empty" hidden>"<span id="route-empty-q"></span>" 역이 없습니다.</p>
+      <p class="route-empty" id="route-empty" hidden>"<span id="route-empty-q"></span>" 역이 없습니다.</p>`;
+    return `<section class="view">
+      <div class="headrow">${legend(data.totals.확인_필요)}${mode}</div>
+      ${body}
     </section>`;
   }
 
@@ -926,6 +1195,14 @@ details.more[open] > summary { margin-bottom: 10px; }
     const tag = Math.abs(d) < 0.05 ? `<span class="pill s-check">주기 변화 거의 없음</span>` : `<span class="pill s-info">교체주기 ${monthsText(d)} ${d < 0 ? "짧아짐" : "길어짐"}</span>`;
     const st = ["빨강", "노랑", "확인_필요", "초록"].filter(s => b.counts[s] || a.counts[s])
       .map(s => `<span>${pill(s)} ${b.counts[s]} → <b>${a.counts[s]}</b></span>`).join("");
+    // 2026-11-02 관리자 검토: 숫자만 보면 계산이 틀린 것처럼 보이는 두 경우에 이유를 붙인다
+    const moved = STATUS_KEYS.reduce((n, s) => n + Math.max(0, a.counts[s] - b.counts[s]), 0);
+    const notes = [
+      a.next_due > b.next_due && a.years <= b.years
+        && "교체주기는 짧아졌지만, 가장 급하던 부품을 이번에 교체해 새로 시작했기 때문에 가장 빠른 교체는 늦어졌습니다.",
+      a.parts > 1 && moved > Math.max(1, a.failures - b.failures)
+        && `교체주기는 이 역 ${c.part_name} ${a.parts}개 전체에 함께 적용돼, 기록 몇 건에도 여러 문의 상태가 같이 바뀝니다.`,
+    ].filter(Boolean).map(t => `<p class="small muted" style="margin:0">${esc(t)}</p>`).join("");
     return `<div class="chg">
         <div class="chg-title"><h3>${esc(c.station_name)} · ${esc(c.part_name)}</h3>${tag}</div>
         <div class="chg-big" aria-label="교체주기 ${yr(b.years)}에서 ${yr(a.years)}로"><span class="old">${yr(b.years)}</span><span class="arr" aria-hidden="true">→</span><span class="new">${yr(a.years)}</span></div>
@@ -935,6 +1212,7 @@ details.more[open] > summary { margin-bottom: 10px; }
           <dt>가장 빠른 교체</dt><dd>${dotDate(b.next_due)} → <b>${dotDate(a.next_due)}</b> <span class="muted small">(${dur(a.days_left)})</span></dd>
         </dl>
         <div class="stchg">${st}</div>
+        ${notes}
         ${kind === "preview" || kind === "compare" ? "" : `<button class="linkbtn" ${goAttr({ name: "station", st: c.station_id })}>${esc(c.station_name)}역 문별 상태 보기 ›</button>`}
       </div>`;
   }
@@ -996,11 +1274,15 @@ details.more[open] > summary { margin-bottom: 10px; }
     const qs = new URLSearchParams({ limit: REC_PER_PAGE, offset: (page - 1) * REC_PER_PAGE, order: "replaced" });
     if (view.rst) qs.set("station_id", view.rst);
     if (view.rpart) qs.set("part", view.rpart);
+    if (view.rfrom) qs.set("date_from", view.rfrom);
+    if (view.rto) qs.set("date_to", view.rto);
+    if (view.rreason) qs.set("reason", view.rreason);
     const [data, rec, hist] = await Promise.all([api("/api/stations"), api("/api/replacement-records?" + qs), api("/api/upload-batches?limit=10")]);
     const opened = data.stations.filter(s => s.in_service);
+    const filtered = !!(view.rst || view.rpart || view.rfrom || view.rto || view.rreason);
     const pages = Math.max(1, Math.ceil(rec.total / REC_PER_PAGE));
     const histRows = hist.batches.map(b => `<tr${b.undone_at ? ` class="muted"` : ""}>
-        <td class="num">${fmtTime(b.uploaded_at)}</td><td>${esc(b.file_name)}</td>
+        <td class="num">${fmtTime(b.uploaded_at)}</td><td>${esc(b.uploaded_by || "-")}</td><td>${esc(b.file_name)}</td>
         <td class="num small">${b.station_count}개 역 · ${dotDate(b.scope_from)}~${dotDate(b.scope_to)}</td>
         <td class="num">${n0(b.inserted)}</td><td class="num">${n0(b.updated)}</td><td class="num">${n0(b.deleted)}</td>
         <td>${b.undone_at ? `<span class="pill s-check">되돌림</span>` : b.can_undo ? `<button class="btn ghost" data-undo="${b.id}" type="button" style="padding:4px 10px">되돌리기</button>` : ""}</td></tr>`).join("");
@@ -1013,32 +1295,43 @@ details.more[open] > summary { margin-bottom: 10px; }
       <form class="panel form" id="xlsxform" novalidate>
         <div class="headrow"><h2>정비기록 엑셀 올리기</h2><a class="linkbtn" href="/api/replacement-records/template" download>빈 양식 내려받기 ›</a></div>
         <p class="small muted">현장 정비기록 엑셀이 원본입니다. 올리면 지금 기록과 먼저 비교해 보여 주고, "반영하기"를 눌러야 저장합니다. 같은 파일을 다시 올려도 기록이 늘지 않습니다.</p>
+        <p class="small"><b>이렇게 쓰면 편합니다:</b> 교체·점검할 때마다 화면에 들어올 필요 없이 현장 엑셀에만 계속 적고, 한 달에 한 번(급한 교체가 있었으면 그때) 그 누적 파일을 통째로 올리세요. 이미 들어간 줄은 "그대로"로 넘어가고 새로 적은 줄만 들어갑니다.</p>
         <label class="drop" id="xf-drop"><input type="file" id="xf-file" accept=".xlsx" class="vh"><b id="xf-name">엑셀 파일을 여기에 끌어다 놓거나, 눌러서 고르세요</b><span class="small muted">.xlsx · 첫 시트만 읽음 · 열: 역, 방향, 문번호, 교체일, 사유, 부품, 입력자</span></label>
         <details class="more"><summary>작성 규칙</summary><ul class="small muted" style="margin:0;padding-left:20px">
           <li>방향은 "부전 방면" 또는 "북울산 방면", 문번호는 "호차-문"(예: 1-1)으로 씁니다.</li>
           <li>역 공통 부품(종합제어반 릴레이)은 방향·문번호를 비워 둡니다.</li>
-          <li>사유는 고장 / 예방 교체 / 함께 교체 / 점검(이상 없음) 중 하나입니다. 고장만 "수명이 끝났다"로 셉니다.</li>
+          <li>사유는 넷 중 하나입니다.
+            <b>고장</b> = 고장 나서 바꿈 ·
+            <b>예방 교체</b> = 고장 나기 전에 미리 바꿈(예정일이 됐거나 점검에서 상태가 나빠서) ·
+            <b>함께 교체</b> = 다른 부품을 고치거나 바꾸는 김에 같이 바꿈(예: 모터를 바꾸며 벨트도 새것으로) ·
+            <b>점검(이상 없음)</b> = 바꾸지 않고 점검만 함.
+            교체주기 계산에서는 고장만 "그 부품이 수명을 다했다"로 세고, 예방·함께 교체는 "그때까지 멀쩡했다"로 셉니다.</li>
           <li>점검(이상 없음)은 교체일 칸에 점검일을 씁니다. 설치일은 바뀌지 않습니다.</li>
           <li>부품은 쉼표로 여러 개 쓸 수 있습니다(예: "DCM,IFM 릴레이"). "전체"는 그 문의 부품 전부입니다.</li>
           <li>잘못 적은 기록은 엑셀에서 고치거나 지운 뒤 다시 올립니다.</li>
-          <li>비교는 파일에 나온 역들의, 파일의 가장 이른 날짜~가장 늦은 날짜 사이 기록하고만 합니다. 누적 파일이면 전체, 한 달 파일이면 그 달만 봅니다.</li>
+          <li>비교는 파일에 나온 역들의, 파일의 가장 이른 날짜~가장 늦은 날짜 사이 기록하고만 합니다. 누적 파일이면 전체, 한 달 파일이면 그 달만 봅니다.
+            한 달 파일에 옛날 기록을 고친 줄을 섞으면 범위가 그 날짜까지 넓어지니, 옛날 기록은 누적 파일에서 고쳐 올리세요.</li>
           <li>한 행이라도 틀리면 아무것도 저장하지 않고, 틀린 행을 모두 알려 줍니다.</li></ul></details>
+        <label class="small muted">올리는 사람 <input type="text" id="xf-who" maxlength="50" placeholder="이름(선택) — 업로드 이력에 남습니다" style="min-width:240px"></label>
         <p class="err" id="xf-err" hidden></p>
         <button class="btn" type="submit">비교하기</button>
       </form>
       <div id="cmp"></div>
       <div class="panel">
         <div class="headrow"><h3>업로드 이력</h3><span class="small muted">되돌리기는 가장 최근 업로드부터 차례로 됩니다</span></div>
-        ${hist.batches.length ? `<div class="scroll"><table><tr><th>올린 때</th><th>파일</th><th>비교 범위</th><th>새 기록</th><th>고침</th><th>지움</th><th></th></tr>${histRows}</table></div>` : `<p class="small muted">아직 올린 파일이 없습니다.</p>`}
+        ${hist.batches.length ? `<div class="scroll"><table><tr><th>올린 때</th><th>올린 사람</th><th>파일</th><th>비교 범위</th><th>새 기록</th><th>고침</th><th>지움</th><th></th></tr>${histRows}</table></div>` : `<p class="small muted">아직 올린 파일이 없습니다.</p>`}
       </div>
       <div class="panel">
         <div class="headrow"><h3>교체 기록</h3><a class="linkbtn" href="/api/replacement-records/export" download>전체 기록 엑셀로 받기 ›</a></div>
         <div class="filters">
           <select id="rf-st" aria-label="역으로 거르기"><option value="">모든 역</option>${opened.map(s => `<option value="${s.id}" ${view.rst === s.id ? "selected" : ""}>${s.name}</option>`).join("")}</select>
           <select id="rf-part" aria-label="부품으로 거르기"><option value="">모든 부품</option>${PART_TYPES.map(t => `<option value="${t.code}" ${view.rpart === t.code ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+          <select id="rf-reason" aria-label="사유로 거르기"><option value="">모든 사유</option>${Object.entries(REASONS).map(([k, l]) => `<option value="${k}" ${view.rreason === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+          <label class="small muted">교체일 <input type="date" id="rf-from" value="${view.rfrom || ""}" aria-label="교체일 시작"> ~ <input type="date" id="rf-to" value="${view.rto || ""}" aria-label="교체일 끝"></label>
+          ${filtered ? `<button type="button" class="linkbtn" id="rf-clear">조건 지우기</button>` : ""}
           <span class="small muted">${n0(rec.total)}건 · 교체일 최신순</span>
         </div>
-        ${rec.records.length ? `<div class="scroll"><table>${recHead}${recRows(rec.records)}</table></div>${pager}` : `<p class="muted">${view.rst || view.rpart ? "조건에 맞는 기록이 없습니다." : "입력된 교체 기록이 없습니다."}</p>`}
+        ${rec.records.length ? `<div class="scroll"><table>${recHead}${recRows(rec.records)}</table></div>${pager}` : `<p class="muted">${filtered ? "조건에 맞는 기록이 없습니다." : "입력된 교체 기록이 없습니다."}</p>`}
       </div>
     </section>`;
   }
@@ -1058,13 +1351,13 @@ details.more[open] > summary { margin-bottom: 10px; }
     ].filter(Boolean).map(t => `<p class="small">${t}</p>`).join("");
     const missing = c.missing ? `<div class="panel" style="padding:12px;border-color:${r.missing_warn ? "var(--red)" : "var(--line)"}">
         <b>엑셀에 없는 기록 ${n0(c.missing)}건</b>
-        <p class="small ${r.missing_warn ? "err" : "muted"}" style="margin:0">${r.missing_warn ? "꽤 많습니다. 다른 역·기간의 파일을 고른 건 아닌지 확인하세요. " : ""}비교 범위 안에 있는데 이 엑셀에는 없는 기록입니다. 엑셀에서 지운 기록이 맞을 때만 지우세요.</p>
+        <p class="small ${r.missing_warn ? "err" : "muted"}" style="margin:0">${r.missing_warn ? `꽤 많습니다. 다른 역·기간의 파일을 고른 건 아닌지, 엑셀 ${r.scope.from_row}행(${dotDate(r.scope.from)})처럼 동떨어진 날짜 한 줄 때문에 범위가 넓어진 건 아닌지 확인하세요. ` : ""}비교 범위 안에 있는데 이 엑셀에는 없는 기록입니다. 엑셀에서 지운 기록이 맞을 때만 지우세요.</p>
         <details class="more"><summary>${n0(c.missing)}건 보기</summary><div class="scroll"><table>${recHead}${recRows(r.missing)}</table></div>${moreNote(r.missing.length, c.missing)}</details>
         <label class="small"><input type="checkbox" id="cmp-del" ${r.delete_missing ? "checked" : ""}> 이 ${n0(c.missing)}건을 지웁니다</label>
       </div>` : "";
     return `<div class="panel result" id="cmp-panel">
         <div class="resulthead"><div><h2>비교 결과: ${nothing ? "바뀌는 기록이 없습니다" : "아직 저장하지 않았습니다"}</h2>
-          <p class="small muted">${esc(r.file)} · 비교 범위 ${r.scope.stations}개 역, ${dotDate(r.scope.from)} ~ ${dotDate(r.scope.to)} (이 범위 밖의 기록은 건드리지 않습니다)</p></div>
+          <p class="small muted">${esc(r.file)} · 비교 범위 ${r.scope.stations}개 역, ${dotDate(r.scope.from)}(엑셀 ${r.scope.from_row}행) ~ ${dotDate(r.scope.to)}(엑셀 ${r.scope.to_row}행) · 이 범위 밖의 기록은 건드리지 않습니다</p></div>
           <div class="filters">${nothing ? "" : `<button class="btn" id="cmp-apply" type="button">반영하기</button>`}<button class="linkbtn" id="cmp-cancel" type="button">${nothing ? "닫기" : "취소"}</button></div></div>
         <div class="stchg"><span>새 기록 <b>${n0(c.new)}</b>건</span><span>고친 기록 <b>${n0(c.changed)}</b>건</span><span>엑셀에 없는 기록 <b>${n0(c.missing)}</b>건</span><span class="muted">그대로 ${n0(c.same)}건</span></div>
         ${nothing && !c.missing ? `<p class="small muted">이미 반영된 파일입니다.</p>` : ""}
@@ -1091,6 +1384,7 @@ details.more[open] > summary { margin-bottom: 10px; }
     const fileInput = f.querySelector("#xf-file"), err = f.querySelector("#xf-err"), btn = f.querySelector("button[type=submit]");
     const drop = f.querySelector("#xf-drop"), nameEl = f.querySelector("#xf-name"), box = app.querySelector("#cmp");
     let picked = null;
+    try { f.querySelector("#xf-who").value = localStorage.getItem("psd-uploader") || ""; } catch (e) {}
     const pick = file => { picked = file; nameEl.textContent = file ? `${file.name} — "비교하기"를 누르세요` : "엑셀 파일을 여기에 끌어다 놓거나, 눌러서 고르세요"; drop.classList.toggle("has", !!file); err.hidden = true; box.innerHTML = ""; };
     fileInput.addEventListener("change", () => pick(fileInput.files[0] || null));
     drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
@@ -1111,7 +1405,9 @@ details.more[open] > summary { margin-bottom: 10px; }
       if (apply) apply.addEventListener("click", async () => {
         apply.disabled = true; apply.textContent = "반영하는 중...";
         try {
-          const res = await apiUpload("/api/replacement-records/sync", picked, { delete_missing: del });
+          const who = f.querySelector("#xf-who").value.trim();
+          try { localStorage.setItem("psd-uploader", who); } catch (e) {}  // 다음에 또 적지 않게 이 브라우저에 기억
+          const res = await apiUpload("/api/replacement-records/sync", picked, { delete_missing: del, ...(who ? { uploaded_by: who } : {}) });
           if (!res.batch_id) { toast("바뀐 기록이 없습니다."); box.innerHTML = ""; return; }
           lastResult = { kind: "upload", ...res };
           go({ name: "records" });
@@ -1135,40 +1431,91 @@ details.more[open] > summary { margin-bottom: 10px; }
 
   // ---------- 역 ----------
   const SIDE_LABEL = { U: "부전 방면", D: "북울산 방면" };
-  async function vStation() {
-    const st = view.st;
-    const [detail, list] = await Promise.all([api(`/api/stations/${st}`), api("/api/stations")]);
-
-    if (!detail.station.in_service) {
-      const s = detail.station;
-      const prev = list.stations.find(x => x.id === st - 1), next = list.stations.find(x => x.id === st + 1);
-      const switcher = `<div class="switcher">
-          <button class="swbtn" ${prev ? goAttr({ name: "station", st: prev.id }) : "disabled"}>‹ ${prev ? prev.name : "이전 역 없음"}</button>
-          <select id="st-jump" aria-label="다른 역으로 이동">${list.stations.map(x => `<option value="${x.id}" ${x.id === st ? "selected" : ""}>${x.id}. ${x.name}</option>`).join("")}</select>
-          <button class="swbtn" ${next ? goAttr({ name: "station", st: next.id }) : "disabled"}>${next ? next.name : "다음 역 없음"} ›</button>
-        </div>`;
-      return `<section class="view">
-        <nav class="crumbs"><button ${goAttr({ name: "route" })}>역 목록</button><span>›</span><span>${s.name}</span></nav>
-        ${switcher}
-        <div class="panel">
-          <h2>${s.name}</h2>
-          <p class="muted">${openLabel(s)} 개통 예정 · 아직 스크린도어(PSD)가 설치되지 않아 교체주기를 계산할 대상이 없습니다.</p>
-        </div>
-      </section>`;
-    }
-
-    const sid = view.side || "U";
-    const sideDoors = detail.sides[sid].doors;
-    const doorId = sideDoors.find(d => d.id === view.door) ? view.door : worstDoor(sideDoors).id;
-    const doorDetail = await api(`/api/doors/${doorId}`);
+  function stationNav(stations, st) {
+    return `<nav class="stnav" aria-label="역 바꾸기">${stations.map(x => {
+      const c = x.counts, n = c.빨강 + c.확인_필요 + c.노랑;
+      const sub = !x.in_service ? "개통 전" : c.빨강 ? `교체 임박 ${c.빨강}` + (c.노랑 ? ` · 주의 ${c.노랑}` : "") : c.확인_필요 ? `확인 필요 ${c.확인_필요}` : c.노랑 ? `주의 ${c.노랑}` : "안전";
+      return `<button class="snav" ${x.id === st ? 'aria-current="page"' : ""} ${goAttr({ name: "station", st: x.id })}><b>${esc(x.name)}</b><span>${sub}</span>${n ? miniBar(c) : ""}</button>`;
+    }).join("")}</nav>`;
+  }
+  // 그 부품이 안전이 아닌 문들을 상태·예정일로 묶는다(현황 "교체 예정"의 한 줄 = 여기 한 묶음).
+  // 현황에서 "문 12개"를 눌러 와도 어느 문인지 승강장 그림을 방향마다 밀어 가며 찾아야 했다(2026-11-02)
+  function doorGroups(x) {
+    const groups = [];
+    (x.units || []).filter(u => u.status !== "초록").forEach(u => {
+      let g = groups.find(g => g.status === u.status && g.due === u.due);
+      if (!g) groups.push(g = { status: u.status, due: u.due, days_left: u.days_left, units: [] });
+      g.units.push(u);
+    });
+    return groups;
+  }
+  function doorListText(stName, p, groups) {
+    const lines = [`${stName} ${p.name} 교체 대상`];
+    groups.forEach(g => {
+      lines.push(`[${STATE[g.status][0]}] ${dotDate(g.due)} · ${g.units.length}개`);
+      Object.entries(SIDE_LABEL).forEach(([sid, label]) => {
+        const nos = g.units.filter(u => u.side === sid).map(u => u.no);
+        if (nos.length) lines.push(`  ${label}: ${nos.join(", ")}`);
+      });
+    });
+    return lines.join("\n");
+  }
+  function doorListRow(stName, p, x, open) {
+    const groups = doorGroups(x);
+    const body = groups.map(g => `<div class="dgroup"><span class="dhead">${pill(g.status)} <span class="num">${dotDate(g.due)} · ${g.units.length}개</span></span>${
+      Object.entries(SIDE_LABEL).map(([sid, label]) => {
+        const us = g.units.filter(u => u.side === sid);
+        return us.length ? `<span class="dside">${label}</span>${us.map(u => `<button type="button" class="dchip" ${goAttr({ name: "part", partId: u.part_id })} title="${esc(label + " " + u.no)}">${u.no}</button>`).join("")}` : "";
+      }).join("")}</div>`).join("");
+    const safe = x.counts.초록;
+    return `<tr class="plist" data-pl="${p.code}" ${open ? "" : "hidden"}><td colspan="6">${body}
+        <div class="plist-foot"><span class="small muted">${safe ? `나머지 ${safe}개는 안전 · ` : ""}문 번호를 누르면 그 부품 상세</span><button type="button" class="btn ghost" data-plcopy="${esc(doorListText(stName, p, groups))}">작업 지시용으로 복사</button></div></td></tr>`;
+  }
+  // 역 전체를 부품 종류별로: 가장 급한 상태, 그 상태인 부품 수 / 전체, 그 예정일. 줄을 누르면 가장 급한 그 부품 상세로
+  function partSummary(parts, stName, openCode) {
+    const rows = PART_TYPES.filter(p => parts[p.code]).map(p => ({ p, x: parts[p.code] }))
+      .sort((a, b) => RANK[a.x.status] - RANK[b.x.status] || a.x.days_left - b.x.days_left)
+      .map(({ p, x }) => {
+        const listable = p.unit !== "station" && x.status !== "초록";
+        const open = listable && openCode === p.code;
+        const btn = listable ? `<button type="button" class="linkbtn" style="padding:0" data-pltoggle="${p.code}" aria-expanded="${open}">${open ? "문 목록 닫기" : "문 목록"}</button>` : "";
+        return `<tr class="prow" tabindex="0" ${goAttr({ name: "part", partId: x.part_id })}><td><b>${esc(p.name)}</b>${p.unit === "station" ? ' <span class="small muted">역 공통</span>' : ""}</td><td>${pill(x.status)}</td><td class="num">${x.counts[x.status]} <span class="muted">/ ${x.total}</span></td><td class="num">${dotDate(x.due)}</td><td class="num">${dur(x.days_left)}</td><td>${btn}</td></tr>${listable ? doorListRow(stName, p, x, open) : ""}`;
+      }).join("");
+    return `<div class="panel" id="partsum">
+        <div class="headrow"><h3>부품별 상태</h3><span class="small muted">대상 = 그 상태인 부품 수 / 전체 · 줄을 누르면 가장 급한 부품 상세 · "문 목록"은 어느 문인지</span></div>
+        <div class="scroll"><table class="ptable"><tr><th>부품</th><th>상태</th><th>대상</th><th>다음 교체</th><th>남은 기간</th><th></th></tr>${rows}</table></div>
+      </div>`;
+  }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* http 등 clipboard가 막힌 곳 → 아래 방법 */ }
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.append(ta); ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  }
+  function setupPartSummary(box) {
+    box.querySelectorAll("[data-pltoggle]").forEach(b => b.addEventListener("click", e => {
+      e.stopPropagation();  // 줄 전체가 부품 상세로 가는 버튼이라 막는다
+      const row = box.querySelector(`.plist[data-pl="${b.dataset.pltoggle}"]`);
+      row.hidden = !row.hidden;
+      b.setAttribute("aria-expanded", String(!row.hidden));
+      b.textContent = row.hidden ? "문 목록" : "문 목록 닫기";
+      // 주소에도 남겨, 문·방향을 바꿔 화면을 다시 그려도 펼친 목록이 그대로 있게 한다
+      view.plist = row.hidden ? (view.plist === b.dataset.pltoggle ? undefined : view.plist) : b.dataset.pltoggle;
+      history.replaceState(null, "", encodeView(view));
+    }));
+    box.querySelectorAll("[data-plcopy]").forEach(b => b.addEventListener("click", async () => {
+      toast(await copyText(b.dataset.plcopy) ? "문 목록을 복사했습니다. 작업 지시서·메신저에 붙여 넣으세요." : "복사하지 못했습니다. 직접 골라 복사하세요.");
+    }));
+    // 현황에서 "문 N개"를 눌러 막 들어왔을 때만 목록까지 내려 준다(같은 역에서 문·방향을 바꿀 땐 keep이라 그대로)
+    const open = box.querySelector(".plist:not([hidden])");
+    if (open && !view.keep) open.previousElementSibling.scrollIntoView({ block: "center" });
+  }
+  // 아래 "안전문 N-N" 칸(문 그림 + 부품 표). 승강장 안전문을 누르면 이 칸만 바꿔 끼운다(selectDoor)
+  function doorPanel(doorDetail) {
     const door = doorDetail.door;
-
-    const at = (d, keep) => ({ name: "station", st, side: sid, door: d, keep });
-    const dirTabs = `<div class="dirtabs" role="group" aria-label="방향 선택">${Object.entries(SIDE_LABEL).map(([k, v]) => `<button class="dirtab" aria-pressed="${k === sid}" ${goAttr({ name: "station", st, side: k, keep: true })}>${v}</button>`).join("")}</div>`;
-    const strip = `<div class="strip-wrap"><div class="strip">${[1, 2, 3, 4].map(car => `<div class="car"><div class="carlabel">${car}호차</div><div class="cardoors">${sideDoors.filter(d => d.car === car).map(d =>
-      `<button class="psd c-${d.worst_status}" aria-pressed="${d.id === doorId}" aria-label="${esc(d.no + " · " + STATE[d.worst_status][0])}" ${goAttr(at(d.id, true))}><span class="psd-head"></span><span class="psd-glass"><i></i><i></i></span><span class="psd-no">${d.no}</span></button>`
-    ).join("")}</div></div>`).join("")}</div></div>`;
-
     const u = code => doorDetail.units.find(x => x.part_type_code === code);
     const chip = (code, label, x, y, w) => { const x0 = u(code); return `<g class="chip c-${x0.status}" tabindex="0" role="link" aria-label="${esc(x0.part_name + " " + STATE[x0.status][0])}" ${goAttr({ name: "part", partId: x0.part_id })}><rect x="${x}" y="${y}" width="${w}" height="24" rx="5"/><text x="${x + w / 2}" y="${y + 16}" text-anchor="middle">${label}</text></g>`; };
     const doorSvg = `<svg class="doorsvg" viewBox="0 0 360 250" role="img" aria-label="안전문 ${door.no} 구조와 부품 상태">
@@ -1186,6 +1533,66 @@ details.more[open] > summary { margin-bottom: 10px; }
       </svg>`;
     const order = [...doorDetail.units].sort((a, b) => RANK[a.status] - RANK[b.status] || a.days_left - b.days_left);
     const partRows = order.map(x => `<tr class="prow" tabindex="0" ${goAttr({ name: "part", partId: x.part_id })}><td><b>${x.part_name}</b></td><td>${pill(x.status)}</td><td class="num">${yr(x.cycle_years)}</td><td class="num">${dotDate(x.due)}</td><td class="num">${dur(x.days_left)}</td></tr>`).join("");
+    return `<div class="psdhead"><h2>안전문 ${door.no}</h2><span class="muted small">${door.side_label}</span></div>
+        <div class="doorgrid">
+          <figure class="doorfig">${doorSvg}</figure>
+          <div class="doorparts">
+            <div class="scroll"><table class="ptable"><tr><th>부품</th><th>상태</th><th>교체주기</th><th>다음 교체</th><th>남은 기간</th></tr>${partRows}</table></div>
+          </div>
+        </div>`;
+  }
+  // 문을 누를 때마다 역 화면 전체를 다시 그리면("불러오는 중…"으로 비웠다 채움) 스크롤과 문 줄의 가로 스크롤이
+  // 튀었다(2026-11-02). 누른 문 표시만 옮기고 아래 칸만 새로 받아 바꾼다. 주소는 전처럼 남겨 뒤로 가기가 된다
+  let doorSeq = 0;
+  async function selectDoor(btn) {
+    const id = Number(btn.dataset.door);
+    btn.closest(".strip").querySelectorAll("[data-door]").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+    view = { ...view, side: btn.dataset.side, door: id, keep: true };
+    const h = encodeView(view);
+    if (location.hash !== h) { suppressHash = true; location.hash = h; }
+    const my = ++doorSeq;
+    try {
+      const d = await api(`/api/doors/${id}`);
+      const panel = app.querySelector(".doorpanel");
+      if (my !== doorSeq || !panel) return;  // 그사이 다른 문을 눌렀거나 화면을 옮겼으면 버린다
+      panel.innerHTML = doorPanel(d);
+      bindGo(panel);
+    } catch (e) { toast(e.message); }
+  }
+  async function vStation() {
+    const st = view.st;
+    const [detail, list] = await Promise.all([api(`/api/stations/${st}`), api("/api/stations")]);
+
+    if (!detail.station.in_service) {
+      const s = detail.station;
+      const prev = list.stations.find(x => x.id === st - 1), next = list.stations.find(x => x.id === st + 1);
+      const switcher = `<div class="switcher">
+          <button class="swbtn" ${prev ? goAttr({ name: "station", st: prev.id }) : "disabled"}>‹ ${prev ? prev.name : "이전 역 없음"}</button>
+          <select id="st-jump" aria-label="다른 역으로 이동">${list.stations.map(x => `<option value="${x.id}" ${x.id === st ? "selected" : ""}>${x.id}. ${x.name}</option>`).join("")}</select>
+          <button class="swbtn" ${next ? goAttr({ name: "station", st: next.id }) : "disabled"}>${next ? next.name : "다음 역 없음"} ›</button>
+        </div>`;
+      return `<section class="view">
+        <nav class="crumbs"><button ${goAttr({ name: "route" })}>역 목록</button><span>›</span><span>${s.name}</span></nav>
+        <div class="stlayout">${stationNav(list.stations, st)}<div class="stmain">
+        ${switcher}
+        <div class="panel">
+          <h2>${s.name}</h2>
+          <p class="muted">${openPlan(s)} · 아직 스크린도어(PSD)가 설치되지 않아 교체주기를 계산할 대상이 없습니다.</p>
+        </div>
+        </div></div>
+      </section>`;
+    }
+
+    const sid = view.side || (view.door && detail.sides.D.doors.some(d => d.id === view.door) ? "D" : "U");
+    const sideDoors = detail.sides[sid].doors;
+    const doorId = sideDoors.find(d => d.id === view.door) ? view.door : worstDoor(sideDoors).id;
+    const doorDetail = await api(`/api/doors/${doorId}`);
+
+    const dirTabs = `<div class="dirtabs" role="group" aria-label="방향 선택">${Object.entries(SIDE_LABEL).map(([k, v]) => `<button class="dirtab" aria-pressed="${k === sid}" ${goAttr({ name: "station", st, side: k, plist: view.plist, keep: true })}>${v}</button>`).join("")}</div>`;
+    const strip = `<div class="strip-wrap"><div class="strip">${[1, 2, 3, 4].map(car => `<div class="car"><div class="carlabel">${car}호차</div><div class="cardoors">${sideDoors.filter(d => d.car === car).map(d =>
+      `<button class="psd c-${d.worst_status}" aria-pressed="${d.id === doorId}" aria-label="${esc(d.no + " · " + STATE[d.worst_status][0])}" data-door="${d.id}" data-side="${sid}"><span class="psd-head"></span><span class="psd-glass"><i></i><i></i></span><span class="psd-no">${d.no}</span></button>`
+    ).join("")}</div></div>`).join("")}</div></div>`;
+
 
     const prev = list.stations.find(s => s.id === st - 1), next = list.stations.find(s => s.id === st + 1);
     const switcher = `<div class="switcher">
@@ -1193,40 +1600,75 @@ details.more[open] > summary { margin-bottom: 10px; }
         <select id="st-jump" aria-label="다른 역으로 이동">${list.stations.map(x => `<option value="${x.id}" ${x.id === st ? "selected" : ""}>${x.id}. ${x.name}</option>`).join("")}</select>
         <button class="swbtn" ${next ? goAttr({ name: "station", st: next.id }) : "disabled"}>${next ? next.name : "다음 역 없음"} ›</button>
       </div>`;
-    const psc = detail.psc, s = detail.station, c = detail.counts;
+    const s = detail.station, c = detail.counts;
     return `<section class="view">
       <nav class="crumbs"><button ${goAttr({ name: "route" })}>역 목록</button><span>›</span><span>${s.name}</span></nav>
+      <div class="stlayout">${stationNav(list.stations, st)}<div class="stmain">
       ${switcher}
       <div class="panel">
         <h2>${s.name}</h2>
-        <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)}</dd><dt>날씨 지점</dt><dd>AWS ${s.aws_station}</dd><dt>문 수</dt><dd>방향마다 16개</dd><dt>운행</dt><dd>방향마다 하루 약 ${dailyTrips(s.service_interval_min)}회</dd></dl>
+        <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)}</dd><dt>PSD 설치일</dt><dd>${fmtDateKR(s.psd_install_date)} <span class="small muted">(교체 기록이 없는 부품은 이날부터 셉니다)</span></dd><dt>날씨 지점</dt><dd>AWS ${s.aws_station}</dd><dt>문 수</dt><dd>방향마다 16개</dd><dt>운행</dt><dd>방향마다 하루 약 ${dailyTrips(s.service_interval_min)}회</dd></dl>
         <div class="legend">${pill("빨강")} ${c.빨강} <span class="${zeroCls(c.확인_필요)}">${pill("확인_필요")} ${c.확인_필요}</span> ${pill("노랑")} ${c.노랑} ${pill("초록")} ${c.초록}</div>
         <div class="filters"><span class="small muted">${s.name}역 보고서</span>${reportBox([], s.id)}</div>
       </div>
+      ${partSummary(detail.parts, s.name, view.plist)}
       <div class="panel">
         <div class="psdhead"><h3>승강장 안전문</h3>${dirTabs}</div>
         ${strip}
         <div class="legend">${pill("빨강")}<span class="muted">6개월 이하</span><span class="${zeroCls(c.확인_필요)}">${pill("확인_필요")} <span class="muted">기록 없이 지남</span></span>${pill("노랑")}<span class="muted">1년 이하</span>${pill("초록")}<span class="muted">여유</span></div>
       </div>
-      <div class="panel doorpanel">
-        <div class="psdhead"><h2>안전문 ${door.no}</h2><span class="muted small">${door.side_label}</span></div>
-        <div class="doorgrid">
-          <figure class="doorfig">${doorSvg}</figure>
-          <div class="doorparts">
-            <div class="scroll"><table class="ptable"><tr><th>부품</th><th>상태</th><th>교체주기</th><th>다음 교체</th><th>남은 기간</th></tr>${partRows}</table></div>
-          </div>
-        </div>
-      </div>
-      <div class="panel">
-        <h3>역 공통 설비</h3>
-        <button class="row" ${goAttr({ name: "part", partId: psc.part_id })}>${pill(psc.status)}<span class="what"><b>종합제어반 릴레이</b><br><span class="small muted">예정일 ${dotDate(psc.due)}</span></span><span class="small num">${dur(psc.days_left)}</span></button>
-      </div>
+      <div class="panel doorpanel">${doorPanel(doorDetail)}</div>
+      </div></div>
     </section>`;
   }
 
-  // ---------- 부품 상세 ----------
-  async function vPart() {
-    const p = await api(`/api/parts/${view.partId}`);
+  // ---------- 부품 상세(오른쪽 패널) ----------
+  const drawer = document.getElementById("drawer"), scrim = document.getElementById("scrim");
+  let drawerPushed = false, drawerSeq = 0;
+  function openPart(id) {
+    view = { ...view, open: id };
+    const h = encodeView(view);
+    if (location.hash !== h) { drawerPushed = true; suppressHash = true; location.hash = h; }
+    syncDrawer();
+  }
+  // 열 때 주소를 하나 쌓았으면 뒤로 가기로 닫는다(브라우저 뒤로 버튼과 같은 동작). 주소로 바로 열었으면 주소만 고친다
+  function closePart() {
+    if (drawer.hidden) return;  // Esc·닫기가 겹쳐 두 번 불려도 한 번만 닫는다(두 번째가 주소를 덮어 앞으로 가기가 깨졌다)
+    if (drawerPushed) { drawerPushed = false; drawer.hidden = scrim.hidden = true; history.back(); return; }
+    view = { ...view, open: undefined };
+    history.replaceState(null, "", encodeView(view));
+    syncDrawer();
+  }
+  function bindDrawer() {
+    drawer.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", closePart));
+    drawer.querySelectorAll("[data-go]").forEach(el => el.addEventListener("click", () => go(JSON.parse(el.dataset.go))));
+  }
+  async function syncDrawer() {
+    const id = view.open;
+    drawer.hidden = scrim.hidden = !id;
+    document.documentElement.classList.toggle("noscroll", !!id);
+    if (!id) { drawer.dataset.id = ""; return; }
+    if (drawer.dataset.id === String(id)) return;
+    drawer.dataset.id = id;
+    const my = ++drawerSeq;
+    drawer.innerHTML = `<div class="drawer-h"><b id="dw-title">불러오는 중…</b><button class="xbtn" type="button" data-close aria-label="닫기">×</button></div>`;
+    bindDrawer();
+    try {
+      const html = partPanel(await api(`/api/parts/${id}`));
+      if (my !== drawerSeq) return;  // 그사이 다른 부품을 열었으면 늦게 온 응답은 버린다
+      drawer.innerHTML = html;
+    } catch (e) {
+      if (my !== drawerSeq) return;
+      drawer.innerHTML = `<div class="drawer-h"><b id="dw-title">불러오지 못했습니다</b><button class="xbtn" type="button" data-close aria-label="닫기">×</button></div><div class="drawer-b"><p class="small muted">${esc(e.message || String(e))}</p></div>`;
+    }
+    bindDrawer();
+    drawer.scrollTop = 0;
+    drawer.querySelector(".xbtn").focus();
+  }
+  scrim.addEventListener("click", closePart);
+  window.addEventListener("keydown", e => { if (e.key === "Escape" && !drawer.hidden) closePart(); });
+
+  function partPanel(p) {
     const { part, cycle, due, days_left, status, weather_basis, history, calibration: cal } = p;
     // 코드 리뷰로 찾은 버그: 축이 7~13년으로 고정돼 있어서, 24개 역 거의 전부인 IFM·DCM
     // 부품(실제 범위가 7년 미만)이 왼쪽 끝에 뭉개져 보였다. 이 부품의 실제 값(+10년 기준선)이
@@ -1239,7 +1681,7 @@ details.more[open] > summary { margin-bottom: 10px; }
     const range = cycle.judgment === "날씨무관" ? "" : `
       <div class="rangebar" aria-hidden="true"><div class="track"></div><div class="band" style="left:${pos(cycle.lo_years)};width:calc(${pos(cycle.hi_years)} - ${pos(cycle.lo_years)})"></div><div class="tick" style="left:${pos(10)}"></div><div class="base" style="left:${pos(cycle.base_years)}"></div></div>
       <div class="rangeaxis"><span>${yr(lo)}</span><span>${yr(hi)}</span></div>
-      <p class="small muted">원인 비중을 어떻게 잡느냐에 따라 ${yr(cycle.lo_years)}–${yr(cycle.hi_years)} · 세로선은 권장 10년</p>`;
+      <p class="small muted">고장 원인(부식·노화 등)이 각각 얼마나 차지한다고 가정하느냐에 따라 ${yr(cycle.lo_years)}–${yr(cycle.hi_years)}까지 달라집니다 · 세로선 = 제조사 권장 10년</p>`;
 
     let basis;
     if (!weather_basis) {
@@ -1247,45 +1689,56 @@ details.more[open] > summary { margin-bottom: 10px; }
         <ol class="src"><li>NSWC-98 기계부품 신뢰성 핸드북: 벨트 장 없음, 베어링 계수에 날씨 입력 없음 — <a href="https://everyspec.com/USN/NSWC/NSWC-98_RELIABILITY_HDBK_SEP1998_55321/" target="_blank" rel="noopener">EverySpec</a></li></ol>`;
     } else {
       const wb = weather_basis, src = SRC[part.part_type_code] || [];
-      basis = `<div class="scroll"><table><tr><th></th><th>이 역(${wb.observatory})</th><th>24개 역 평균</th></tr>
+      // 권장 주기 = 10년 ÷ Σ(비중 × 열화 속도). 비중은 기본값(문자열 맨 앞 %), 열화 속도는 24개 역 평균 날씨 대비
+      const formula = `10년 ÷ (${wb.causes.map(c => `${c.name} ${parseFloat(c.weight_default)}% × ${c.af.toFixed(2)}`).join(" + ")}) ≈ ${yr(cycle.base_years)}`;
+      basis = `<div class="formula">${esc(formula)}</div>
+        <p class="small muted">열화 속도 = 이 역 날씨에서 그 원인이 24개 역 평균 날씨보다 몇 배 빨리 진행되는지(1보다 크면 빨리 닳음). 날마다 계산해 평균 낸 값이라, 평균 날씨가 비슷해도 습하거나 더운 날이 몰리면 1보다 크게 나옵니다.</p>
+        <div class="scroll"><table><tr><th>날씨(AWS 실측 평균)</th><th>이 역(${wb.observatory})</th><th>24개 역 평균</th></tr>
           <tr><td>연평균 기온</td><td class="num">${wb.station_climate.T.toFixed(1)}°C</td><td class="num">${wb.reference_climate.T.toFixed(1)}°C</td></tr>
           <tr><td>평균 습도</td><td class="num">${wb.station_climate.RH.toFixed(1)}%</td><td class="num">${wb.reference_climate.RH.toFixed(1)}%</td></tr>
           <tr><td>평균 일교차</td><td class="num">${wb.station_climate.DT.toFixed(1)}°C</td><td class="num">${wb.reference_climate.DT.toFixed(1)}°C</td></tr></table></div>
-        <div class="scroll"><table><tr><th>고장 원인</th><th>날씨 변수</th><th>열화 속도(평균 대비)</th><th>비중 기본값(범위)</th></tr>
-          ${wb.causes.map(r => `<tr><td>${r.name}</td><td>${r.variable}</td><td class="num">${r.af.toFixed(2)}배</td><td class="num">${r.weight_default}</td></tr>`).join("")}</table></div>
+        <details class="more"><summary>원인별 열화 속도와 비중</summary><div class="scroll"><table><tr><th>고장 원인</th><th>날씨 변수</th><th>열화 속도(평균 대비)</th><th>비중 기본값(범위)</th></tr>
+          ${wb.causes.map(r => `<tr><td>${r.name}</td><td>${r.variable}</td><td class="num">${r.af.toFixed(2)}배</td><td class="num">${r.weight_default}</td></tr>`).join("")}</table></div></details>
         <button class="linkbtn" ${goAttr({ name: "weather", simSt: part.station_id })}>이 역 날씨를 바꿔 보기 ›</button>
         <ol class="src">${src.map(x => `<li><a href="${x[1]}" target="_blank" rel="noopener">${x[0]}</a></li>`).join("")}</ol>`;
     }
-    // 예정일 = 기준일 + 교체주기. 기준일은 마지막 교체일(점검은 안 셈), 교체 기록이 없으면 PSD 설치일
+    // 예정일 = 마지막 교체일 + 교체주기(점검은 안 셈), 교체 기록이 없으면 PSD 설치일부터 센다.
+    // "기준일"이라고 쓰면 머리글의 "2026.11.02 기준"(오늘)과 같은 말이라 헷갈려 실제 날짜 이름으로 쓴다(2026-11-02)
     const lastRep = history.find(r => r.reason !== "check");
-    const baseNote = lastRep && lastRep.replaced_on === p.install_date ? "마지막 교체" : history.length ? "교체 기록 없음(점검만) → PSD 설치일" : "교체 기록 없음 → PSD 설치일";
-    const hist = history.length ? `<div class="list">${history.map(r => `<div class="row" style="cursor:default"><span class="pill s-check">${REASONS[r.reason]}</span><span class="what">${dotDate(r.replaced_on)}</span><span></span></div>`).join("")}</div>` : `<p class="muted">기록 없음</p>`;
-    return `<section class="view">
-      <nav class="crumbs"><button ${goAttr({ name: "route" })}>역 목록</button><span>›</span><button ${goAttr({ name: "station", st: part.station_id })}>${part.station_name}</button><span>›</span><span>${part.door_label} ${part.part_name}</span></nav>
-      <div class="panel">
-        <h2>${part.station_name} · ${part.door_label} · ${part.part_name}</h2>
-        <div class="legend">${pill(status)} <span class="num">${dur(days_left)}</span></div>
-        <dl class="kv"><dt>다음 교체 예정일</dt><dd class="num">${dotDate(due)}</dd>
-          <dt>기준일</dt><dd><span class="num">${dotDate(p.install_date)}</span> <span class="small muted">(${baseNote})</span></dd>
-          <dt>교체주기</dt><dd><span class="num">${yr(p.cycle_years)}</span> <span class="small muted">(기준일 + 교체주기 = 예정일)</span></dd></dl>
+    const baseNote = lastRep && lastRep.replaced_on === p.install_date ? "마지막 교체일" : history.length ? "PSD 설치일(교체 기록 없음, 점검만)" : "PSD 설치일(교체 기록 없음)";
+    const hist = history.length ? `<div class="list">${history.map(r => `<div class="row" style="cursor:default"><span class="pill s-check">${REASONS[r.reason]}</span><span class="what">${dotDate(r.replaced_on)}</span><span></span></div>`).join("")}</div>` : `<p class="muted small">기록 없음</p>`;
+    const left = days_left < 0 ? `${-days_left}일 지남` : `D-${days_left}`;
+    const onStation = view.name === "station" && view.st === part.station_id;
+    // 2026-11-02 관리자 검토: 문 하나 고장에 같은 역 문 수십 개 상태가 바뀌는 이유, "고장 N건 반영"이 아래 이력(이 문)과
+    // 다른 이유를 화면에 밝히고, 계산식·Peck 모델 같은 용어는 "계산 자세히" 안으로 접었다
+    return `<div class="drawer-h">
+        <div><span class="small muted">${esc(part.station_name)} · ${esc(part.door_label)}</span><h2 id="dw-title">${esc(part.part_name)}</h2><div class="legend">${pill(status)}</div></div>
+        <button class="xbtn" type="button" data-close aria-label="닫기">×</button>
+      </div>
+      <div class="drawer-b">
+        <div class="duebox">
+          <span class="small muted">다음 교체</span>
+          <span class="big">${dotDate(due)}<b class="${days_left < 0 || status === "빨강" ? "late" : ""}" style="${days_left < 0 || status === "빨강" ? "color:var(--red)" : ""}">${left}</b></span>
+          <span class="small muted">${dur(days_left)} · ${baseNote} ${dotDate(p.install_date)} + 교체주기 ${yr(p.cycle_years)}</span>
+        </div>
         ${status === "확인_필요" ? `<p class="small">기록 없이 예정일이 지났습니다. 교체했거나 점검했다면 정비기록 엑셀에 적어 교체 기록 탭에서 올리세요.</p>` : ""}
-      </div>
-      <div class="panel">
-        <h3>이 역의 교체주기</h3>
-        <div class="cycle"><span class="big">${yr(p.cycle_years)}</span>${cal && cal.failures ? `<span class="pill s-info">고장 기록 ${cal.failures}건 반영</span>` : `<span class="pill s-check">날씨 공식 그대로</span>`}</div>
-        ${cal ? `${cmpSvg([["날씨 공식", cal.formula_years, "b0"], ["기록 반영", cal.years, "b1"]], [[10, "권장 10년"]], "날씨 공식과 기록 반영 교체주기 비교")}` : ""}
-        ${cal && cal.capped ? `<p class="small muted">계산상 ${yr(cal.raw_years)}이지만, 제조사 권장 10년보다 늦게 바꾸지 않도록 예정일엔 10년을 씁니다.</p>` : ""}
-      </div>
-      <div class="panel"><h3>교체·점검 이력</h3>${hist}</div>
-      <div class="panel">
-        <details class="more"><summary>계산 근거 자세히 (날씨 공식·원인별 영향·출처)</summary>
-          <h3>날씨 공식 ${yr(cycle.base_years)}</h3>
-          <div class="cycle">${jpill(cycle.judgment)}</div>
-          ${range}
-          ${basis}
-        </details>
-      </div>
-    </section>`;
+        <section class="panel">
+          <h3>이 역의 교체주기</h3>
+          <div class="cycle"><span class="big">${yr(p.cycle_years)}</span>${cal && cal.failures ? `<span class="pill s-info">이 역 ${esc(part.part_name)} 고장 ${cal.failures}건 반영</span>` : `<span class="pill s-check">날씨 공식 그대로</span>`}</div>
+          ${cal ? `${cmpSvg([["날씨 공식", cal.formula_years, "b0"], ["기록 반영", cal.years, "b1"]], [[10, "권장 10년"]], "날씨 공식과 기록 반영 교체주기 비교")}` : ""}
+          ${cal && cal.capped ? `<p class="small muted">계산상 ${yr(cal.raw_years)}이지만, 제조사 권장 10년보다 늦게 바꾸지 않도록 예정일엔 10년을 씁니다.</p>` : ""}
+          <p class="small muted">교체주기는 문마다 따로가 아니라 <b>이 역 ${esc(part.part_name)} 전체</b>의 기록(고장·교체·지금까지 버틴 기간)으로 함께 정합니다. 그래서 한 문에서 고장이 나도 이 역 같은 부품 모두의 예정일이 함께 당겨질 수 있습니다.${cal && cal.failures ? ` 날씨 공식 값에서 출발해 고장 기록이 쌓일수록 기록 쪽으로 옮겨 갑니다(지금 기록 비중 약 ${Math.round(cal.data_share * 100)}%).` : ""}</p>
+        </section>
+        <section class="panel">
+          <div class="headrow"><h3>날씨 공식 ${yr(cycle.base_years)}</h3>${jpill(cycle.judgment)}</div>
+          <p class="small">${weather_basis
+            ? `이 부품은 습도·기온·일교차에 따라 빨리 닳는 원인이 있어, 이 역 가까운 기상 관측소(AWS ${esc(weather_basis.observatory)})의 실제 날씨로 제조사 권장 10년을 줄이거나 늘렸습니다. ${JUDGE[cycle.judgment][2]}`
+            : JUDGE.날씨무관[2]}</p>
+          ${weather_basis ? `<details class="more"><summary>계산 자세히(공식·날씨·원인별 비중·출처)</summary>${range}${basis}</details>` : basis}
+        </section>
+        <section class="panel"><h3>이 부품의 교체·점검 이력 <span class="small muted">${esc(part.door_label)}</span></h3>${hist}</section>
+        ${onStation ? "" : `<button class="linkbtn" ${goAttr({ name: "station", st: part.station_id, ...(part.door_id ? { door: part.door_id } : {}) })}>${esc(part.station_name)} 역 상세로 ›</button>`}
+      </div>`;
   }
 
   // ---------- 날씨 영향 ----------
@@ -1458,23 +1911,87 @@ details.more[open] > summary { margin-bottom: 10px; }
     upd();
   }
 
-  // ---------- 교체 물량(현황 그래프의 "부품별 표") ----------
-  async function vVolume() {
-    const vol = await api("/api/replacement-volume?years_ahead=3");  // 현황 그래프와 같은 3년
-    const tot = q => PART_TYPES.reduce((a, p) => a + (q.counts[p.code] || 0), 0);
-    const quarters = vol.quarters.filter(q => q.total);  // 교체 예정이 없는 분기는 뺀다
-    const max = Math.max(...quarters.map(tot), 1);
-    const checkTot = vol.check.total;
-    return `<section class="view">
-      <nav class="crumbs"><button ${goAttr({ name: "home" })}>현황</button><span>›</span><span>교체 물량</span></nav>
+  // ---------- 교체 계획: 기간마다 교체 예정 부품 수(자재 발주·작업 배분, 몰리는 때 앞당겨 나눌 역 고르기) ----------
+  const PLAN_SPANS = ["12m", "3y", "5y"];
+  const SPAN_LABEL = { "12m": ["12개월", "월별"], "3y": ["3년", "분기별"], "5y": ["5년", "연도별"] };
+  // 맨 앞 칸은 지금 달·분기·해(남은 기간)라 칸 수가 하나 더 많다(12개월 = 13칸) — 카드 제목에 그대로 밝힌다
+  const SPAN_NOW = { month: "이번 달", quarter: "이번 분기", year: "올해" };
+  // 축 글자: 해가 바뀌는 칸(과 맨 앞 칸)에만 연도를 붙인다
+  function axisLabel(b, i, unit) {
+    if (unit === "year") return [String(b.year), ""];
+    const first = i === 0 || b.sub === 1;
+    return [unit === "month" ? `${b.sub}월` : `${b.sub}분기`, first ? String(b.year) : ""];
+  }
+  function planChart(B, unit, pi) {
+    // 그림 폭을 고정해 기간 수(13칸·6칸)와 상관없이 높이가 같게 한다. 막대는 너무 굵어지지 않게 52까지
+    const n = B.length, W = 832, BW = W / n, H = 150, TOP = 18;
+    const max = Math.max(...B.map(b => b.total), 1);
+    const bars = B.map((b, i) => {
+      const x = i * BW, h = b.total ? Math.max(3, b.total / max * (H - TOP)) : 0, y = H - h, w = Math.min(BW - 12, 52), bx = x + (BW - w) / 2, r = Math.min(4, h, w / 2);
+      const [l1, l2] = axisLabel(b, i, unit);
+      const rows = [...PART_TYPES.filter(p => b.counts[p.code]).map(p => [p.name, b.counts[p.code].toLocaleString() + "개"]), ["합계", b.total.toLocaleString() + "개"]];
+      const bar = h ? `<path class="bar ${i === pi ? "pk" : ""}" d="M${bx},${H}V${y + r}Q${bx},${y} ${bx + r},${y}H${bx + w - r}Q${bx + w},${y} ${bx + w},${y + r}V${H}Z"/>` : "";
+      return `<rect class="hit" data-pb="${i}" x="${x}" y="0" width="${BW}" height="${H + 30}" rx="3" tabindex="0" role="button" aria-label="${esc(b.label)} ${b.total}개 · 역별 물량 보기" ${tipAttr(b.label, rows)}/>${bar}
+        <text class="v" x="${x + BW / 2}" y="${(h ? y : H) - 5}" text-anchor="middle">${b.total ? b.total.toLocaleString() : "–"}</text>
+        <text x="${x + BW / 2}" y="${H + 14}" text-anchor="middle">${l1}</text>${l2 ? `<text x="${x + BW / 2}" y="${H + 26}" text-anchor="middle">${l2}</text>` : ""}`;
+    }).join("");
+    return `<div class="pchart"><svg viewBox="0 -4 ${W} ${H + 34}" role="img" aria-label="기간별 교체 예정 부품 수"><line class="base" x1="0" x2="${W}" y1="${H}" y2="${H}"/>${bars}</svg></div>`;
+  }
+  // 막대를 누르면 그 기간의 역별 물량으로 바꾼다(다시 받지 않고 미리 그려 둔 것 중 하나만 보임)
+  function setupPlan(box) {
+    const pick = i => {
+      box.querySelectorAll(".sbars[data-pb]").forEach(el => { el.hidden = el.dataset.pb !== String(i); });
+      box.querySelectorAll(".pchart .hit").forEach(el => el.classList.toggle("sel", el.dataset.pb === String(i)));
+    };
+    box.querySelectorAll(".pchart .hit").forEach(el => {
+      el.addEventListener("click", () => pick(el.dataset.pb));
+      el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(el.dataset.pb); } });
+    });
+    pick(box.dataset.peak);
+  }
+  async function vPlan() {
+    const span = PLAN_SPANS.includes(view.span) ? view.span : "12m";
+    const plan = await api(`/api/replacement-plan?span=${span}`);
+    const B = plan.buckets, [spanName, unitName] = SPAN_LABEL[span];
+    const total = B.reduce((a, b) => a + b.total, 0);
+    const peak = peakOf(B), pi = peak.total ? B.indexOf(peak) : -1;
+    const main = peak.total ? PART_TYPES.reduce((a, p) => ((peak.counts[p.code] || 0) > (peak.counts[a.code] || 0) ? p : a), PART_TYPES[0]) : null;
+
+    const seg = `<div class="seg" role="group" aria-label="기간">${PLAN_SPANS.map(k => `<button type="button" class="segbtn" aria-pressed="${k === span}" ${goAttr({ name: "plan", span: k, keep: true })}>${SPAN_LABEL[k][0]}</button>`).join("")}</div>`;
+    const cards = `<section class="scards">
+        <div class="scard"><span class="lab">${SPAN_NOW[plan.unit]} + 앞으로 ${spanName}</span><span class="big">${total.toLocaleString()}<small>부품</small></span><span class="sub">${esc(B[0].label)} ~ ${esc(B[B.length - 1].label)} · 교체 후 다음 주기까지 포함</span></div>
+        <div class="scard"><span class="lab">가장 몰리는 때</span><span class="big">${peak.total ? esc(peak.label) : "없음"}${peak.total ? `<small>${peak.total.toLocaleString()}개 · ${Math.round(peak.total / total * 100)}%</small>` : ""}</span><span class="sub">${main ? `그중 ${esc(main.name)} ${peak.counts[main.code].toLocaleString()}개` : "이 기간엔 교체 예정이 없습니다."}</span></div>
+        <div class="scard ${zeroCls(plan.check.total)}"><span class="lab">${pill("확인_필요")}</span><span class="big">${plan.check.total.toLocaleString()}<small>부품</small></span><span class="sub">기록 없이 예정일이 지나 계획에서 뺐습니다. 교체 여부부터 확인하세요.</span></div>
+      </section>`;
+    const pk = i => (i === pi ? "pk" : "");
+    const rf = plan.recent_failures;
+    const table =`<div class="scroll"><table class="vol">
+        <tr><th>부품</th>${B.map((b, i) => `<th class="${pk(i)}">${axisLabel(b, i, plan.unit).filter(Boolean).reverse().join(" ")}</th>`).join("")}<th>합계</th><th class="muted" title="예정 교체에는 없는 돌발 고장 — 예비품 수량 참고">지난 1년 고장</th></tr>
+        ${PART_TYPES.map(p => `<tr><td>${esc(p.name)}</td>${B.map((b, i) => `<td class="n ${pk(i)}">${b.counts[p.code] || ""}</td>`).join("")}<td class="n"><b>${B.reduce((a, b) => a + b.counts[p.code], 0).toLocaleString()}</b></td><td class="n muted">${rf[p.code] || "–"}</td></tr>`).join("")}
+        <tr><td><b>합계</b></td>${B.map((b, i) => `<td class="n ${pk(i)}"><b>${b.total || ""}</b></td>`).join("")}<td class="n"><b>${total.toLocaleString()}</b></td><td class="n muted">${Object.values(rf).reduce((a, n) => a + n, 0) || "–"}</td></tr>
+      </table></div>`;
+    const sbars = B.map((b, i) => {
+      const mx = Math.max(...b.stations.map(s => s.count), 1);
+      return `<div class="sbars" data-pb="${i}" hidden>
+          <div class="headrow"><h3>${esc(b.label)} 역별 물량</h3><span class="small muted">앞당겨 나눌 역을 고를 때 참고 · 다른 기간은 위 막대를 누르세요</span></div>
+          ${b.stations.length ? b.stations.map(s => {
+            // 그 역에 챙겨 갈 부품: 막대 밑에 부품별 개수를 적는다(역 합계만으론 무엇을 가져갈지 몰랐다)
+            const kinds = PART_TYPES.filter(p => s.parts[p.code]).map(p => `${p.name} ${s.parts[p.code]}`).join(" · ");
+            return `<button class="sbar" ${goAttr({ name: "station", st: s.id })} title="${esc(s.name)} 역 화면으로"><span>${esc(s.name)}</span><span class="trk"><i style="width:${(s.count / mx * 100).toFixed(1)}%"></i></span><b class="num">${s.count.toLocaleString()}</b><small class="kinds">${esc(kinds)}</small></button>`;
+          }).join("") : `<p class="small muted">이 기간엔 교체 예정이 없습니다.</p>`}
+        </div>`;
+    }).join("");
+    return `<section class="view" id="plan" data-peak="${Math.max(pi, 0)}">
+      <div class="headrow"><div><h2>교체 계획</h2><p class="small muted">기간마다 교체 예정일이 오는 부품 수입니다(교체 후 다음 주기 예정까지 포함). 자재 발주와 작업 배분에 씁니다.</p></div>${seg}</div>
+      ${cards}
       <div class="panel">
-        <div class="headrow"><h2>분기별 교체 물량</h2><span class="small muted">앞으로 3년 · 교체 예정이 없는 분기는 뺐습니다</span></div>
-        ${quarters.length || checkTot ? `<div class="scroll"><table class="vol">
-          <tr><th>분기</th>${PART_TYPES.map(p => `<th>${p.name}</th>`).join("")}<th>합계</th><th></th></tr>
-          ${checkTot ? `<tr class="checkrow"><td>확인 필요</td>${PART_TYPES.map(p => `<td class="n">${vol.check.counts[p.code] || ""}</td>`).join("")}<td class="n">${checkTot}</td><td></td></tr>` : ""}
-          ${quarters.map(q => `<tr><td>${q.label}</td>${PART_TYPES.map(p => `<td class="n">${q.counts[p.code] || ""}</td>`).join("")}<td class="n"><b>${q.total.toLocaleString()}</b></td><td class="barcell"><div class="vbar" style="width:${(tot(q) / max * 100).toFixed(1)}%"></div></td></tr>`).join("")}
-        </table></div>` : `<p class="muted">앞으로 3년 안에 교체 예정인 부품이 없습니다.</p>`}
+        <div class="headrow"><h3>${unitName} 교체 물량</h3><span class="small muted">막대 위 숫자 = 부품 수${pi >= 0 ? " · 가장 몰리는 때는 주황" : ""}</span></div>
+        ${planChart(B, plan.unit, pi)}
       </div>
+      <div class="panel"><div class="headrow"><h3>부품별</h3><a class="btn ghost" href="/api/replacement-plan/export?span=${span}" download style="text-decoration:none">엑셀로 받기</a></div>${table}
+        <p class="small"><b>이 표는 예정일이 오는 교체만 셉니다.</b> 돌발 고장은 언제 날지 몰라 빠져 있으니, 예비품은 오른쪽 "지난 1년 고장"(고장으로 바꾼 개수)을 참고해 따로 잡으세요.</p>
+        <p class="small muted">엑셀에는 부품별·역별·역 x 부품(기간·역·부품·수량 한 줄씩) 시트가 들어 있습니다. 발주서에 옮길 때 쓰세요.</p></div>
+      <div class="panel">${sbars}</div>
     </section>`;
   }
 

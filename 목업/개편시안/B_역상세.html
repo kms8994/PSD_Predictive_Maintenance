@@ -1,0 +1,112 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>개편 시안 B · 역 상세</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --blue: #0065b3; --blue-soft: #e9f2fa; --bg: #f5f7f9; --card: #fff; --ink: #14181d; --muted: #616a75; --faint: #9aa2ac; --line: #e4e8ec;
+  --red: #e0352b; --red-soft: #fdecea; --amber: #f2a900; --amber-ink: #946600; --amber-soft: #fdf4dc; --gray: #7d8590; --gray-soft: #eef0f3;
+}
+body { width: 1280px; background: var(--bg); color: var(--ink); font-family: Pretendard, sans-serif; font-size: 14px; line-height: 1.5; }
+.num { font-variant-numeric: tabular-nums; }
+/* 상단: 흰 바탕 + 위쪽 파란 띠. 탭은 밑줄 하나로 */
+.top { background: #fff; border-top: 4px solid var(--blue); border-bottom: 1px solid var(--line); }
+.top .in { width: 1200px; margin: 0 auto; height: 60px; display: flex; align-items: center; gap: 40px; }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 800; letter-spacing: -0.4px; }
+.brand i { width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: #fff; font-style: normal; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
+nav { display: flex; gap: 28px; height: 100%; }
+nav a { display: flex; align-items: center; font-size: 15px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+nav a.on { color: var(--ink); font-weight: 800; border-color: var(--blue); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 13px; }
+.iconbtn { width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); }
+.page { width: 1200px; margin: 0 auto; padding: 28px 0 40px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+h2 { font-size: 16px; font-weight: 800; letter-spacing: -0.3px; }
+.muted { color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.c-red { color: var(--red); background: var(--red-soft); }
+.c-amber { color: var(--amber-ink); background: var(--amber-soft); }
+.c-gray { color: var(--gray); background: var(--gray-soft); }
+.c-blue { color: var(--blue); background: var(--blue-soft); }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border-radius: 6px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.btn.pri { background: var(--blue); color: #fff; }
+.btn.sec { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+.note { text-align: center; color: var(--faint); font-size: 12px; margin-top: 18px; }
+
+.crumb { font-size: 13px; color: var(--muted); margin-bottom: 8px; } .crumb a { color: var(--blue); font-weight: 600; }
+.title { display: flex; align-items: center; gap: 14px; }
+.title h1 { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
+.title .chip { font-size: 13px; padding: 3px 11px; }
+.title .nav2 { margin-left: auto; display: flex; gap: 8px; }
+.meta { color: var(--muted); font-size: 13.5px; margin: 4px 0 18px; }
+.meta b { color: var(--ink); font-weight: 600; }
+.alert { display: flex; align-items: center; gap: 18px; padding: 18px 22px; border-left: 5px solid var(--red); margin-bottom: 20px; }
+.alert .t { font-size: 18px; font-weight: 800; letter-spacing: -0.4px; }
+.alert .t em { font-style: normal; color: var(--red); }
+.alert .s { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+.alert .acts { margin-left: auto; display: flex; gap: 8px; }
+.cols { display: grid; grid-template-columns: 1fr 400px; gap: 20px; align-items: start; }
+.doors { padding: 20px 22px; }
+.doors .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.seg { display: inline-flex; background: var(--gray-soft); border-radius: 8px; padding: 3px; }
+.seg span { padding: 6px 16px; border-radius: 6px; font-size: 13.5px; font-weight: 700; color: var(--muted); }
+.seg span.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.train { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.car { background: var(--bg); border-radius: 8px; padding: 10px 10px 12px; }
+.car .cn { font-size: 12.5px; font-weight: 700; color: var(--muted); text-align: center; margin-bottom: 8px; }
+.car .ds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.door { height: 62px; border-radius: 6px; background: #fff; border: 1.5px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--muted); }
+.door small { font-size: 10.5px; font-weight: 700; margin-top: 2px; }
+.door.r { background: var(--red-soft); border-color: #f3b4ae; color: var(--red); }
+.door.sel { outline: 3px solid var(--blue); outline-offset: 2px; }
+.platform { height: 10px; margin-top: 10px; border-radius: 3px; background: repeating-linear-gradient(90deg, #ffd23f 0 14px, #2a2f35 14px 28px); opacity: .85; }
+.platform-l { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--muted); margin-top: 14px; }
+.legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; border: 1.5px solid var(--line); background: #fff; }
+.common { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13.5px; }
+.panel { padding: 20px 22px; }
+.panel .head { display: flex; justify-content: space-between; align-items: baseline; }
+.panel .sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+.part { padding: 11px 0; border-bottom: 1px solid var(--line); }
+.part:last-of-type { border-bottom: 0; }
+.part .l1 { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; }
+.part .l1 b { font-weight: 700; }
+.part .l1 span { font-size: 13px; color: var(--muted); }
+.track { height: 8px; background: var(--gray-soft); border-radius: 4px; margin: 7px 0 4px; overflow: hidden; }
+.track i { display: block; height: 100%; border-radius: 4px; background: #b9c9d9; }
+.part.r .track i { background: var(--red); } .part.r .l1 span { color: var(--red); font-weight: 700; }
+.part .l2 { font-size: 12px; color: var(--faint); }
+.hist { margin-top: 14px; padding: 12px 14px; background: var(--bg); border-radius: 8px; font-size: 13px; color: var(--muted); }
+.hist b { color: var(--ink); }
+</style></head><body><header class="top"><div class="in">
+  <div class="brand"><i>동해</i>스크린도어 교체 관리</div>
+  <nav><a class="">현황</a><a class="on">역</a><a class="">교체 기록</a><a class="">분석</a></nav>
+  <div class="right"><span>2026년 11월 1일 기준</span><span class="iconbtn" title="어둡게"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></div>
+</div></header>
+<main class="page">
+  <div class="crumb"><a>역</a> › 벡스코</div>
+  <div class="title"><h1>벡스코</h1><span class="chip c-red">위험 13개</span>
+    <div class="nav2"><span class="btn sec">‹ 센텀</span><span class="btn sec">신해운대 ›</span></div></div>
+  <p class="meta"><b>2016년 12월 개통</b> · 방향마다 문 16개 · 하루 약 51회 운행 · 날씨 AWS 해운대</p>
+  <div class="card alert">
+    <div><div class="t">IFM 릴레이 <em>13개</em>를 2027년 3월 25일까지 교체해야 해요</div>
+      <div class="s">남은 기간 144일 · 부전 방면 7개, 북울산 방면 6개 · 나머지 부품 180개는 안전</div></div>
+    <div class="acts"><span class="btn sec">보고서 받기 ▾</span><span class="btn pri">+ 교체 기록 입력</span></div>
+  </div>
+  <div class="cols">
+    <section class="card doors">
+      <div class="head"><h2>승강장 안전문</h2><div class="seg"><span class="on">부전 방면 · 위험 7</span><span>북울산 방면 · 위험 6</span></div></div>
+      <div class="train"><div class="car"><div class="cn">1호차</div><div class="ds"><div class="door ">1-1</div><div class="door ">1-2</div><div class="door r sel">1-3<small>위험</small></div><div class="door r">1-4<small>위험</small></div></div></div><div class="car"><div class="cn">2호차</div><div class="ds"><div class="door ">2-1</div><div class="door r">2-2<small>위험</small></div><div class="door ">2-3</div><div class="door ">2-4</div></div></div><div class="car"><div class="cn">3호차</div><div class="ds"><div class="door r">3-1<small>위험</small></div><div class="door ">3-2</div><div class="door r">3-3<small>위험</small></div><div class="door ">3-4</div></div></div><div class="car"><div class="cn">4호차</div><div class="ds"><div class="door r">4-1<small>위험</small></div><div class="door r">4-2<small>위험</small></div><div class="door ">4-3</div><div class="door ">4-4</div></div></div></div>
+      <div class="platform"></div>
+      <div class="platform-l"><span>← 부전</span><span>승강장</span><span>북울산 →</span></div>
+      <div class="legend"><span><i style="background:var(--red-soft);border-color:#f3b4ae"></i>위험 · 6개월 안</span><span><i style="background:var(--amber-soft);border-color:#f0d58a"></i>주의 · 1년 안</span><span><i></i>안전</span><span>문을 누르면 오른쪽에 부품이 나와요</span></div>
+      <div class="common"><span class="chip c-blue">역 공통</span><b>종합제어반 릴레이</b><span class="muted">안전 · 다음 교체 2031.06.14 · 4년 7개월</span></div>
+    </section>
+    <aside class="card panel">
+      <div class="head"><h2>부전 방면 1-3번 문</h2><span class="chip c-red">위험 1</span></div>
+      <p class="sub">부품 6개 · 막대가 찰수록 교체할 때가 가까워요</p>
+      <div class="part r"><div class="l1"><b>IFM 릴레이</b><span class="num">2027.03.25 · D-144</span></div><div class="track"><i style="width:92%"></i></div><div class="l2">수명 92% 사용 · 교체주기 5.2년 · 2021.12 교체</div></div><div class="part "><div class="l1"><b>DCM</b><span class="num">2028.08.30 · 1년 10개월</span></div><div class="track"><i style="width:63%"></i></div><div class="l2">수명 63% 사용 · 교체주기 5.0년 · 2023.09 교체</div></div><div class="part "><div class="l1"><b>모터</b><span class="num">2029.07.12 · 2년 8개월</span></div><div class="track"><i style="width:48%"></i></div><div class="l2">수명 48% 사용 · 교체주기 8.1년 · 2022.03 교체</div></div><div class="part "><div class="l1"><b>도어 행거</b><span class="num">2030.02.03 · 3년 3개월</span></div><div class="track"><i style="width:41%"></i></div><div class="l2">수명 41% 사용 · 교체주기 7.0년 · 2023.02 교체</div></div><div class="part "><div class="l1"><b>타이밍벨트</b><span class="num">2030.05.18 · 3년 6개월</span></div><div class="track"><i style="width:35%"></i></div><div class="l2">수명 35% 사용 · 교체주기 6.2년 · 2024.04 교체</div></div><div class="part "><div class="l1"><b>풀리</b><span class="num">2032.01.09 · 5년 2개월</span></div><div class="track"><i style="width:22%"></i></div><div class="l2">수명 22% 사용 · 교체주기 8.0년 · 2024.01 교체</div></div>
+      <div class="hist"><b>최근 기록</b> 2021.12.08 IFM 릴레이 예방 교체 · 정비1팀</div>
+    </aside>
+  </div>
+  <p class="note">개편 시안 B · 역 상세 — 벡스코 위험 13개는 실제 데이터, 문별 배치·부품 값은 예시</p>
+</main></body></html>

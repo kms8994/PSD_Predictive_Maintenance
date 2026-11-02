@@ -113,6 +113,7 @@ class UploadBatch(Base):
     deleted: Mapped[int] = mapped_column()  # 지운 기록(엑셀에서 빠진 것 + DB 중복)
     removed: Mapped[list] = mapped_column(JSON)  # 지우거나 고치기 전 기록들(되돌리기용)
     undone_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    uploaded_by: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 올린 사람(화면에서 적는 이름, 로그인 전이라 확인은 안 함)
 
 
 class ReplacementRecord(Base):
