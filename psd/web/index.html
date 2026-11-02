@@ -207,6 +207,12 @@ button.scard:hover { border-color: var(--accent); }
 .recs { display: flex; flex-direction: column; }
 .recs .rec { font-size: 0.86rem; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .recs .rec b { font-weight: 700; } .recs .rec span { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+/* 반복 고장 의심 문(psd/repeat.py). 상태색(빨강·노랑·회색·초록)과 겹치지 않게 글자색 반전 배지로 표시한다 */
+.recs button.rec { appearance: none; background: none; border: 0; border-bottom: 1px solid var(--line); width: 100%; text-align: left; font: inherit; font-size: 0.86rem; color: inherit; cursor: pointer; }
+.recs button.rec:hover b { text-decoration: underline; }
+.repbadge { display: inline-block; font-size: 0.68rem; font-weight: 700; line-height: 1; padding: 3px 5px; border-radius: 4px; background: var(--ink); color: var(--surface); vertical-align: 1px; }
+.repnote { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 0.86rem; }
+.repnote.on { border-left: 4px solid var(--ink); }
 .btn.block { align-self: stretch; text-align: center; padding: 11px; }
 .labnav { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 
@@ -370,6 +376,8 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
 .psd-glass { width: 40px; height: 46px; border: 1.5px solid var(--muted); border-radius: 2px; display: flex; gap: 2px; padding: 2px; background: var(--surface); }
 .psd-glass i { flex: 1; background: var(--accent-soft); border: 1px solid var(--line); }
 .psd-no { font-family: var(--font-data); font-size: 0.75rem; }
+.psd { position: relative; }
+.psd .repbadge { position: absolute; top: -7px; right: -8px; }
 .c-빨강 { --st: var(--red); --st-soft: var(--red-soft); }
 .c-노랑 { --st: var(--amber); --st-soft: var(--amber-soft); }
 .c-초록 { --st: var(--green); --st-soft: var(--green-soft); }
@@ -1016,6 +1024,24 @@ details.more[open] > summary { margin-bottom: 10px; }
     const left = x.days_left < 0 ? `${-x.days_left}일 지남` : `D-${x.days_left}`;
     return `<tr tabindex="0" data-s="${x.status}" data-st="${x.station_id}" data-p="${x.part_type_code}" ${goAttr(target)}><td>${pill(x.status)}</td><td><b>${esc(x.station_name)}</b></td><td>${esc(x.part_name)}</td><td class="opt">${where}</td><td class="num opt">${dotDate(x.due)}</td><td class="num ${x.days_left < 0 || x.status === "빨강" ? "late" : ""}" title="${dotDate(x.due)} · ${dur(x.days_left)}">${left}</td></tr>`;
   }
+  // 반복 고장 의심 문(psd/repeat.py): 건수만 보면 절반이 넘는 문이 걸려서, 같은 역 다른 문 평균과 비교해
+  // 우연이라 보기 어려운 문만 보여 준다. 판정 기준은 API가 준 값을 그대로 적는다
+  const repeatRuleText = rule => `최근 ${rule.window_years}년 고장이 같은 역 다른 문 평균보다 유난히 많은 문(${rule.min_failures}건 이상, 우연일 확률 ${Math.round(rule.p_max * 100)}% 미만)`;
+  const peerText = r => r.peer_mean === null ? "" : `같은 역 다른 문 평균 ${r.peer_mean.toFixed(1)}건${r.ratio ? `의 ${r.ratio.toFixed(1)}배` : ""}`;
+  function repeatCard(rep) {
+    const rows = rep.doors.map(r => `<button type="button" class="rec" ${goAttr({ name: "station", st: r.station_id, side: r.side, door: r.door_id })}><b>${esc(r.station_name)}</b> ${esc(r.label)} · 고장 ${r.failures}건<span>${peerText(r)} · 마지막 ${dotDate(r.last)}</span></button>`).join("");
+    return `<div><div class="headrow"><h3>반복 고장 의심 문 <span class="small muted">최근 ${rep.rule.window_years}년</span></h3></div>
+        <div class="recs">${rows || `<p class="small muted" style="padding:9px 0">같은 역 다른 문보다 유난히 고장이 잦은 문이 없습니다.</p>`}</div>
+        <p class="small muted" style="margin-top:6px">${repeatRuleText(rep.rule)} · 문 ${rep.doors_checked.toLocaleString()}개 중 ${rep.doors.length}개</p></div>`;
+  }
+  function repeatNote(d) {
+    const r = d.repeat, y = d.repeat_rule.window_years;
+    if (!r.flagged) return `<p class="repnote small muted">최근 ${y}년 고장 ${r.failures ? r.failures + "건" : "없음"}${r.peer_mean === null ? "" : " · " + peerText({ ...r, ratio: null })}</p>`;
+    const parts = r.by_part.map(p => `${esc(p.name)} ${p.count}`).join(", ");
+    return `<div class="repnote on"><span class="repbadge">반복</span> <b>반복 고장 의심</b> — 최근 ${y}년 고장 ${r.failures}건, ${peerText(r)}입니다.
+        부품을 바꿔도 이 문에서 다시 고장 나는지, 문 자체(설치·정렬·주변 환경)를 함께 점검할 후보입니다.
+        <span class="small muted" style="display:block;margin-top:4px">고장 부품: ${parts} · 마지막 고장 ${dotDate(r.last)} · ${repeatRuleText(d.repeat_rule)}</span></div>`;
+  }
   // 상태·역·부품 거르기는 화면을 다시 받지 않고 줄만 숨긴다(노선도 아래라 다시 그리면 스크롤이 튄다).
   // 고른 값은 주소에도 남겨 상세에 갔다가 뒤로 오면 그대로 보이게 한다
   function setupHomeWork(box) {
@@ -1045,7 +1071,7 @@ details.more[open] > summary { margin-bottom: 10px; }
     apply();
   }
   async function vHome() {
-    const [wi, data, rec, vol] = await Promise.all([api("/api/work-items?within_days=1100"), api("/api/stations"), api("/api/replacement-records?limit=4&order=replaced"), api("/api/replacement-volume?years_ahead=3")]);
+    const [wi, data, rec, vol, rep] = await Promise.all([api("/api/work-items?within_days=1100"), api("/api/stations"), api("/api/replacement-records?limit=4&order=replaced"), api("/api/replacement-volume?years_ahead=3"), api("/api/repeat-doors")]);
     const items = wi.items.filter(x => x.status !== "초록");  // API가 급한 순서(위험 → 확인 필요 → 주의, 같은 상태는 예정일 순)로 준다
     const opened = data.stations.filter(s => s.in_service);
     const segs = [["", "전체", items], ...HOME_STATUS.map(s => [s, STATE[s][0], items.filter(x => x.status === s)])]
@@ -1081,6 +1107,7 @@ details.more[open] > summary { margin-bottom: 10px; }
         ${work}
         <aside class="side">
           ${volumeChart(vol)}
+          ${repeatCard(rep)}
           <div><div class="headrow"><h3>최근 교체 기록</h3><button class="linkbtn" ${goAttr({ name: "records" })}>전체 ${rec.total.toLocaleString()}건 ›</button></div>
             <div class="recs">${recs || `<p class="small muted" style="padding:9px 0">입력된 교체 기록이 없습니다.</p>`}</div></div>
         </aside>
@@ -1534,6 +1561,7 @@ details.more[open] > summary { margin-bottom: 10px; }
     const order = [...doorDetail.units].sort((a, b) => RANK[a.status] - RANK[b.status] || a.days_left - b.days_left);
     const partRows = order.map(x => `<tr class="prow" tabindex="0" ${goAttr({ name: "part", partId: x.part_id })}><td><b>${x.part_name}</b></td><td>${pill(x.status)}</td><td class="num">${yr(x.cycle_years)}</td><td class="num">${dotDate(x.due)}</td><td class="num">${dur(x.days_left)}</td></tr>`).join("");
     return `<div class="psdhead"><h2>안전문 ${door.no}</h2><span class="muted small">${door.side_label}</span></div>
+        ${repeatNote(doorDetail)}
         <div class="doorgrid">
           <figure class="doorfig">${doorSvg}</figure>
           <div class="doorparts">
@@ -1590,7 +1618,7 @@ details.more[open] > summary { margin-bottom: 10px; }
 
     const dirTabs = `<div class="dirtabs" role="group" aria-label="방향 선택">${Object.entries(SIDE_LABEL).map(([k, v]) => `<button class="dirtab" aria-pressed="${k === sid}" ${goAttr({ name: "station", st, side: k, plist: view.plist, keep: true })}>${v}</button>`).join("")}</div>`;
     const strip = `<div class="strip-wrap"><div class="strip">${[1, 2, 3, 4].map(car => `<div class="car"><div class="carlabel">${car}호차</div><div class="cardoors">${sideDoors.filter(d => d.car === car).map(d =>
-      `<button class="psd c-${d.worst_status}" aria-pressed="${d.id === doorId}" aria-label="${esc(d.no + " · " + STATE[d.worst_status][0])}" data-door="${d.id}" data-side="${sid}"><span class="psd-head"></span><span class="psd-glass"><i></i><i></i></span><span class="psd-no">${d.no}</span></button>`
+      `<button class="psd c-${d.worst_status}" aria-pressed="${d.id === doorId}" aria-label="${esc(d.no + " · " + STATE[d.worst_status][0])}" data-door="${d.id}" data-side="${sid}"><span class="psd-head"></span><span class="psd-glass"><i></i><i></i></span><span class="psd-no">${d.no}</span>${d.repeat ? `<span class="repbadge" title="반복 고장 의심">반복</span>` : ""}</button>`
     ).join("")}</div></div>`).join("")}</div></div>`;
 
 
@@ -1601,6 +1629,9 @@ details.more[open] > summary { margin-bottom: 10px; }
         <button class="swbtn" ${next ? goAttr({ name: "station", st: next.id }) : "disabled"}>${next ? next.name : "다음 역 없음"} ›</button>
       </div>`;
     const s = detail.station, c = detail.counts;
+    // 반복 고장 의심 문은 방향과 상관없이 역 요약에 적고, 누르면 그 문으로 간다
+    const repDoors = Object.entries(detail.sides).flatMap(([k, sd]) => sd.doors.filter(d => d.repeat).map(d => ({ ...d, side: k })));
+    const repLine = repDoors.length ? `<p class="small" style="margin:8px 0 0"><span class="repbadge">반복</span> 반복 고장 의심 문: ${repDoors.map(d => `<button class="linkbtn" style="padding:0" ${goAttr({ name: "station", st, side: d.side, door: d.id, keep: true })}>${esc(d.label)}</button>`).join(", ")}</p>` : "";
     return `<section class="view">
       <nav class="crumbs"><button ${goAttr({ name: "route" })}>역 목록</button><span>›</span><span>${s.name}</span></nav>
       <div class="stlayout">${stationNav(list.stations, st)}<div class="stmain">
@@ -1609,13 +1640,14 @@ details.more[open] > summary { margin-bottom: 10px; }
         <h2>${s.name}</h2>
         <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)}</dd><dt>PSD 설치일</dt><dd>${fmtDateKR(s.psd_install_date)} <span class="small muted">(교체 기록이 없는 부품은 이날부터 셉니다)</span></dd><dt>날씨 지점</dt><dd>AWS ${s.aws_station}</dd><dt>문 수</dt><dd>방향마다 16개</dd><dt>운행</dt><dd>방향마다 하루 약 ${dailyTrips(s.service_interval_min)}회</dd></dl>
         <div class="legend">${pill("빨강")} ${c.빨강} <span class="${zeroCls(c.확인_필요)}">${pill("확인_필요")} ${c.확인_필요}</span> ${pill("노랑")} ${c.노랑} ${pill("초록")} ${c.초록}</div>
+        ${repLine}
         <div class="filters"><span class="small muted">${s.name}역 보고서</span>${reportBox([], s.id)}</div>
       </div>
       ${partSummary(detail.parts, s.name, view.plist)}
       <div class="panel">
         <div class="psdhead"><h3>승강장 안전문</h3>${dirTabs}</div>
         ${strip}
-        <div class="legend">${pill("빨강")}<span class="muted">6개월 이하</span><span class="${zeroCls(c.확인_필요)}">${pill("확인_필요")} <span class="muted">기록 없이 지남</span></span>${pill("노랑")}<span class="muted">1년 이하</span>${pill("초록")}<span class="muted">여유</span></div>
+        <div class="legend">${pill("빨강")}<span class="muted">6개월 이하</span><span class="${zeroCls(c.확인_필요)}">${pill("확인_필요")} <span class="muted">기록 없이 지남</span></span>${pill("노랑")}<span class="muted">1년 이하</span>${pill("초록")}<span class="muted">여유</span>${repDoors.length ? `<span class="repbadge">반복</span><span class="muted">반복 고장 의심</span>` : ""}</div>
       </div>
       <div class="panel doorpanel">${doorPanel(doorDetail)}</div>
       </div></div>

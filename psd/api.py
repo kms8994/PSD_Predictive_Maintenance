@@ -45,6 +45,7 @@ from psd.excel_io import (
     template_bytes,
 )
 from psd.models import CycleResult, Door, Part, ReplacementPart, ReplacementRecord, Station, UploadBatch
+from psd.repeat import REPEAT_MIN_FAILURES, REPEAT_P_MAX, REPEAT_WINDOW_YEARS, DoorRepeat, find_repeat_doors, window_start
 from psd.status import (
     RANK,
     _joined_parts,
@@ -414,6 +415,72 @@ def recent_replacement_records(
     }
 
 
+# ---------- 4-1c. 반복 고장 문 (psd/repeat.py) ----------
+
+
+def _repeat_map(db: Session, station_id: int | None = None) -> dict[int, DoorRepeat]:
+    """문 id → 반복 고장 통계. station_id를 주면 그 역만(같은 역끼리만 비교하므로 결과는 같다)."""
+    today = date.today()
+    q = (
+        select(ReplacementRecord.door_id, ReplacementRecord.replaced_on, ReplacementRecord.station_id, ReplacementPart.part_type_code)
+        .join(ReplacementPart, ReplacementPart.record_id == ReplacementRecord.id)
+        .where(ReplacementRecord.reason == "fail", ReplacementRecord.door_id.is_not(None),
+               ReplacementRecord.replaced_on >= window_start(today))
+    )
+    dq = select(Door.id, Door.station_id)
+    if station_id is not None:
+        q = q.where(ReplacementRecord.station_id == station_id)
+        dq = dq.where(Door.station_id == station_id)
+    by_record: dict[tuple[int, date], list[str]] = {}
+    for door_id, day, _, code in db.execute(q):
+        by_record.setdefault((door_id, day), []).append(code)
+    doors_by_station: dict[int, list[int]] = {}
+    for door_id, st in db.execute(dq):
+        doors_by_station.setdefault(st, []).append(door_id)
+    failures = [(door_id, day, codes) for (door_id, day), codes in by_record.items()]
+    return find_repeat_doors(failures, doors_by_station, today)
+
+
+def _repeat_dict(r: DoorRepeat) -> dict:
+    return {
+        "failures": r.failures,
+        "peer_mean": round(r.peer_mean, 2) if r.peer_mean is not None else None,
+        "ratio": round(r.ratio, 1) if r.ratio is not None else None,
+        "p_value": round(r.p_value, 4) if r.p_value is not None else None,
+        "flagged": r.flagged,
+        "by_part": [{"code": c, "name": NAME_BY_CODE[c], "count": n} for c, n in r.by_part.most_common()],
+        "last": r.last,
+    }
+
+
+REPEAT_RULE = {"window_years": REPEAT_WINDOW_YEARS, "min_failures": REPEAT_MIN_FAILURES, "p_max": REPEAT_P_MAX}
+
+
+@app.get("/api/repeat-doors")
+def repeat_doors(db: Session = Depends(get_db)):
+    """같은 역 다른 문보다 유난히 고장이 잦은 문(반복 고장 의심). 우연일 확률이 낮은 순."""
+    doors = {d.id: d for d in db.execute(select(Door).options(joinedload(Door.station))).scalars()}
+    flagged = sorted((r for r in _repeat_map(db).values() if r.flagged), key=lambda r: (r.p_value, -r.failures))
+    return {
+        "today": date.today(),
+        "since": window_start(date.today()),
+        "rule": REPEAT_RULE,
+        "doors_checked": len(doors),
+        "doors": [
+            {
+                "door_id": r.door_id,
+                "station_id": r.station_id,
+                "station_name": doors[r.door_id].station.name,
+                "side": doors[r.door_id].side,
+                "label": doors[r.door_id].label,
+                "no": f"{doors[r.door_id].car}-{doors[r.door_id].position}",
+                **_repeat_dict(r),
+            }
+            for r in flagged
+        ],
+    }
+
+
 # ---------- 4-2. 역 ----------
 
 
@@ -433,6 +500,7 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
             by_door.setdefault(u.door_id, []).append(u)
 
     doors = db.execute(select(Door).where(Door.station_id == station_id).order_by(Door.side, Door.car, Door.position)).scalars().all()
+    repeat = _repeat_map(db, station_id)
     sides: dict[str, list[dict]] = {side: [] for side in SIDES}
     for d in doors:
         door_units = by_door.get(d.id)
@@ -450,6 +518,7 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
                 "no": f"{d.car}-{d.position}",
                 "worst_status": w.status,
                 "worst_days_left": w.days_left,
+                "repeat": repeat[d.id].flagged,  # 반복 고장 의심(psd/repeat.py)
             }
         )
 
@@ -469,6 +538,7 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
         "sides": {sid: {"label": label, "doors": sides[sid]} for sid, label in SIDES.items()},
         "counts": counts(statuses),
         "parts": _part_summary(statuses, {d.id: d for d in doors}),
+        "repeat_rule": REPEAT_RULE,
     }
 
 
@@ -498,6 +568,8 @@ def get_door(door_id: int, db: Session = Depends(get_db)):
             "no": f"{door.car}-{door.position}",
         },
         "units": [_unit_dict(u) for u in units],
+        "repeat": _repeat_dict(_repeat_map(db, door.station_id)[door.id]),
+        "repeat_rule": REPEAT_RULE,
     }
 
 
