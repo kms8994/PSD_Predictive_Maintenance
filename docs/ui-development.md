@@ -37,8 +37,8 @@ py -3.12 -m venv .venv
 ```
 
 가상환경을 활성화하지 않고 전용 Python을 직접 실행하므로 PowerShell 실행 정책을
-바꿀 필요가 없다. `requirements-dev.txt`는 기존 실행 패키지에 API 테스트용 `httpx`와
-PDF 검증용 `pypdf`를 추가한다.
+바꿀 필요가 없다. `requirements-dev.txt`는 기존 실행 패키지에 API 테스트용 `httpx`를
+추가한다. PDF 검증용 `pypdf`는 `requirements.txt`에 포함돼 있다.
 
 ## 3. 개인용 DB와 설정 파일 만들기
 
@@ -73,16 +73,11 @@ GRANT ALL PRIVILEGES ON psd_hoyun_ui.* TO 'psd_hoyun_ui'@'localhost';
 
 전처리된 AWS 날씨는 저장소에 이미 있으므로 다시 수집할 필요가 없다.
 위 명령으로 역, 문, 부품 및 교체주기 계산 결과를 만든다.
-ASOS 보관용 날씨 표도 채우려면 추가로 실행한다.
 
-```powershell
-.\.venv\Scripts\python.exe scripts/load_weather.py
-```
-
-초기 상태에는 교체 기록이 없다. 기록이 있는 화면도 확인하려면 서버 실행 후
-**교체 기록 → 엑셀 업로드**에서 저장소의
-`data/dummy/replacement_records_dummy.xlsx`를 한 번 업로드한다. 이는 실제 고장 이력이
-아닌 개발·시연용 더미데이터다. 같은 파일을 반복 업로드하면 기록이 중복 추가된다.
+초기 상태에는 교체 기록이 없다. 개발·시연용 더미 기록이 필요한 경우
+`data/dummy/초기데이터_교체기록_1230건.xlsx`를 사용한다. 데이터 입력과 기존 기록에
+미치는 영향은 [README의 초기 데이터 안내](../README.md)를
+먼저 확인한다. 화면의 교체 기록 탭에서는 엑셀을 비교한 뒤 반영할 수 있다.
 
 `init_db.py --reset`은 해당 DB의 기존 표와 기록을 지우므로, 일반적인 UI 작업에는
 위의 기본 명령만 사용한다.

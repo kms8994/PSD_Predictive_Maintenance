@@ -11,7 +11,7 @@
 더 크다"는 마모 성질을 못 담아 초반 고장이 과하게 많이 나온다. 형상모수 2는 이 프로젝트가
 나중에 쓰기로 한 Weibull 회귀(MVP_계획.md)와도 같은 가정이라 더 일관적이다.
 
-psd/excel_io.py와 같은 열 형식으로 써서, 바로 POST /api/replacement-records/upload로
+psd/excel_io.py와 같은 열 형식으로 써서, 바로 POST /api/replacement-records/sync로
 올릴 수 있다.
 
     python scripts/generate_dummy_records.py                    # 미리보기(저장 안 함)

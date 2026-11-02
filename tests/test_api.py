@@ -113,6 +113,22 @@ def test_station_report_pdf_is_a_readable_two_page_pdf():
     assert "부전역 PSD 부품 교체 현황 보고서" in text
 
 
+def test_all_stations_report_pdf_has_every_operating_station():
+    import io
+
+    from pypdf import PdfReader
+
+    from psd.cycle import STATIONS
+
+    r = client.get("/api/report.pdf")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    text = "".join(page.extract_text() for page in PdfReader(io.BytesIO(r.content)).pages)
+    for s in STATIONS:
+        if s.in_service:
+            assert f"{s.name}역 PSD 부품 교체 현황 보고서" in text
+
+
 def test_station_report_pdf_not_in_service_or_unknown_station():
     assert client.get("/api/stations/24/report.pdf").status_code == 409  # 북울산(개통 전)
     assert client.get("/api/stations/999999/report.pdf").status_code == 404
@@ -167,7 +183,7 @@ def test_upload_unknown_station_name_is_rejected_without_saving_anything():
         "사유": "고장", "부품": "종합제어반 릴레이", "입력자": "",
     }])
     r = client.post(
-        "/api/replacement-records/upload",
+        "/api/replacement-records/sync",
         files={"file": ("t.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
     assert r.status_code == 400
@@ -182,8 +198,64 @@ def test_upload_rejects_excel_missing_required_columns():
     buf = BytesIO()
     pd.DataFrame([{"역": "부전"}]).to_excel(buf, index=False)
     r = client.post(
-        "/api/replacement-records/upload",
+        "/api/replacement-records/sync",
         files={"file": ("t.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
     assert r.status_code == 400
     assert "필요한 열" in r.json()["detail"]
+
+
+# ---------- 2026-11-01: 엑셀이 원본(올리면 DB를 엑셀에 맞춘다) ----------
+
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def test_exported_records_compare_as_unchanged():
+    """전체 기록을 내려받아 그대로 다시 올리면 바뀌는 게 없어야 한다(내려받기 ↔ 올리기 형식이 같다)."""
+    exported = client.get("/api/replacement-records/export")
+    assert exported.status_code == 200
+    r = client.post("/api/replacement-records/compare", files={"file": ("all.xlsx", exported.content, XLSX)}).json()
+    total = client.get("/api/replacement-records?limit=1").json()["total"]
+    assert r["counts"] == {"new": 0, "changed": 0, "missing": 0, "db_duplicates": 0, "same": total, "file_duplicates": 0}
+    assert r["changes"] == []
+
+
+def test_compare_does_not_save_anything():
+    from psd.excel_io import rows_to_excel_bytes
+
+    before = client.get("/api/replacement-records?limit=1").json()["total"]
+    content = rows_to_excel_bytes([{
+        "역": "부전", "방향": "", "문번호": "", "교체일": "2026-01-01",
+        "사유": "고장", "부품": "종합제어반 릴레이", "입력자": "",
+    }])
+    r = client.post("/api/replacement-records/compare", files={"file": ("t.xlsx", content, XLSX)}).json()
+    assert r["counts"]["new"] + r["counts"]["same"] == 1
+    assert "batch_id" not in r
+    assert client.get("/api/replacement-records?limit=1").json()["total"] == before
+
+
+def test_template_has_empty_record_sheet_and_separate_examples():
+    import io
+
+    import pandas as pd
+
+    from psd.excel_io import COLUMNS
+
+    xl = pd.ExcelFile(io.BytesIO(client.get("/api/replacement-records/template").content))
+    assert xl.sheet_names == ["기록", "작성 예시"]
+    records, examples = (pd.read_excel(xl, s) for s in xl.sheet_names)
+    assert list(records.columns) == COLUMNS and records.empty  # 업로드는 첫 시트만 읽는다
+    assert len(examples) == 3
+
+
+def test_record_list_filters_by_station_and_part_and_pages():
+    first = client.get("/api/replacement-records?limit=3&order=replaced&station_id=3&part=IFM").json()
+    second = client.get("/api/replacement-records?limit=3&offset=3&order=replaced&station_id=3&part=IFM").json()
+    assert first["total"] == second["total"]
+    for r in first["records"] + second["records"]:
+        assert r["station_id"] == 3 and "IFM 릴레이" in r["parts"]
+    assert not {r["id"] for r in first["records"]} & {r["id"] for r in second["records"]}
+
+
+def test_undo_unknown_upload_is_404():
+    assert client.post("/api/upload-batches/999999/undo").status_code == 404

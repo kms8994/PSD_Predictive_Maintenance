@@ -1,6 +1,6 @@
 """DB 표 만들기 + 초기 데이터 적재 (MVP_계획.md 3-2~3-4).
 
-- 표: 역, 관측소, 문, 부품 종류, 부품, 교체 기록, 교체 부품, 일별 날씨, 계산 결과
+- 표: 역, 관측소, 문, 부품 종류, 부품, 교체 기록, 교체 부품, 업로드 이력, 계산 결과
 - 초기 데이터: 역 24개(이 중 PSD 운영 중인 역만, 지금은 23개 — 북울산 제외), 관측소 2곳,
   방향별 문 16개(임시), 부품 종류 7개
 - 부품 생성: 운영 중인 역마다 문 32개 × 6종(문 단위) + 종합제어반 릴레이 1개(역 단위)
@@ -39,6 +39,7 @@ from psd.models import Door, Observatory, Part, PartType, Station  # noqa: E402
 _NEW_COLUMNS = [
     ("stations", "near_water", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ("stations", "in_service", "BOOLEAN NOT NULL DEFAULT TRUE"),
+    ("replacement_records", "batch_id", "INT NULL"),  # 2026-11-01 업로드 이력(upload_batches)
 ]
 
 
@@ -143,6 +144,10 @@ def main() -> None:
     args = ap.parse_args()
 
     if args.reset:
+        # daily_weather(예전 ASOS 일별 날씨)는 모델에서 뺐지만 예전 DB엔 남아 있을 수 있다. observatories를
+        # 참조하고 있어 먼저 지우지 않으면 drop_all이 observatories를 못 지운다.
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS daily_weather"))
         Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     sync_schema(engine)

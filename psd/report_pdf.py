@@ -38,7 +38,7 @@ HEAD_BG = colors.HexColor("#f2f4f6")
 BORDER = colors.HexColor("#bfc6ce")
 FILL = {"빨강": colors.HexColor("#fbd9d6"), "확인_필요": colors.HexColor("#e3e6ea"), "노랑": colors.HexColor("#fdeec4")}
 STATE = {"빨강": ("위험", RED), "확인_필요": ("확인 필요", GRAY), "노랑": ("주의", AMBER), "초록": ("안전", BLUE)}
-REASON = {"fail": "고장", "prev": "예방 교체", "with": "함께 교체"}
+REASON = {"fail": "고장", "prev": "예방 교체", "with": "함께 교체", "check": "점검(이상 없음)"}
 NAME = {p["code"]: p["name"] for p in PART_TYPES}
 DOOR_CODES = [p["code"] for p in PART_TYPES if p["unit"] == "door"]
 STATION_CODES = [p["code"] for p in PART_TYPES if p["unit"] == "station"]
@@ -227,7 +227,7 @@ def build_station_pdf(
             continue
         first = min(us, key=lambda u: u.days_left)
         k = lambda s: sum(1 for u in us if u.status == s) or "-"  # noqa: E731
-        rows.append([NAME[code], len(us), f"{us[0].cycle.base_years:.1f}년", _ymd(first.due), _left(first.days_left), k("빨강"), k("확인_필요"), k("노랑")])
+        rows.append([NAME[code], len(us), f"{us[0].cycle_years:.1f}년", _ymd(first.due), _left(first.days_left), k("빨강"), k("확인_필요"), k("노랑")])
         if k("빨강") != "-":
             extra += [("TEXTCOLOR", (5, len(rows) - 1), (5, len(rows) - 1), RED), ("FONTNAME", (5, len(rows) - 1), (5, len(rows) - 1), bold)]
     story.append(grid_table(rows, [38 * mm, 16 * mm, 22 * mm, 32 * mm, 26 * mm] + [(CONTENT_W - 134 * mm) / 3] * 3, extra=extra))

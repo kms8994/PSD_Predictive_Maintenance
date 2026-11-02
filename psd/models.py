@@ -3,14 +3,18 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, String, func
+from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from psd.db import Base
 
 
 class Observatory(Base):
-    """관측소: ASOS 관측소 2곳(부산 159, 울산 152). AWS 승인되면 역별 관측소로 교체."""
+    """관측소: ASOS 관측소 2곳(부산 159, 울산 152). 역이 이 표를 참조하는 연결로만 남아 있다.
+
+    2026-10-25부터 날씨 계산은 역마다 가장 가까운 AWS 지점(psd/cycle.py STATIONS의 aws_stn,
+    AWS_STATION_NAMES)을 쓰고, AWS 날씨는 DB가 아니라 data/processed/aws_weather_daily.csv에서 읽는다.
+    """
 
     __tablename__ = "observatories"
 
@@ -21,7 +25,6 @@ class Observatory(Base):
     lon: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     stations: Mapped[list["Station"]] = relationship(back_populates="observatory")
-    daily_weather: Mapped[list["DailyWeather"]] = relationship(back_populates="observatory")
 
 
 class Station(Base):
@@ -83,15 +86,37 @@ class Part(Base):
     station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"))
     door_id: Mapped[int | None] = mapped_column(ForeignKey("doors.id"), nullable=True)  # 역 단위 부품은 비움
     install_date: Mapped[dt.date] = mapped_column(Date)  # 마지막 교체일, 기록 없으면 역 개통일
-    has_record: Mapped[bool] = mapped_column(default=False)  # 교체 기록이 한 번이라도 있는지(확인 필요 판정용)
+    has_record: Mapped[bool] = mapped_column(default=False)  # 교체·점검 기록이 한 번이라도 있는지(확인 필요 판정용)
 
     part_type: Mapped[PartType] = relationship(back_populates="parts")
     station: Mapped[Station] = relationship(back_populates="parts")
     door: Mapped[Door | None] = relationship(back_populates="parts")
 
 
+class UploadBatch(Base):
+    """업로드 이력: 정비기록 엑셀을 한 번 올릴 때마다 1줄(psd/sync.py — 엑셀이 원본, DB는 그에 맞춘다).
+
+    되돌리기는 가장 최근 것부터 차례로만 된다. 이 업로드로 넣은 기록은 ReplacementRecord.batch_id로,
+    지운 기록은 removed(JSON)에 그대로 적어 두었다가 되돌릴 때 다시 넣는다.
+    """
+
+    __tablename__ = "upload_batches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    file_name: Mapped[str] = mapped_column(String(255))
+    uploaded_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
+    scope_from: Mapped[dt.date] = mapped_column(Date)  # 비교 범위: 파일의 가장 이른 날짜
+    scope_to: Mapped[dt.date] = mapped_column(Date)  # ~ 가장 늦은 날짜
+    station_count: Mapped[int] = mapped_column()  # 파일에 나온 역 수
+    inserted: Mapped[int] = mapped_column()  # 새로 넣은 기록
+    updated: Mapped[int] = mapped_column()  # 고친 기록(사유·부품이 달라 바꿔 넣은 것)
+    deleted: Mapped[int] = mapped_column()  # 지운 기록(엑셀에서 빠진 것 + DB 중복)
+    removed: Mapped[list] = mapped_column(JSON)  # 지우거나 고치기 전 기록들(되돌리기용)
+    undone_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class ReplacementRecord(Base):
-    """교체 기록: 화면에서 입력. 한 기록에 부품(종류) 여러 개가 함께 묶일 수 있다."""
+    """교체 기록: 정비기록 엑셀을 올려 넣는다. 한 기록에 부품(종류) 여러 개가 함께 묶일 수 있다."""
 
     __tablename__ = "replacement_records"
 
@@ -99,9 +124,10 @@ class ReplacementRecord(Base):
     replaced_on: Mapped[dt.date] = mapped_column(Date)
     station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"))
     door_id: Mapped[int | None] = mapped_column(ForeignKey("doors.id"), nullable=True)
-    reason: Mapped[str] = mapped_column(String(10))  # "fail" | "prev" | "with"
+    reason: Mapped[str] = mapped_column(String(10))  # "fail" | "prev" | "with" | "check"(점검 이상 없음 — 교체 아님)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
     created_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("upload_batches.id"), nullable=True)  # 이 기록을 넣은 업로드
 
     station: Mapped[Station] = relationship()
     door: Mapped[Door | None] = relationship()
@@ -119,24 +145,6 @@ class ReplacementPart(Base):
 
     record: Mapped[ReplacementRecord] = relationship(back_populates="parts")
     part_type: Mapped[PartType] = relationship()
-
-
-class DailyWeather(Base):
-    """일별 날씨: 기상청 ASOS 일자료 전처리 결과(`data/processed/weather_daily.csv`)."""
-
-    __tablename__ = "daily_weather"
-
-    observatory_id: Mapped[str] = mapped_column(ForeignKey("observatories.id"), primary_key=True)
-    date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
-    ta_avg: Mapped[float] = mapped_column(Float)
-    ta_max: Mapped[float] = mapped_column(Float)
-    ta_min: Mapped[float | None] = mapped_column(Float, nullable=True)  # 남은 결측 1일(울산)
-    hm_avg: Mapped[float] = mapped_column(Float)
-    dtr: Mapped[float | None] = mapped_column(Float, nullable=True)  # 일교차 = ta_max - ta_min
-    frost: Mapped[bool | None] = mapped_column(nullable=True)  # 결빙일(최저기온 < 0°C)
-    imputed: Mapped[bool] = mapped_column()  # 보간한 날인지
-
-    observatory: Mapped[Observatory] = relationship(back_populates="daily_weather")
 
 
 class CycleResult(Base):
