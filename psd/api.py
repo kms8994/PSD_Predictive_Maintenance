@@ -250,6 +250,11 @@ def list_stations(db: Session = Depends(get_db)):
     for u in statuses:  # 역마다 따로 조회하지 않고 한 번에 가져와 나눔(N+1 방지)
         by_station.setdefault(u.station_id, []).append(u)
 
+    repeat_by_station: dict[int, int] = {}
+    for r in _repeat_map(db).values():
+        if r.flagged:
+            repeat_by_station[r.station_id] = repeat_by_station.get(r.station_id, 0) + 1
+
     rows = []
     totals = {"빨강": 0, "노랑": 0, "확인_필요": 0}
     for s in db.execute(select(Station).order_by(Station.id)).scalars():
@@ -268,6 +273,7 @@ def list_stations(db: Session = Depends(get_db)):
                 "near_water": s.near_water,
                 "in_service": s.in_service,
                 "counts": c,
+                "repeat_doors": repeat_by_station.get(s.id, 0),  # 반복 고장 의심 문 수(psd/repeat.py) — 노선도·역 목록 표시용
                 # 역 목록에서 "다음 교체가 언제인지"를 보여 주려고 — 개통 전 역은 부품이 없어 None
                 "next": {
                     "due": soonest.due,

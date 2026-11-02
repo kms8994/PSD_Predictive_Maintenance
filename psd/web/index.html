@@ -29,6 +29,9 @@ try { const t = localStorage.getItem("psd-theme"); if (t === "light" || t === "d
   --green-soft: #e4f2ec;
   --gray: #7d8590;
   --gray-soft: #eef0f3;
+  --rep: #7c3aed;
+  --rep-soft: #f3edff;
+  --on-rep: #ffffff;
   --font-body: Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --font-data: Pretendard, "Malgun Gothic", system-ui, sans-serif;
   --scroll-edge: rgba(0, 0, 0, .14);
@@ -39,6 +42,7 @@ try { const t = localStorage.getItem("psd-theme"); if (t === "light" || t === "d
     --rail: #3d8fd6; --accent: #6fb0ec; --accent-soft: #1a2a3b; --on-accent: #0b1520;
     --red: #f2675d; --red-soft: #3a1f1d; --amber: #f0b43c; --amber-dot: #f0b43c; --amber-soft: #3a2f18;
     --green: #5cc08f; --green-soft: #183224; --gray: #8f99a6; --gray-soft: #252e39;
+    --rep: #b794f6; --rep-soft: #2a2142; --on-rep: #1a1030;
     --scroll-edge: rgba(255, 255, 255, .16);
     color-scheme: dark;
   }
@@ -49,6 +53,7 @@ try { const t = localStorage.getItem("psd-theme"); if (t === "light" || t === "d
   --rail: #3d8fd6; --accent: #6fb0ec; --accent-soft: #1a2a3b; --on-accent: #0b1520;
   --red: #f2675d; --red-soft: #3a1f1d; --amber: #f0b43c; --amber-dot: #f0b43c; --amber-soft: #3a2f18;
   --green: #5cc08f; --green-soft: #183224; --gray: #8f99a6; --gray-soft: #252e39;
+    --rep: #b794f6; --rep-soft: #2a2142; --on-rep: #1a1030;
   --scroll-edge: rgba(255, 255, 255, .16);
   color-scheme: dark;
 }
@@ -133,18 +138,20 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .map-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; }
 .map-scroll { overflow-x: auto; padding-bottom: 4px; }
 .rail { position: relative; display: grid; grid-template-columns: repeat(24, minmax(40px, 1fr)); min-width: 960px; }
-.rail::before { content: ""; position: absolute; left: 20px; right: 20px; top: 31px; height: 6px; background: var(--rail); border-radius: 3px; }
+/* 노선 상태는 강조를 낮춘다(2026-11-03): 선은 연한 파랑으로 가늘게, 점은 작게, 빨강·노랑은 굵은 고리 대신 옅은 테두리만 */
+.map { --map-line: color-mix(in srgb, var(--rail) 38%, var(--surface-2)); }
+.rail::before { content: ""; position: absolute; left: 20px; right: 20px; top: 32px; height: 4px; background: var(--map-line); border-radius: 2px; }
 .stn { appearance: none; background: none; border: 0; font: inherit; color: inherit; padding: 0; cursor: pointer; position: relative; display: grid; grid-template-rows: 22px 24px 22px; justify-items: center; align-items: center; }
-.stn .dot { grid-row: 2; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); border: 5px solid var(--rail); }
-.stn .dot.r { background: var(--red); border-color: var(--surface); box-shadow: 0 0 0 3px var(--red); }
-.stn .dot.y { background: var(--amber-dot); border-color: var(--surface); box-shadow: 0 0 0 3px var(--amber-dot); }
-.stn .dot.c { background: var(--gray); border-color: var(--surface); box-shadow: 0 0 0 3px var(--gray); }
+.stn .dot { grid-row: 2; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); border: 3px solid var(--map-line); }
+.stn .dot.r { background: color-mix(in srgb, var(--red) 82%, var(--surface)); border: 2px solid var(--surface); box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 28%, transparent); }
+.stn .dot.y { background: color-mix(in srgb, var(--amber-dot) 82%, var(--surface)); border: 2px solid var(--surface); box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber-dot) 30%, transparent); }
+.stn .dot.c { background: var(--gray); border: 2px solid var(--surface); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gray) 30%, transparent); }
 .stn .dot.x { border-color: var(--line); border-style: dashed; }
 .stn .nm { grid-row: 3; font-size: 12px; white-space: nowrap; color: var(--muted); }
 .stn:nth-child(even) .nm { grid-row: 1; }
-.stn.hl .nm { font-weight: 800; color: var(--ink); }
+.stn.hl .nm { font-weight: 700; color: var(--ink); }
 .stn:hover .nm { color: var(--accent); text-decoration: underline; }
-.stn:hover .dot { transform: scale(1.12); }
+.stn:hover .dot { transform: scale(1.2); }
 .maplegend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.8rem; color: var(--muted); }
 .maplegend i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 /* 현황: 교체 예정 + 옆 패널 */
@@ -210,9 +217,21 @@ button.scard:hover { border-color: var(--accent); }
 /* 반복 고장 의심 문(psd/repeat.py). 상태색(빨강·노랑·회색·초록)과 겹치지 않게 글자색 반전 배지로 표시한다 */
 .recs button.rec { appearance: none; background: none; border: 0; border-bottom: 1px solid var(--line); width: 100%; text-align: left; font: inherit; font-size: 0.86rem; color: inherit; cursor: pointer; }
 .recs button.rec:hover b { text-decoration: underline; }
-.repbadge { display: inline-block; font-size: 0.68rem; font-weight: 700; line-height: 1; padding: 3px 5px; border-radius: 4px; background: var(--ink); color: var(--surface); vertical-align: 1px; }
+.repbadge { display: inline-block; font-size: 0.7rem; font-weight: 800; line-height: 1; padding: 3px 6px; border-radius: 999px; background: var(--rep); color: var(--on-rep); vertical-align: 1px; white-space: nowrap; }
 .repnote { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 0.86rem; }
-.repnote.on { border-left: 4px solid var(--ink); }
+.repnote.on { border-left: 4px solid var(--rep); }
+.repnote.on > b { font-size: 0.95rem; }
+/* 현황 오른쪽 맨 위 카드: 배경·테두리 없이 왼쪽 보라 줄 하나로만 구분한다(색이 많아 강조를 낮춤, 2026-11-03) */
+.repcard { border-left: 4px solid var(--rep); padding: 2px 0 2px 12px; }
+.repcard .recs button.rec { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; }
+.repcard .recs button.rec:last-child { border-bottom: 0; }
+.repcard .recs .rec span { grid-column: 1; }
+.repcard .recs .rec .n { grid-column: 2; grid-row: 1 / span 2; color: var(--ink); font-weight: 800; font-size: 1.05rem; margin: 0; }
+.s-rep { color: var(--rep); background: var(--rep-soft); }
+.snav .snrep { color: var(--rep); font-weight: 700; }
+.stn .repmark { position: absolute; top: 14px; left: calc(50% + 5px); width: 14px; height: 14px; border-radius: 50%; background: color-mix(in srgb, var(--rep) 80%, var(--surface)); color: var(--on-rep); font-size: 9px; font-weight: 800; line-height: 14px; text-align: center; box-shadow: 0 0 0 2px var(--surface-2); z-index: 1; }
+.stn:nth-child(even) .repmark { top: auto; bottom: 14px; }  /* 짝수 역은 이름이 위에 있어 겹치지 않게 아래로 */
+.maplegend .rl { display: inline-block; width: 13px; height: 13px; border-radius: 50%; background: var(--rep); color: var(--on-rep); font-size: 9px; line-height: 13px; text-align: center; font-weight: 800; margin-right: 6px; vertical-align: -1px; font-style: normal; }
 .btn.block { align-self: stretch; text-align: center; padding: 11px; }
 .labnav { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 
@@ -377,7 +396,9 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
 .psd-glass i { flex: 1; background: var(--accent-soft); border: 1px solid var(--line); }
 .psd-no { font-family: var(--font-data); font-size: 0.75rem; }
 .psd { position: relative; }
-.psd .repbadge { position: absolute; top: -7px; right: -8px; }
+/* 반복 고장 의심 문은 문 번호를 보라 라벨로 바꾼다 — 위에 배지를 얹으면 상태 막대(psd-head)를 가렸다 */
+.psd-no.rep { background: var(--rep); color: var(--on-rep); border-radius: 999px; padding: 0 5px; font-weight: 700; }
+.psd.rep .psd-glass { border-color: var(--rep); box-shadow: 0 0 0 2px var(--rep); }
 .c-빨강 { --st: var(--red); --st-soft: var(--red-soft); }
 .c-노랑 { --st: var(--amber); --st-soft: var(--amber-soft); }
 .c-초록 { --st: var(--green); --st-soft: var(--green-soft); }
@@ -1029,8 +1050,8 @@ details.more[open] > summary { margin-bottom: 10px; }
   const repeatRuleText = rule => `최근 ${rule.window_years}년 고장이 같은 역 다른 문 평균보다 유난히 많은 문(${rule.min_failures}건 이상, 우연일 확률 ${Math.round(rule.p_max * 100)}% 미만)`;
   const peerText = r => r.peer_mean === null ? "" : `같은 역 다른 문 평균 ${r.peer_mean.toFixed(1)}건${r.ratio ? `의 ${r.ratio.toFixed(1)}배` : ""}`;
   function repeatCard(rep) {
-    const rows = rep.doors.map(r => `<button type="button" class="rec" ${goAttr({ name: "station", st: r.station_id, side: r.side, door: r.door_id })}><b>${esc(r.station_name)}</b> ${esc(r.label)} · 고장 ${r.failures}건<span>${peerText(r)} · 마지막 ${dotDate(r.last)}</span></button>`).join("");
-    return `<div><div class="headrow"><h3>반복 고장 의심 문 <span class="small muted">최근 ${rep.rule.window_years}년</span></h3></div>
+    const rows = rep.doors.map(r => `<button type="button" class="rec" ${goAttr({ name: "station", st: r.station_id, side: r.side, door: r.door_id })}><b>${esc(r.station_name)} · ${esc(r.label)}</b><span class="n">${r.failures}건</span><span>${peerText(r)} · 마지막 ${dotDate(r.last)}</span></button>`).join("");
+    return `<div class="${rep.doors.length ? "repcard" : ""}"><div class="headrow"><h3>${rep.doors.length ? "↻ " : ""}반복 고장 의심 문 ${rep.doors.length ? rep.doors.length + "곳" : ""} <span class="small muted">최근 ${rep.rule.window_years}년</span></h3></div>
         <div class="recs">${rows || `<p class="small muted" style="padding:9px 0">같은 역 다른 문보다 유난히 고장이 잦은 문이 없습니다.</p>`}</div>
         <p class="small muted" style="margin-top:6px">${repeatRuleText(rep.rule)} · 문 ${rep.doors_checked.toLocaleString()}개 중 ${rep.doors.length}개</p></div>`;
   }
@@ -1038,7 +1059,7 @@ details.more[open] > summary { margin-bottom: 10px; }
     const r = d.repeat, y = d.repeat_rule.window_years;
     if (!r.flagged) return `<p class="repnote small muted">최근 ${y}년 고장 ${r.failures ? r.failures + "건" : "없음"}${r.peer_mean === null ? "" : " · " + peerText({ ...r, ratio: null })}</p>`;
     const parts = r.by_part.map(p => `${esc(p.name)} ${p.count}`).join(", ");
-    return `<div class="repnote on"><span class="repbadge">반복</span> <b>반복 고장 의심</b> — 최근 ${y}년 고장 ${r.failures}건, ${peerText(r)}입니다.
+    return `<div class="repnote on"><b>↻ 반복 고장 의심 문</b> — 최근 ${y}년 고장 ${r.failures}건, ${peerText(r)}입니다.
         부품을 바꿔도 이 문에서 다시 고장 나는지, 문 자체(설치·정렬·주변 환경)를 함께 점검할 후보입니다.
         <span class="small muted" style="display:block;margin-top:4px">고장 부품: ${parts} · 마지막 고장 ${dotDate(r.last)} · ${repeatRuleText(d.repeat_rule)}</span></div>`;
   }
@@ -1094,9 +1115,10 @@ details.more[open] > summary { margin-bottom: 10px; }
         <div class="map-scroll"><div class="rail">${data.stations.map(s => {
           const d = stationDot(s);
           const label = !s.in_service ? "개통 전" : d === "r" ? "교체 임박" : d === "c" ? "확인 필요" : d === "y" ? "주의" : "안전";
-          return `<button class="stn ${d && d !== "x" ? "hl" : ""}" ${goAttr({ name: "station", st: s.id })} aria-label="${esc(s.name + " · " + label)}" title="${esc(s.name + " · " + label)}"><span class="dot ${d}"></span><span class="nm">${esc(s.name)}</span></button>`;
+          const lab = s.name + " · " + label + (s.repeat_doors ? ` · 반복 고장 의심 문 ${s.repeat_doors}곳` : "");
+          return `<button class="stn ${d && d !== "x" ? "hl" : ""}" ${goAttr({ name: "station", st: s.id })} aria-label="${esc(lab)}" title="${esc(lab)}"><span class="dot ${d}"></span>${s.repeat_doors ? `<span class="repmark" aria-hidden="true">↻</span>` : ""}<span class="nm">${esc(s.name)}</span></button>`;
         }).join("")}</div></div>
-        <div class="maplegend"><span><i style="background:var(--red)"></i>교체 임박 6개월 안</span><span class="${zeroCls(data.totals.확인_필요)}"><i style="background:var(--gray)"></i>확인 필요</span><span><i style="background:var(--amber-dot)"></i>주의 1년 안</span><span><i style="border:3px solid var(--rail)"></i>안전</span><span><i style="border:2px dashed var(--line)"></i>개통 전</span></div>
+        <div class="maplegend"><span><i style="background:color-mix(in srgb, var(--red) 82%, var(--surface))"></i>교체 임박 6개월 안</span><span class="${zeroCls(data.totals.확인_필요)}"><i style="background:var(--gray)"></i>확인 필요</span><span><i style="background:color-mix(in srgb, var(--amber-dot) 82%, var(--surface))"></i>주의 1년 안</span><span><i style="border:3px solid var(--map-line)"></i>안전</span><span><i style="border:2px dashed var(--line)"></i>개통 전</span>${data.stations.some(s => s.repeat_doors) ? `<span><i class="rl">↻</i>반복 고장 의심 문 있음</span>` : ""}</div>
       </section>`;
 
     const recs = rec.records.map(r => `<div class="rec"><b>${esc(r.station_name)}</b> ${r.parts.map(esc).join(", ")} · ${REASONS[r.reason] || esc(r.reason)}<span>${r.replaced_on.replaceAll("-", ".")} · ${esc(r.location)}${r.created_by ? " · " + esc(r.created_by) : ""}</span></div>`).join("");
@@ -1106,8 +1128,8 @@ details.more[open] > summary { margin-bottom: 10px; }
       <div class="homegrid">
         ${work}
         <aside class="side">
-          ${volumeChart(vol)}
           ${repeatCard(rep)}
+          ${volumeChart(vol)}
           <div><div class="headrow"><h3>최근 교체 기록</h3><button class="linkbtn" ${goAttr({ name: "records" })}>전체 ${rec.total.toLocaleString()}건 ›</button></div>
             <div class="recs">${recs || `<p class="small muted" style="padding:9px 0">입력된 교체 기록이 없습니다.</p>`}</div></div>
         </aside>
@@ -1197,11 +1219,12 @@ details.more[open] > summary { margin-bottom: 10px; }
     const item = s => {
       const c = s.counts;
       const b = [c.빨강 ? `<span class="pill stp s-red">임박 ${c.빨강}</span>` : "", c.확인_필요 ? `<span class="pill stp s-check">확인 ${c.확인_필요}</span>` : "", c.노랑 ? `<span class="pill stp s-amber">주의 ${c.노랑}</span>` : ""].join("");
+      const rb = s.repeat_doors ? `<span class="pill s-rep">↻ 반복 ${s.repeat_doors}</span>` : "";
       // in_service가 false면(지금은 북울산) 부품 자체가 없어 counts가 전부 0이다 — "안전"으로
       // 잘못 보여주면 안 된다(코드 리뷰로 찾은 버그). 운영 중 역만 그 fallback을 쓴다.
       const fallback = s.in_service ? '<span class="pill stp s-green">안전</span>' : '<span class="pill s-check">개통 전</span>';
       const meta = s.next ? `다음 교체 ${dotDate(s.next.due)} ${PART[s.next.part_type_code].name} · ${dur(s.next.days_left)}` : openPlan(s);
-      return `<li data-name="${esc(s.name)}"><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${meta}</span>${miniBar(c)}</span><span class="badges">${b || fallback}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
+      return `<li data-name="${esc(s.name)}"><button class="st" ${goAttr({ name: "station", st: s.id })}><span class="body"><span class="name">${s.name}</span><span class="meta">${meta}</span>${miniBar(c)}</span><span class="badges">${rb}${b || fallback}</span><span class="chev" aria-hidden="true">›</span></button></li>`;
     };
     const mode = `<div class="seg" role="group" aria-label="보기 방식">${[[false, "목록"], [true, "격자"]].map(([g, l]) => `<button type="button" class="segbtn" aria-pressed="${!!view.grid === g}" ${goAttr({ name: "route", grid: g || undefined, keep: true })}>${l}</button>`).join("")}</div>`;
     const body = view.grid ? routePatterns(data.stations) + routeGrid(data.stations) : `
@@ -1462,7 +1485,7 @@ details.more[open] > summary { margin-bottom: 10px; }
     return `<nav class="stnav" aria-label="역 바꾸기">${stations.map(x => {
       const c = x.counts, n = c.빨강 + c.확인_필요 + c.노랑;
       const sub = !x.in_service ? "개통 전" : c.빨강 ? `교체 임박 ${c.빨강}` + (c.노랑 ? ` · 주의 ${c.노랑}` : "") : c.확인_필요 ? `확인 필요 ${c.확인_필요}` : c.노랑 ? `주의 ${c.노랑}` : "안전";
-      return `<button class="snav" ${x.id === st ? 'aria-current="page"' : ""} ${goAttr({ name: "station", st: x.id })}><b>${esc(x.name)}</b><span>${sub}</span>${n ? miniBar(c) : ""}</button>`;
+      return `<button class="snav" ${x.id === st ? 'aria-current="page"' : ""} ${goAttr({ name: "station", st: x.id })}><b>${esc(x.name)}</b><span>${sub}${x.repeat_doors ? ` · <span class="snrep">↻ 반복 ${x.repeat_doors}</span>` : ""}</span>${n ? miniBar(c) : ""}</button>`;
     }).join("")}</nav>`;
   }
   // 그 부품이 안전이 아닌 문들을 상태·예정일로 묶는다(현황 "교체 예정"의 한 줄 = 여기 한 묶음).
@@ -1618,7 +1641,7 @@ details.more[open] > summary { margin-bottom: 10px; }
 
     const dirTabs = `<div class="dirtabs" role="group" aria-label="방향 선택">${Object.entries(SIDE_LABEL).map(([k, v]) => `<button class="dirtab" aria-pressed="${k === sid}" ${goAttr({ name: "station", st, side: k, plist: view.plist, keep: true })}>${v}</button>`).join("")}</div>`;
     const strip = `<div class="strip-wrap"><div class="strip">${[1, 2, 3, 4].map(car => `<div class="car"><div class="carlabel">${car}호차</div><div class="cardoors">${sideDoors.filter(d => d.car === car).map(d =>
-      `<button class="psd c-${d.worst_status}" aria-pressed="${d.id === doorId}" aria-label="${esc(d.no + " · " + STATE[d.worst_status][0])}" data-door="${d.id}" data-side="${sid}"><span class="psd-head"></span><span class="psd-glass"><i></i><i></i></span><span class="psd-no">${d.no}</span>${d.repeat ? `<span class="repbadge" title="반복 고장 의심">반복</span>` : ""}</button>`
+      `<button class="psd c-${d.worst_status} ${d.repeat ? "rep" : ""}" aria-pressed="${d.id === doorId}" aria-label="${esc(d.no + " · " + STATE[d.worst_status][0] + (d.repeat ? " · 반복 고장 의심" : ""))}" data-door="${d.id}" data-side="${sid}"><span class="psd-head"></span><span class="psd-glass"><i></i><i></i></span>${d.repeat ? `<span class="psd-no rep" title="반복 고장 의심">↻ ${d.no}</span>` : `<span class="psd-no">${d.no}</span>`}</button>`
     ).join("")}</div></div>`).join("")}</div></div>`;
 
 
@@ -1631,7 +1654,7 @@ details.more[open] > summary { margin-bottom: 10px; }
     const s = detail.station, c = detail.counts;
     // 반복 고장 의심 문은 방향과 상관없이 역 요약에 적고, 누르면 그 문으로 간다
     const repDoors = Object.entries(detail.sides).flatMap(([k, sd]) => sd.doors.filter(d => d.repeat).map(d => ({ ...d, side: k })));
-    const repLine = repDoors.length ? `<p class="small" style="margin:8px 0 0"><span class="repbadge">반복</span> 반복 고장 의심 문: ${repDoors.map(d => `<button class="linkbtn" style="padding:0" ${goAttr({ name: "station", st, side: d.side, door: d.id, keep: true })}>${esc(d.label)}</button>`).join(", ")}</p>` : "";
+    const repLine = repDoors.length ? `<div class="repnote on" style="margin:0"><b>↻ 반복 고장 의심 문 ${repDoors.length}곳</b> — ${repDoors.map(d => `<button class="linkbtn" style="padding:0;font-weight:700" ${goAttr({ name: "station", st, side: d.side, door: d.id, keep: true })}>${esc(d.label)}</button>`).join(", ")}<span class="small muted"> · 같은 역 다른 문보다 고장이 유난히 잦습니다. 누르면 그 문으로 갑니다.</span></div>` : "";
     return `<section class="view">
       <nav class="crumbs"><button ${goAttr({ name: "route" })}>역 목록</button><span>›</span><span>${s.name}</span></nav>
       <div class="stlayout">${stationNav(list.stations, st)}<div class="stmain">
@@ -1647,7 +1670,7 @@ details.more[open] > summary { margin-bottom: 10px; }
       <div class="panel">
         <div class="psdhead"><h3>승강장 안전문</h3>${dirTabs}</div>
         ${strip}
-        <div class="legend">${pill("빨강")}<span class="muted">6개월 이하</span><span class="${zeroCls(c.확인_필요)}">${pill("확인_필요")} <span class="muted">기록 없이 지남</span></span>${pill("노랑")}<span class="muted">1년 이하</span>${pill("초록")}<span class="muted">여유</span>${repDoors.length ? `<span class="repbadge">반복</span><span class="muted">반복 고장 의심</span>` : ""}</div>
+        <div class="legend">${pill("빨강")}<span class="muted">6개월 이하</span><span class="${zeroCls(c.확인_필요)}">${pill("확인_필요")} <span class="muted">기록 없이 지남</span></span>${pill("노랑")}<span class="muted">1년 이하</span>${pill("초록")}<span class="muted">여유</span>${repDoors.length ? `<span class="repbadge">↻ 반복</span><span class="muted">반복 고장 의심</span>` : ""}</div>
       </div>
       <div class="panel doorpanel">${doorPanel(doorDetail)}</div>
       </div></div>
