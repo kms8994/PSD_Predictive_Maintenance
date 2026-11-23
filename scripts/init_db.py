@@ -1,7 +1,7 @@
 """DB 표 만들기 + 초기 데이터 적재 (MVP_계획.md 3-2~3-4).
 
-- 표: 역, 관측소, 문, 부품 종류, 부품, 교체 기록, 교체 부품, 업로드 이력, 계산 결과
-- 초기 데이터: 역 24개(이 중 PSD 운영 중인 역만, 지금은 23개 — 북울산 제외), 관측소 2곳,
+- 표: 역, 문, 부품 종류, 부품, 교체 기록, 교체 부품, 업로드 이력, 계산 결과, AI 모델 이력
+- 초기 데이터: 역 24개(이 중 PSD 운영 중인 역만, 지금은 23개 — 북울산 제외),
   방향별 문 16개(임시), 부품 종류 7개
 - 부품 생성: 운영 중인 역마다 문 32개 × 6종(문 단위) + 종합제어반 릴레이 1개(역 단위)
 
@@ -21,14 +21,13 @@ from psd.catalog import (  # noqa: E402
     CARS_PER_SIDE,
     DOOR_PART_CODES,
     DOORS_PER_SIDE,
-    OBSERVATORIES,
     PART_TYPES,
     SIDES,
     STATION_PART_CODES,
 )
-from psd.cycle import OBS_CODE, STATIONS  # noqa: E402
+from psd.cycle import STATIONS  # noqa: E402
 from psd.db import Base, engine, get_session  # noqa: E402
-from psd.models import Door, Observatory, Part, PartType, Station  # noqa: E402
+from psd.models import Door, Part, PartType, Station  # noqa: E402
 
 # Alembic 같은 마이그레이션 도구가 없는 프로젝트다. Base.metadata.create_all()은 없는 표만
 # 새로 만들고, 이미 있는 표에 컬럼을 추가해 주지는 않는다(SQLAlchemy 자체 제약) — 그래서
@@ -46,6 +45,12 @@ _NEW_COLUMNS = [
     ("replacement_records", "symptom", "VARCHAR(10) NULL"),
     ("replacement_records", "cause", "VARCHAR(10) NULL"),
     ("replacement_parts", "sub_parts", "VARCHAR(200) NULL"),
+    # 2026-11-23 역 환경 칸(psd/models.py Station 주석). 정보가 없어 비워 둔다. seed()는 이 칸을 넘기지 않아
+    # 나중에 채운 값을 init_db.py를 다시 돌려도 지우지 않는다(session.merge는 설정 안 한 속성을 건드리지 않음)
+    ("stations", "structure", "VARCHAR(10) NULL"),
+    ("stations", "coast_km", "FLOAT NULL"),
+    ("stations", "daily_riders", "INT NULL"),
+    ("stations", "env_note", "VARCHAR(200) NULL"),
 ]
 
 
@@ -54,7 +59,12 @@ _NEW_COLUMNS = [
 _DROP_COLUMNS = [
     ("cycle_results", "weather_start"),
     ("cycle_results", "weather_end"),
+    ("stations", "observatory_id"),  # 2026-11-23: 예전 ASOS 관측소 연결. 날씨는 aws_stn(psd/cycle.py)으로만 계산한다
 ]
+
+# 모델에서 뺀 표(2026-11-23 정리). 순서대로 지운다 — daily_weather가 observatories를 참조한다
+# daily_weather: 예전 ASOS 일별 날씨(2026-10-25부터 AWS CSV로 바꾸며 안 씀), observatories: 그 관측소 목록
+_DROP_TABLES = ["daily_weather", "observatories"]
 
 
 def sync_schema(engine) -> None:
@@ -72,21 +82,25 @@ def sync_schema(engine) -> None:
                     conn.execute(text("UPDATE replacement_records SET action = 'none' WHERE reason = 'check'"))
         for table, column in _DROP_COLUMNS:
             if table in existing_tables and column in {c["name"] for c in inspector.get_columns(table)}:
+                # 외래 키가 걸린 칸은 키부터 풀어야 지울 수 있다(MySQL)
+                for fk in inspector.get_foreign_keys(table):
+                    if column in fk["constrained_columns"] and fk.get("name"):
+                        conn.execute(text(f"ALTER TABLE {table} DROP FOREIGN KEY {fk['name']}"))
                 conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
                 print(f"스키마 동기화: {table}.{column} 칸 지움")
+        for table in _DROP_TABLES:
+            if table in existing_tables:
+                conn.execute(text(f"DROP TABLE {table}"))
+                print(f"스키마 동기화: {table} 표 지움")
 
 
 def seed(session) -> None:
-    for row in OBSERVATORIES:
-        session.merge(Observatory(**row))
-
     for s in STATIONS:
         session.merge(
             Station(
                 id=s.order,
                 name=s.name,
                 open_date=s.open_date,
-                observatory_id=OBS_CODE[s.obs],
                 near_water=s.near_water,
                 in_service=s.in_service,
             )
@@ -164,17 +178,13 @@ def main() -> None:
     args = ap.parse_args()
 
     if args.reset:
-        # daily_weather(예전 ASOS 일별 날씨)는 모델에서 뺐지만 예전 DB엔 남아 있을 수 있다. observatories를
-        # 참조하고 있어 먼저 지우지 않으면 drop_all이 observatories를 못 지운다.
-        with engine.begin() as conn:
-            conn.execute(text("DROP TABLE IF EXISTS daily_weather"))
-        Base.metadata.drop_all(engine)
+        Base.metadata.drop_all(engine)  # 예전 표(daily_weather·observatories)는 아래 sync_schema가 지운다
     Base.metadata.create_all(engine)
     sync_schema(engine)
 
     session = get_session()
     try:
-        # seed()는 session.merge()로 역·관측소·부품 종류·문·부품만 올리거나 갱신한다(교체
+        # seed()는 session.merge()로 역·부품 종류·문·부품만 올리거나 갱신한다(교체
         # 기록 표는 건드리지 않고, 이미 있는 부품의 install_date도 더는 덮어쓰지 않는다 —
         # 위 existing_part_ids 주석 참고). 이미 있어도 다시 실행해 안전하다 — STATIONS나
         # PART_TYPES에 새 항목을 추가했을 때 조용히 건너뛰지 않도록 항상 seed한다.
@@ -184,7 +194,7 @@ def main() -> None:
         door_count = len(SIDES) * DOORS_PER_SIDE
         part_count = door_count * len(DOOR_PART_CODES) + len(STATION_PART_CODES)
         print(
-            f"적재 완료: 관측소 {len(OBSERVATORIES)}, 역 {len(STATIONS)}(운영 중 {len(in_service)}), "
+            f"적재 완료: 역 {len(STATIONS)}(운영 중 {len(in_service)}), "
             f"문 {len(in_service) * door_count}, "
             f"부품 종류 {len(PART_TYPES)}, "
             f"부품 {len(in_service) * part_count}"

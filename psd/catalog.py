@@ -1,14 +1,7 @@
-"""DB 초기 데이터로 쓰는 고정 목록 (관측소, 부품 종류, 문 배치).
+"""DB 초기 데이터로 쓰는 고정 목록 (부품 종류, 문 배치).
 
-역 목록(STATIONS)은 `psd/cycle.py`에 있다. 관측소 코드(OBS_CODE)도 같은 곳에 있지만
-2026-10-25부터 날씨 계산에는 안 쓰고 DB 적재(scripts/init_db.py)용으로만 쓴다 — 실제
-날씨 계산은 STATIONS의 aws_stn·AWS_STATION_NAMES(둘 다 psd/cycle.py)를 기준으로 한다.
+역 목록(STATIONS)과 날씨 지점(aws_stn·AWS_STATION_NAMES)은 `psd/cycle.py`에 있다.
 """
-
-OBSERVATORIES = [
-    {"id": "159", "kind": "ASOS", "name": "부산(추정)"},
-    {"id": "152", "kind": "ASOS", "name": "울산(추정)"},
-]
 
 # 코드, 이름, 설치 위치(문/역), 날씨 계산 여부 (설계_v2.md 4-2, 4단계_계산공식_근거조사.md 1장)
 PART_TYPES = [

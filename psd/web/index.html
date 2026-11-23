@@ -122,7 +122,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .crumbs { display: flex; gap: 6px; flex-wrap: wrap; font-size: 0.88rem; color: var(--muted); }
 .crumbs button { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 0.92rem; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; }
@@ -199,7 +198,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .items-empty span { margin-top: 4px; }
 /* 요약 카드 세 장(교체 계획 위쪽, 역 탭 격자의 "눈에 띄는 패턴") */
 .scards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-@media (max-width: 760px) { .scards { grid-template-columns: minmax(0, 1fr); } }
+.scards.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 760px) { .scards, .scards.two { grid-template-columns: minmax(0, 1fr); } }
 .scard { appearance: none; font: inherit; color: inherit; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 button.scard { cursor: pointer; }
 button.scard:hover { border-color: var(--accent); }
@@ -242,7 +242,7 @@ button.scard:hover { border-color: var(--accent); }
 .s-rep { color: var(--rep); background: var(--rep-soft); }
 .snav .snrep { color: var(--rep); font-weight: 700; }
 .btn.block { align-self: stretch; text-align: center; padding: 11px; }
-.labnav { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+
 
 .route { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
 .route li { position: relative; }
@@ -321,17 +321,12 @@ th { font-weight: 600; color: var(--muted); font-size: 0.8rem; }
 .btn { appearance: none; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 700; padding: 9px 16px; border-radius: 3px; cursor: pointer; align-self: flex-start; }
 .btn.ghost { background: none; color: var(--accent); }
 .form { display: flex; flex-direction: column; gap: 14px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field label, .field legend { font-weight: 600; font-size: 0.9rem; }
-fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 input[type="date"], input[type="search"], select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); color: var(--ink); max-width: 260px; }
 .stfilter-wrap { position: relative; }
 input.stfilter { width: 100%; max-width: none; padding-left: 34px; }
 .stfilter-wrap::before { content: "⌕"; position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 1.1rem; pointer-events: none; }
 .route li.hide { display: none; }
 .route-empty { padding: 20px 14px; color: var(--muted); font-size: 0.9rem; }
-.checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
-.checks label { font-weight: 400; display: flex; gap: 6px; align-items: center; }
 .err { color: var(--red); font-size: 0.88rem; }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 3px; font-size: 0.9rem; z-index: 50; }
 /* 부품 상세: 오른쪽에서 열리는 패널. 보던 화면(현황·역 상세)은 뒤에 그대로 둔다 */
@@ -350,9 +345,6 @@ html.noscroll { overflow: hidden; }
 
 .vol td.n { text-align: right; font-family: var(--font-data); font-variant-numeric: tabular-nums; min-width: 52px; }
 .vol td.n:empty::before { content: "–"; color: var(--line); }
-.vol td.barcell { width: 30%; min-width: 120px; }
-.vbar { height: 10px; background: var(--accent); border-radius: 3px; }
-.vol tr.checkrow td { background: var(--gray-soft); }
 .vol th.pk, .vol td.pk { background: var(--amber-soft); }
 /* 교체 계획: 기간별 막대(가장 몰리는 때는 주황), 누르면 아래에 그 기간 역별 물량 */
 .pchart { overflow-x: auto; padding-top: 4px; }
@@ -446,30 +438,9 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
 .swbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .swbtn:disabled { color: var(--muted); cursor: default; opacity: 0.6; }
 
-.mk { display: block; overflow: visible; }
-.mk .axisl, .chart .grid { stroke: var(--line); stroke-width: 1; }
-.mk .refl, .chart .refl { stroke: var(--muted); stroke-width: 1; }
-.mk .dot, .chart .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
-.mk .band { fill: var(--accent); opacity: 0.25; }
-.chart .whisker { stroke: var(--accent); stroke-width: 1.5; opacity: 0.45; }
-.chart text { fill: var(--muted); font-family: var(--font-data); font-size: 11px; }
-.chart text.lab { fill: var(--ink); font-family: var(--font-body); font-size: 11.5px; }
-.chart .hit { fill: transparent; cursor: default; }
-.chart .hit:focus-visible, .mk:focus-visible { outline: 2px solid var(--accent); }
-.chart:hover .dot { opacity: 0.85; }
-.rowchart th, .rowchart td { padding: 4px 8px; }
-.rowchart td.nm { font-weight: 500; }
-.cap { display: block; font-weight: 400; font-size: 0.72rem; color: var(--muted); }
-.charts2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
-.charts2 figure { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.charts2 figcaption { font-weight: 600; font-size: 0.92rem; }
-.charts2 svg { width: 100%; height: auto; }
 .tip { position: fixed; z-index: 30; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px; font-size: 0.82rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); display: flex; flex-direction: column; gap: 2px; max-width: 240px; }
 .tip strong { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
 .tip span { color: var(--muted); }
-.sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 20px; }
-.sliders .field label { display: flex; justify-content: space-between; gap: 8px; }
-input[type="range"] { width: 100%; accent-color: var(--accent); }
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 /* 엑셀 업로드: 끌어다 놓기 */
 .drop { border: 2px dashed var(--line); border-radius: 6px; padding: 24px 16px; text-align: center; cursor: pointer; display: flex; flex-direction: column; gap: 4px; align-items: center; }
@@ -506,31 +477,6 @@ details.more[open] > summary { margin-bottom: 10px; }
 .cmp-ov em { position: absolute; top: -16px; left: 0; transform: translateX(-50%); font-style: normal; font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
 .cmp-ax { height: 14px; display: block; }
 .cmp-ax i { position: absolute; top: 0; transform: translateX(-50%); font-style: normal; font-size: 0.72rem; color: var(--muted); }
-/* 날씨 분석 */
-.sens { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-.sens .card { border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-.srow { display: grid; grid-template-columns: 76px minmax(0, 1fr) 104px; gap: 10px; align-items: center; font-size: 0.86rem; }
-.srow .strk { height: 10px; background: var(--surface-2); border-radius: 0 4px 4px 0; }
-.srow .sb { display: block; height: 10px; background: var(--accent); border-radius: 0 4px 4px 0; }
-.srow .sv { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; text-align: right; }
-.srow.zero .sv { color: var(--muted); font-weight: 500; }
-.lolli svg { display: block; width: 100%; min-width: 760px; height: auto; }
-.lolli .banda { fill: var(--surface-2); }
-.lolli .bandb { fill: transparent; }
-.lolli .grid { stroke: var(--line); stroke-width: 1; }
-.lolli .ten { stroke: var(--ink); stroke-width: 1.2; stroke-dasharray: 4 3; opacity: 0.6; }
-.lolli .stem { stroke: var(--accent); stroke-width: 2; }
-.lolli .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
-.lolli text { fill: var(--muted); font-size: 10.5px; font-family: var(--font-data); }
-.lolli text.nm { fill: var(--ink); font-family: var(--font-body); font-size: 11px; }
-.lolli text.grp { fill: var(--ink); font-family: var(--font-body); font-size: 11px; font-weight: 700; }
-.lolli text.v { fill: var(--ink); font-weight: 700; font-size: 11px; }
-.lolli .hit { fill: transparent; cursor: default; }
-.lolli .hit:hover, .lolli .hit:focus-visible { fill: var(--accent); fill-opacity: 0.08; outline: none; }
-.sliders .ends { display: flex; justify-content: space-between; gap: 8px; font-size: 0.72rem; color: var(--muted); line-height: 1.3; margin-top: -2px; }
-.simgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
-.simgrid .card { border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
-.simgrid .card .tag { font-weight: 700; font-size: 0.9rem; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 @media (max-width: 520px) {
   .st { padding-left: 48px; }
@@ -549,7 +495,6 @@ details.more[open] > summary { margin-bottom: 10px; }
       <button class="tab" id="tab-plan" role="tab" aria-selected="false">교체 계획</button>
       <button class="tab" id="tab-records" role="tab" aria-selected="false">교체 기록</button>
       <button class="tab" id="tab-ai" role="tab" aria-selected="false">AI 관리</button>
-      <button class="tab" id="tab-lab" role="tab" aria-selected="false">주기 근거</button>
     </nav>
     <button class="themebtn" id="theme-btn" type="button" role="switch" aria-checked="false"><span class="theme-label">WHITE MODE</span><span class="sw" aria-hidden="true"><span class="knob"></span></span></button>
   </div>
@@ -691,11 +636,6 @@ details.more[open] > summary { margin-bottom: 10px; }
       case "part":
         path = `/part/${v.partId}`;
         break;
-      case "weather":
-        path = "/lab/weather";
-        if (v.simSt != null) q.set("sim", v.simSt);
-        if (v.wpart) q.set("part", v.wpart);
-        break;
       case "plan":
         path = "/plan";
         if (v.span && v.span !== "12m") q.set("span", v.span);
@@ -713,9 +653,6 @@ details.more[open] > summary { margin-bottom: 10px; }
         if (v.rreason) q.set("reason", v.rreason);
         if (v.raction) q.set("action", v.raction);
         if (v.rpage > 1) q.set("page", v.rpage);
-        break;
-      case "sample":
-        path = "/sample";
         break;
       case "model":
         path = "/ai";
@@ -749,8 +686,7 @@ details.more[open] > summary { margin-bottom: 10px; }
     const h = location.hash.slice(1) || "/home";
     const [path, qs] = h.split("?");
     const q = new URLSearchParams(qs || "");
-    let parts = path.split("/").filter(Boolean);
-    if (parts[0] === "lab") parts = parts.slice(1); // 예전 주소(#/weather, #/volume)도 그대로 열리게
+    const parts = path.split("/").filter(Boolean);  // 없앤 화면(주기 근거 #/lab/…, #/sample)의 예전 주소는 현황으로 간다
     try {
       switch (parts[0]) {
         case "home": {
@@ -780,8 +716,6 @@ details.more[open] > summary { margin-bottom: 10px; }
           if (q.get("page")) v.rpage = Number(q.get("page"));
           return v;
         }
-        case "sample":
-          return { name: "sample" };
         case "ai":
         case "model": {  // 예전 주소(#/model)도 그대로 열리게
           const v = { name: "model" };
@@ -802,12 +736,6 @@ details.more[open] > summary { margin-bottom: 10px; }
           const partId = Number(parts[1]);
           if (!partId) break;
           return { name: "part", partId };
-        }
-        case "weather": {
-          const v = { name: "weather" };
-          if (q.get("sim")) v.simSt = Number(q.get("sim"));
-          if (q.get("part")) v.wpart = q.get("part");
-          return v;
         }
         case "plan":
         case "volume": {  // 예전 주소(#/volume = 분기별 표)는 3년 보기로
@@ -845,7 +773,6 @@ details.more[open] > summary { margin-bottom: 10px; }
   document.getElementById("tab-plan").onclick = () => go({ name: "plan" });
   document.getElementById("tab-records").onclick = () => go({ name: "records" });
   document.getElementById("tab-ai").onclick = () => go({ name: "model" });
-  document.getElementById("tab-lab").onclick = () => go({ name: "weather" });
   document.getElementById("nav-back").onclick = () => history.back();
   document.getElementById("nav-fwd").onclick = () => history.forward();
 
@@ -868,13 +795,13 @@ details.more[open] > summary { margin-bottom: 10px; }
   systemDark.addEventListener("change", showTheme);
   showTheme();
 
-  const TAB_OF = { home: "home", work: "home", route: "route", station: "route", part: "route", plan: "plan", records: "records", sample: "lab", weather: "lab", model: "ai" };
+  const TAB_OF = { home: "home", work: "home", route: "route", station: "route", part: "route", plan: "plan", records: "records", model: "ai" };
   // 화면을 빨리 바꾸면 먼저 시작한 느린 화면이 나중에 끝나 새 화면을 덮었다. 가장 최근 것만 그린다
   let renderSeq = 0;
   async function render() {
     const my = ++renderSeq;
     const tab = TAB_OF[view.name];
-    ["home", "route", "plan", "records", "ai", "lab"].forEach(t => document.getElementById("tab-" + t).setAttribute("aria-selected", String(t === tab)));
+    ["home", "route", "plan", "records", "ai"].forEach(t => document.getElementById("tab-" + t).setAttribute("aria-selected", String(t === tab)));
     tipEl.hidden = true;
     // 같은 화면을 다시 그릴 때(keep: 방향 바꾸기·거르기·쪽 넘기기 등)는 "불러오는 중…"으로 비우지 않고, 다 그린 뒤
     // 스크롤 위치(창·역 목록·문 줄 가로 스크롤)를 되돌린다 — 비웠다 채우면 화면이 위아래로 튀었다(2026-11-02)
@@ -892,7 +819,7 @@ details.more[open] > summary { margin-bottom: 10px; }
         view = { name: "station", st: pp.part.station_id, ...(pp.part.door_id ? { door: pp.part.door_id } : {}), open: view.partId };
         history.replaceState(null, "", encodeView(view));
       }
-      const html = await ({ home: vHome, work: vWork, route: vRoute, records: vRecords, sample: vSample, model: vModel, station: vStation, plan: vPlan, weather: vWeather }[view.name])();
+      const html = await ({ home: vHome, work: vWork, route: vRoute, records: vRecords, model: vModel, station: vStation, plan: vPlan }[view.name])();
       if (my !== renderSeq) return;
       app.innerHTML = html;
       bind();
@@ -958,9 +885,6 @@ details.more[open] > summary { margin-bottom: 10px; }
       app.querySelector("#route-empty").hidden = shown > 0;
       app.querySelector("#route-empty-q").textContent = q;
     });
-    const tt = app.querySelector("#tbltoggle");
-    if (tt) tt.addEventListener("click", () => { const t = app.querySelector("#numtbl"); t.hidden = !t.hidden; tt.textContent = t.hidden ? "숫자 표로 보기" : "숫자 표 닫기"; });
-    if (app.querySelector("#sim")) setupSim();
     const pl = app.querySelector("#plan");
     if (pl) setupPlan(pl);
     const hw = app.querySelector("#home-work");
@@ -980,19 +904,6 @@ details.more[open] > summary { margin-bottom: 10px; }
     });
     const rfClear = app.querySelector("#rf-clear");
     if (rfClear) rfClear.addEventListener("click", () => go({ name: "records", keep: true }));
-    const spRun = app.querySelector("#sp-run");
-    if (spRun) spRun.addEventListener("click", async () => {
-      spRun.disabled = true; spRun.textContent = "계산하는 중...";
-      try {
-        const r = await apiPost("/api/sample-records/preview", {});
-        const box = app.querySelector("#sp-result");
-        box.innerHTML = resultPanel({ kind: "preview", ...r });
-        box.querySelectorAll("[data-go]").forEach(el => el.addEventListener("click", () => go(JSON.parse(el.dataset.go))));
-        box.scrollIntoView({ behavior: "smooth", block: "start" });
-        spRun.textContent = "다시 계산";
-      } catch (ex) { toast(ex.message); spRun.textContent = "올리면 어떻게 바뀌나 보기"; }
-      spRun.disabled = false;
-    });
     const aiSt = app.querySelector("#ai-st"), aiPart = app.querySelector("#ai-part");
     if (aiSt) aiSt.addEventListener("change", () => go({ ...view, ast: Number(aiSt.value) || undefined, keep: true }));
     if (aiPart) aiPart.addEventListener("change", () => go({ ...view, apart: aiPart.value || undefined, keep: true }));
@@ -1307,18 +1218,17 @@ details.more[open] > summary { margin-bottom: 10px; }
         </dl>
         <div class="stchg">${st}</div>
         ${notes}
-        ${kind === "preview" || kind === "compare" ? "" : `<button class="linkbtn" ${goAttr({ name: "station", st: c.station_id })}>${esc(c.station_name)}역 문별 상태 보기 ›</button>`}
+        ${kind === "compare" ? "" : `<button class="linkbtn" ${goAttr({ name: "station", st: c.station_id })}>${esc(c.station_name)}역 문별 상태 보기 ›</button>`}
       </div>`;
   }
-  // 미리보기(정비기록 시연)·비교(반영 전)는 저장하지 않아 역 화면으로 가면 올리기 전 상태가 보인다 — 그래서 카드에 역 링크를 두지 않는다
+  // 비교(반영 전)는 저장하지 않아 역 화면으로 가면 올리기 전 상태가 보인다 — 그래서 카드에 역 링크를 두지 않는다
   const STATUS_KEYS = ["빨강", "노랑", "확인_필요", "초록"];
   const statusMoved = c => STATUS_KEYS.some(s => c.before.counts[s] !== c.after.counts[s]);
   function resultPanel(r) {
-    // 미리보기·비교는 위험·주의·안전이 실제로 바뀐 곳을 먼저 보여 준다(주기만 몇 달 바뀐 곳은 그 뒤, 같은 묶음 안에선 주기 변화 큰 순)
-    const ahead = r.kind === "preview" || r.kind === "compare";
+    // 비교는 위험·주의·안전이 실제로 바뀐 곳을 먼저 보여 준다(주기만 몇 달 바뀐 곳은 그 뒤, 같은 묶음 안에선 주기 변화 큰 순)
+    const ahead = r.kind === "compare";
     const changes = ahead ? [...r.changes.filter(statusMoved), ...r.changes.filter(c => !statusMoved(c))] : r.changes;
     const shown = changes.slice(0, 6), rest = changes.slice(6);
-    const sub = `<p class="small muted">${r.checked ? `교체 ${r.replaced.toLocaleString()}건 · 점검(이상 없음) ${r.checked.toLocaleString()}건 · ` : ""}${esc(r.file || "")}</p>`;
     let summary = "";
     if (ahead) {
       const sum = side => Object.fromEntries(STATUS_KEYS.map(s => [s, r.changes.reduce((n, c) => n + c[side].counts[s], 0)]));
@@ -1326,8 +1236,7 @@ details.more[open] > summary { margin-bottom: 10px; }
       summary = `<div class="stchg"><span><b>상태가 바뀐 곳 ${moved}곳</b></span>${STATUS_KEYS.filter(s => b[s] !== a[s]).map(s => `<span>${pill(s)} ${b[s].toLocaleString()} → <b>${a[s].toLocaleString()}</b></span>`).join("")}</div>`;
     }
     const head = r.kind === "upload" ? `<h2>반영했습니다: ${diffText(r)}</h2><p class="small muted">${esc(r.file)} · 교체주기와 예정일을 다시 계산했습니다</p>`
-      : r.kind === "compare" ? `<h2>반영하면 ${r.changes.length}곳의 교체주기가 이렇게 바뀝니다</h2>${summary}`
-      : `<h2>${r.inserted.toLocaleString()}건을 올리면 ${r.changes.length}곳의 교체주기가 이렇게 바뀝니다</h2>${sub}${summary}`;
+      : `<h2>반영하면 ${r.changes.length}곳의 교체주기가 이렇게 바뀝니다</h2>${summary}`;
     const restRows = rest.map(c => `<tr><td>${esc(c.station_name)}</td><td>${esc(c.part_name)}</td><td class="num">${yr(c.before.years)} → <b>${yr(c.after.years)}</b></td><td class="num">${dotDate(c.before.next_due)} → ${dotDate(c.after.next_due)}</td></tr>`).join("");
     return `<div class="panel result" id="result">
         <div class="resulthead"><div>${head}</div>${ahead ? "" : `<div class="filters">${r.kind === "upload" && r.batch_id ? `<button class="btn ghost" data-undo="${r.batch_id}" type="button">이 업로드 되돌리기</button>` : ""}<button class="linkbtn" id="res-close" type="button">닫기</button></div>`}</div>
@@ -1335,26 +1244,6 @@ details.more[open] > summary { margin-bottom: 10px; }
         ${rest.length ? `<details class="more"><summary>나머지 ${rest.length}곳 보기</summary><div class="scroll"><table><tr><th>역</th><th>부품</th><th>교체주기</th><th>가장 빠른 교체</th></tr>${restRows}</table></div></details>` : ""}
       </div>`;
   }
-  // ---------- 정비기록 시연: 샘플 엑셀(입력)을 올리면 결과가 어떻게 바뀌는지. 미리보기라 저장하지 않는다 ----------
-  async function vSample() {
-    const s = await api("/api/sample-records");
-    const n = {};
-    s.rows.forEach(r => { n[r.reason] = (n[r.reason] || 0) + 1; });
-    const stations = new Set(s.rows.map(r => r.station_name)).size;
-    const rows = s.rows.map(r => `<tr><td>${dotDate(r.replaced_on)}</td><td>${esc(r.station_name)}</td><td>${r.side_label ? `${esc(r.side_label)} ${esc(r.door_no)}` : "종합제어반"}</td><td>${esc(r.parts)}${r.sub_parts ? `<div class="small muted">${esc(r.sub_parts)}</div>` : ""}</td><td>${esc(r.reason)}</td><td>${r.action === "없음" ? "" : esc(r.action)}${r.symptom || r.cause ? `<div class="small muted">${[r.symptom, r.cause].filter(Boolean).map(esc).join(" · ")}</div>` : ""}</td><td>${esc(r.created_by || "")}</td></tr>`).join("");
-    return `<section class="view">
-      ${labNav("sample")}
-      <div class="panel">
-        <h2>입력: 정비기록 샘플</h2>
-        <p class="small muted">${esc(s.file)} · ${s.rows.length.toLocaleString()}건 · ${stations}개 역 · ${Object.entries(n).map(([k, v]) => `${k} ${v}건`).join(" · ")}</p>
-        <details class="more"><summary>기록 ${s.rows.length.toLocaleString()}건 보기</summary><div class="scroll"><table><tr><th>날짜</th><th>역</th><th>위치</th><th>부품</th><th>사유</th><th>조치</th><th>입력자</th></tr>${rows}</table></div></details>
-        <p class="small muted">미리보기라 DB에는 저장하지 않습니다. 실제로 올리려면 교체 기록 탭을 쓰세요.</p>
-        <button class="btn" id="sp-run" type="button">올리면 어떻게 바뀌나 보기</button>
-      </div>
-      <div id="sp-result"></div>
-    </section>`;
-  }
-
   // ---------- AI 모델: 고장 위험도 모델의 버전·검증·재학습(psd/risk.py, 2026-11-16) ----------
   const MODEL_STATUS = { active: ["사용 중", "s-green"], rejected: ["보류", "s-amber"], retired: ["이전", "s-check"] };
   const TRIGGER = { upload: "기록 업로드", undo: "업로드 되돌리기", manual: "직접 다시 학습", script: "스크립트" };
@@ -1921,7 +1810,6 @@ details.more[open] > summary { margin-bottom: 10px; }
           <tr><td>평균 일교차</td><td class="num">${wb.station_climate.DT.toFixed(1)}°C</td><td class="num">${wb.reference_climate.DT.toFixed(1)}°C</td></tr></table></div>
         <details class="more"><summary>원인별 열화 속도와 비중</summary><div class="scroll"><table><tr><th>고장 원인</th><th>날씨 변수</th><th>열화 속도(평균 대비)</th><th>비중 기본값(범위)</th></tr>
           ${wb.causes.map(r => `<tr><td>${r.name}</td><td>${r.variable}</td><td class="num">${r.af.toFixed(2)}배</td><td class="num">${r.weight_default}</td></tr>`).join("")}</table></div></details>
-        <button class="linkbtn" ${goAttr({ name: "weather", simSt: part.station_id })}>이 역 날씨를 바꿔 보기 ›</button>
         <ol class="src">${src.map(x => `<li><a href="${x[1]}" target="_blank" rel="noopener">${x[0]}</a></li>`).join("")}</ol>`;
     }
     // 예정일 = 마지막 전체 교체일 + 교체주기(점검·일부 교체·수리는 안 셈), 교체 기록이 없으면 PSD 설치일부터 센다.
@@ -1977,176 +1865,6 @@ details.more[open] > summary { margin-bottom: 10px; }
       </div>`;
   }
 
-  // ---------- 날씨 영향 ----------
-  const WPARTS = ["DCM", "IFM", "MOTOR"];
-  function niceTicks(lo, hi, n) {
-    const span = hi - lo, mag = Math.pow(10, Math.floor(Math.log10(span / n)));
-    const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => span / x <= n) || mag * 10;
-    const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6));
-    return out;
-  }
-  function dotCell(v, lo, hi, ref, tipT, tipR, label) {
-    const W = 120, H = 22, x = t => (6 + (t - lo) / (hi - lo) * (W - 12)).toFixed(1);
-    return `<svg class="mk" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" tabindex="0" role="img" aria-label="${esc(label)}" ${tipAttr(tipT, tipR)}><line class="axisl" x1="0" x2="${W}" y1="11" y2="11"/><line class="refl" x1="${x(ref)}" x2="${x(ref)}" y1="3" y2="19"/><circle class="dot" cx="${x(v)}" cy="11" r="4.5"/></svg>`;
-  }
-  function rangeCell(c, lo, hi, tipT, tipR, label) {
-    const W = 120, H = 22, x = t => 6 + (t - lo) / (hi - lo) * (W - 12);
-    return `<svg class="mk" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" tabindex="0" role="img" aria-label="${esc(label)}" ${tipAttr(tipT, tipR)}><line class="axisl" x1="0" x2="${W}" y1="11" y2="11"/><rect class="band" x="${x(c.lo).toFixed(1)}" y="8" width="${Math.max(2, x(c.hi) - x(c.lo)).toFixed(1)}" height="6" rx="3"/><line class="refl" x1="${x(10).toFixed(1)}" x2="${x(10).toFixed(1)}" y1="3" y2="19"/><circle class="dot" cx="${x(c.base).toFixed(1)}" cy="11" r="4.5"/></svg>`;
-  }
-  function cc(cyc) { return { base: cyc.base_years, lo: cyc.lo_years, hi: cyc.hi_years, j: cyc.judgment }; }
-  function scatter(title, stations, key, xLabel, code, fmtX) {
-    const W = 440, H = 280, m = { l: 44, r: 16, t: 26, b: 44 };
-    const pts = stations.map(s => ({ s, x: s.weather[key], c: cc(s.cycles[code]) }));
-    const xs = pts.map(p => p.x), pad = (Math.max(...xs) - Math.min(...xs)) * 0.08 || 1;
-    const xlo = Math.min(...xs) - pad, xhi = Math.max(...xs) + pad;
-    const ylo = Math.min(9.5, Math.floor(Math.min(...pts.map(p => p.c.lo)) * 2) / 2), yhi = Math.max(10.5, Math.ceil(Math.max(...pts.map(p => p.c.hi)) * 2) / 2);
-    const X = v => m.l + (v - xlo) / (xhi - xlo) * (W - m.l - m.r), Y = v => H - m.b - (v - ylo) / (yhi - ylo) * (H - m.t - m.b);
-    const f = v => v.toFixed(1);
-    const minP = pts.reduce((a, b) => b.c.base < a.c.base ? b : a), maxP = pts.reduce((a, b) => b.c.base > a.c.base ? b : a);
-    const lab = p => { const x = X(p.x), right = x > W / 2; return `<text class="lab" x="${f(right ? x - 9 : x + 9)}" y="${f(Y(p.c.base) - 7)}" text-anchor="${right ? "end" : "start"}">${esc(p.s.name)}</text>`; };
-    return `<figure><figcaption>${title}</figcaption>
-      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">
-        ${niceTicks(ylo, yhi, 5).map(v => `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${f(Y(v))}" y2="${f(Y(v))}"/><text x="${m.l - 6}" y="${f(Y(v) + 4)}" text-anchor="end">${v}</text>`).join("")}
-        ${niceTicks(xlo, xhi, 5).map(v => `<text x="${f(X(v))}" y="${H - m.b + 16}" text-anchor="middle">${v}</text>`).join("")}
-        <text x="${(m.l + W - m.r) / 2}" y="${H - 8}" text-anchor="middle">${xLabel}</text>
-        <text x="${m.l - 6}" y="14" text-anchor="end">년</text>
-        <line class="refl" x1="${m.l}" x2="${W - m.r}" y1="${f(Y(10))}" y2="${f(Y(10))}"/><text x="${W - m.r}" y="${f(Y(10) - 5)}" text-anchor="end">10년</text>
-        ${pts.map(p => `<line class="whisker" x1="${f(X(p.x))}" x2="${f(X(p.x))}" y1="${f(Y(p.c.lo))}" y2="${f(Y(p.c.hi))}"/>`).join("")}
-        ${pts.map(p => `<circle class="dot" cx="${f(X(p.x))}" cy="${f(Y(p.c.base))}" r="4.5"/>`).join("")}
-        ${lab(minP)}${minP !== maxP ? lab(maxP) : ""}
-        ${pts.map(p => `<circle class="hit" cx="${f(X(p.x))}" cy="${f(Y(p.c.base))}" r="12" tabindex="0" ${tipAttr(p.s.name, [[xLabel, fmtX(p.x)], ["기본 비중 주기", yr(p.c.base)], ["범위", f(p.c.lo) + "–" + f(p.c.hi) + "년"], ["판정", JUDGE[p.c.j][0]]])}/>`).join("")}
-      </svg></figure>`;
-  }
-  function labNav(cur) {
-    return `<div class="labnav"><button class="linkbtn" ${goAttr({ name: "home" })}>‹ 관리 화면으로</button><div class="dirtabs" role="group" aria-label="분석 화면">${[["weather", "날씨 영향"], ["sample", "정비기록 시연"]].map(([k, l]) => `<button class="dirtab" aria-pressed="${k === cur}" ${goAttr({ name: k })}>${l}</button>`).join("")}</div></div>`;
-  }
-  let weatherCache = null;
-  const SENS_VARS = [["rh", "습도", "+5%p"], ["temp", "기온", "+1°C"], ["dt", "일교차", "+1°C"]];
-  function deltaTag(dy) {
-    const m = Math.round(Math.abs(dy) * 12);
-    return m ? `${monthsText(dy)} ${dy < 0 ? "빨라짐" : "늦어짐"}` : "영향 없음";
-  }
-  // 노선을 따라 역마다 한 부품의 교체주기: 10년(제조사 권장)에서 아래로 내려온 막대 끝이 그 역의 주기.
-  // 바탕 띠는 같은 AWS 날씨 지점을 쓰는 역 묶음 — 같은 묶음은 날씨가 같아 주기도 같다
-  function routeChart(ST, code) {
-    const n = ST.length, CW = 40, L = 44, R = 14, T = 46, PH = 200, B = 44;
-    const W = L + n * CW + R, H = T + PH + B;
-    const vals = ST.map(s => s.cycles[code].base_years);
-    const ylo = Math.max(0, Math.floor(Math.min(...vals) - 0.5)), yhi = 10.5;
-    const Y = v => T + (yhi - v) / (yhi - ylo) * PH, X = i => L + i * CW + CW / 2, f = v => v.toFixed(1);
-    const groups = [];
-    ST.forEach((s, i) => { const g = groups[groups.length - 1]; if (g && g.obs === s.observatory) g.end = i; else groups.push({ obs: s.observatory, start: i, end: i, rh: s.weather.RH }); });
-    const bands = groups.map((g, k) => {
-      const x0 = L + g.start * CW, w = (g.end - g.start + 1) * CW, cx = x0 + w / 2;
-      return `<rect class="${k % 2 ? "bandb" : "banda"}" x="${x0}" y="${T - 40}" width="${w}" height="${PH + 40}"/><text class="grp" x="${cx}" y="${T - 26}" text-anchor="middle">${esc(g.obs)}</text><text x="${cx}" y="${T - 12}" text-anchor="middle">${g.rh.toFixed(1)}%</text>`;
-    }).join("");
-    const ticks = niceTicks(ylo, 10, 4).map(v => `<line class="grid" x1="${L}" x2="${W - R}" y1="${f(Y(v))}" y2="${f(Y(v))}"/><text x="${L - 6}" y="${f(Y(v) + 4)}" text-anchor="end">${v}년</text>`).join("");
-    const iMin = vals.indexOf(Math.min(...vals)), iMax = vals.indexOf(Math.max(...vals));
-    const marks = ST.map((s, i) => {
-      const v = vals[i], x = X(i);
-      const lab = i === iMin || i === iMax ? `<text class="v" x="${x}" y="${f(Y(v) + 18)}" text-anchor="middle">${yr(v)}</text>` : "";
-      return `<line class="stem" x1="${x}" x2="${x}" y1="${f(Y(10))}" y2="${f(Y(v))}"/><circle class="dot" cx="${x}" cy="${f(Y(v))}" r="5"/>${lab}<text class="nm" x="${x}" y="${T + PH + (i % 2 ? 32 : 16)}" text-anchor="middle">${esc(s.name)}</text>`;
-    }).join("");
-    const hits = ST.map((s, i) => `<rect class="hit" x="${L + i * CW}" y="${T - 40}" width="${CW}" height="${PH + 40 + B}" tabindex="0" aria-label="${esc(s.name + " " + PART[code].name + " " + yr(vals[i]))}" ${tipAttr(s.name + " · " + PART[code].name, [["교체주기", yr(vals[i])], ["권장 10년보다", monthsText(10 - vals[i]) + " 짧음"], ["습도", s.weather.RH.toFixed(1) + "%"], ["기온", s.weather.T.toFixed(1) + "°C"], ["일교차", s.weather.DT.toFixed(1) + "°C"], ["날씨 지점", "AWS " + s.observatory]])}/>`).join("");
-    return `<div class="scroll lolli"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc("역별 " + PART[code].name + " 교체주기")}">
-        ${bands}${ticks}
-        <line class="ten" x1="${L}" x2="${W - R}" y1="${f(Y(10))}" y2="${f(Y(10))}"/><text x="${W - R}" y="${f(Y(10) - 5)}" text-anchor="end">제조사 권장 10년</text>
-        ${marks}${hits}
-      </svg></div>`;
-  }
-  async function vWeather() {
-    const [data, sens] = await Promise.all([api("/api/weather-impact"), api("/api/weather-impact/sensitivity")]);
-    // 개통 전 역(북울산)은 PSD가 없어 교체주기를 말할 대상이 아니므로 뺀다
-    weatherCache = { ...data, stations: data.stations.filter(s => s.in_service) };
-    const ST = weatherCache.stations, REF = data.reference;
-    const code = WPARTS.includes(view.wpart) ? view.wpart : "IFM";
-
-    const maxAbs = Math.max(...WPARTS.flatMap(c => SENS_VARS.map(([k]) => Math.abs(sens.parts[c][k]))), 0.01);
-    const cards = SENS_VARS.map(([k, name, step]) => `<div class="card"><h3>${name} ${step}</h3>
-        ${WPARTS.map(c => { const d = sens.parts[c][k], zero = Math.round(Math.abs(d) * 12) === 0; return `<div class="srow ${zero ? "zero" : ""}"><span>${PART[c].name}</span><span class="strk"><span class="sb" style="width:${(Math.abs(d) / maxAbs * 100).toFixed(1)}%"></span></span><span class="sv">${deltaTag(d)}</span></div>`; }).join("")}
-      </div>`).join("");
-
-    const partSeg = `<div class="seg" role="group" aria-label="부품 고르기">${WPARTS.map(c => `<button class="segbtn" aria-pressed="${c === code}" ${goAttr({ ...view, wpart: c, keep: true })}>${PART[c].name}</button>`).join("")}</div>`;
-
-    const rh = ST.map(s => s.weather.RH), dt = ST.map(s => s.weather.DT);
-    const rhLo = Math.min(...rh) - 1, rhHi = Math.max(...rh) + 1, dtLo = Math.min(...dt) - 0.5, dtHi = Math.max(...dt) + 0.5;
-    const all = ST.flatMap(s => WPARTS.map(k => cc(s.cycles[k])));
-    const cyLo = Math.min(9.5, Math.floor(Math.min(...all.map(c => c.lo)) * 2) / 2), cyHi = Math.max(10.5, Math.ceil(Math.max(...all.map(c => c.hi)) * 2) / 2);
-    const rows = ST.map(s => `<tr><td class="nm">${s.name}</td>
-        <td>${dotCell(s.weather.RH, rhLo, rhHi, REF.RH, s.name, [["습도", s.weather.RH.toFixed(1) + "%"], ["24개 역 평균", REF.RH.toFixed(1) + "%"]], s.name + " 습도 " + s.weather.RH.toFixed(1) + "%")}</td>
-        <td>${dotCell(s.weather.DT, dtLo, dtHi, REF.DT, s.name, [["일교차", s.weather.DT.toFixed(1) + "°C"], ["24개 역 평균", REF.DT.toFixed(1) + "°C"]], s.name + " 일교차 " + s.weather.DT.toFixed(1) + "°C")}</td>
-        ${WPARTS.map(k => { const c = cc(s.cycles[k]); return `<td>${rangeCell(c, cyLo, cyHi, s.name + " · " + PART[k].name, [["기본 비중", yr(c.base)], ["범위", c.lo.toFixed(1) + "–" + c.hi.toFixed(1) + "년"], ["판정", JUDGE[c.j][0]]], s.name + " " + PART[k].name + " " + yr(c.base))}</td>`; }).join("")}</tr>`).join("");
-    const numRows = ST.map(s => `<tr><td>${s.name}</td><td class="num">${s.weather.T.toFixed(1)}</td><td class="num">${s.weather.RH.toFixed(1)}</td><td class="num">${s.weather.DT.toFixed(1)}</td>${WPARTS.map(k => { const c = cc(s.cycles[k]); return `<td class="num">${c.base.toFixed(1)} (${c.lo.toFixed(1)}–${c.hi.toFixed(1)})</td>`; }).join("")}</tr>`).join("");
-
-    return `<section class="view">
-      ${labNav("weather")}
-      <p class="small muted">이 화면의 교체주기는 날씨 공식만으로 낸 값입니다(교체 기록 반영 전). 실제 예정일은 교체 기록을 반영한 주기로 계산하므로 역·부품 화면의 값과 다를 수 있습니다.</p>
-      <div class="panel">
-        <h2>날씨가 한 칸 바뀌면 교체가 얼마나 빨라지나</h2>
-        <div class="sens">${cards}</div>
-      </div>
-      <div class="panel">
-        <div class="headrow"><h2>노선을 따라 본 교체주기 <span class="small muted">날씨 공식 기준</span></h2>${partSeg}</div>
-        ${routeChart(ST, code)}
-      </div>
-      ${simPanel(view.simSt ?? ST[0].id)}
-      <div class="panel">
-        <details class="more"><summary>자세한 표와 그래프(원인 비중 범위 포함)</summary>
-          <div class="scroll"><table class="rowchart">
-            <tr><th>역</th><th>습도<span class="cap">${rhLo.toFixed(0)}–${rhHi.toFixed(0)}%</span></th><th>일교차<span class="cap">${dtLo.toFixed(1)}–${dtHi.toFixed(1)}°C</span></th>${WPARTS.map(k => `<th>${PART[k].name} 주기<span class="cap">${cyLo}–${cyHi}년</span></th>`).join("")}</tr>
-            ${rows}
-          </table></div>
-          <button class="linkbtn" id="tbltoggle">숫자 표로 보기</button>
-          <div class="scroll" id="numtbl" hidden><table><tr><th>역</th><th>기온 °C</th><th>습도 %</th><th>일교차 °C</th>${WPARTS.map(k => `<th>${PART[k].name} 주기(년)</th>`).join("")}</tr>${numRows}</table></div>
-          <div class="charts2" style="margin-top:14px">
-            ${scatter("습도와 IFM 릴레이 주기", ST, "RH", "평균 습도(%)", "IFM", v => v.toFixed(1) + "%")}
-            ${scatter("일교차와 DCM 주기", ST, "DT", "평균 일교차(°C)", "DCM", v => v.toFixed(1) + "°C")}
-          </div>
-        </details>
-      </div>
-    </section>`;
-  }
-  function simPanel(stId) {
-    return `<div class="panel" id="sim">
-      <h2>이 역 날씨가 바뀌면</h2>
-      <div class="filters"><select id="sim-st" aria-label="역">${weatherCache.stations.map(x => `<option value="${x.id}" ${x.id === stId ? "selected" : ""}>${x.id}. ${x.name}</option>`).join("")}</select></div>
-      <div class="sliders">
-        <div class="field"><label for="sim-rh">습도 변화 <b class="num" id="sim-rh-v">0%p</b></label><input type="range" id="sim-rh" min="-10" max="10" step="1" value="0"><span class="ends"><span>← 더 건조한 날씨</span><span>더 눅눅한 날씨 →</span></span></div>
-        <div class="field"><label for="sim-dt">일교차 변화 <b class="num" id="sim-dt-v">0.0°C</b></label><input type="range" id="sim-dt" min="-3" max="3" step="0.5" value="0"><span class="ends"><span>← 낮밤 기온 차 작음</span><span>낮밤 기온 차 큼 →</span></span></div>
-        <div class="field"><label for="sim-t">기온 변화 <b class="num" id="sim-t-v">0.0°C</b></label><input type="range" id="sim-t" min="-2" max="2" step="0.5" value="0"><span class="ends"><span>← 더 서늘한 날씨</span><span>더 더운 날씨 →</span></span></div>
-      </div>
-      <div id="sim-out"><p class="muted small">계산 중…</p></div>
-    </div>`;
-  }
-  function setupSim() {
-    const g = id => app.querySelector("#" + id);
-    const sign = (v, d) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(d);
-    let timer = null, seq = 0;
-    const upd = () => {
-      clearTimeout(timer);
-      const dRH = Number(g("sim-rh").value), dDT = Number(g("sim-dt").value), dT = Number(g("sim-t").value);
-      g("sim-rh-v").textContent = sign(dRH, 0) + "%p";
-      g("sim-dt-v").textContent = sign(dDT, 1) + "°C";
-      g("sim-t-v").textContent = sign(dT, 1) + "°C";
-      timer = setTimeout(async () => {
-        const my = ++seq;
-        const s = weatherCache.stations.find(x => x.id === Number(g("sim-st").value));
-        const sim = await api(`/api/weather-impact/simulate?station_id=${s.id}&d_temp=${dT}&d_rh=${dRH}&d_dt=${dDT}`);
-        if (my !== seq || !g("sim-out")) return;  // 슬라이더를 빨리 움직이면 늦게 온 옛 응답이 새 결과를 덮지 않게
-        const cards = WPARTS.map(k => {
-          const a = sim.baseline[k].base_years, b = sim.cycles[k].base_years, d = b - a;
-          return `<div class="card"><div class="headrow"><h3>${PART[k].name}</h3><span class="tag">${Math.round(Math.abs(d) * 12) ? "교체 " + deltaTag(d) : "변화 없음"}</span></div>
-            ${cmpSvg([["지금 날씨", a, "b0"], ["바꾼 날씨", b, "b1"]], [[10, "권장 10년"]], `${s.name} ${PART[k].name} 지금 날씨와 바꾼 날씨 비교`)}</div>`;
-        }).join("");
-        const t = s.weather.T + dT, rh = Math.min(100, s.weather.RH + dRH), dt = Math.max(0.5, s.weather.DT + dDT);
-        g("sim-out").innerHTML = `<div class="simgrid">${cards}</div>
-          <p class="small muted">바꾼 날씨: 기온 ${t.toFixed(1)}°C · 습도 ${rh.toFixed(0)}% · 일교차 ${dt.toFixed(1)}°C</p>`;
-      }, 150);
-    };
-    ["sim-st", "sim-rh", "sim-dt", "sim-t"].forEach(id => g(id).addEventListener("input", upd));
-    upd();
-  }
-
   // ---------- 교체 계획: 기간마다 교체 예정 부품 수(자재 발주·작업 배분, 몰리는 때 앞당겨 나눌 역 고르기) ----------
   const PLAN_SPANS = ["12m", "3y", "5y"];
   const SPAN_LABEL = { "12m": ["12개월", "월별"], "3y": ["3년", "분기별"], "5y": ["5년", "연도별"] };
@@ -2194,23 +1912,24 @@ details.more[open] > summary { margin-bottom: 10px; }
     const main = peak.total ? PART_TYPES.reduce((a, p) => ((peak.counts[p.code] || 0) > (peak.counts[a.code] || 0) ? p : a), PART_TYPES[0]) : null;
 
     const seg = `<div class="seg" role="group" aria-label="기간">${PLAN_SPANS.map(k => `<button type="button" class="segbtn" aria-pressed="${k === span}" ${goAttr({ name: "plan", span: k, keep: true })}>${SPAN_LABEL[k][0]}</button>`).join("")}</div>`;
-    const cards = `<section class="scards">
-        <div class="scard"><span class="lab">${SPAN_NOW[plan.unit]} + 앞으로 ${spanName}</span><span class="big">${total.toLocaleString()}<small>부품</small></span><span class="sub">${esc(B[0].label)} ~ ${esc(B[B.length - 1].label)} · 교체 후 다음 주기까지 포함</span></div>
+    // 확인 필요가 0이면 카드를 빼고 두 장만 보인다
+    const cards = `<section class="scards ${plan.check.total ? "" : "two"}">
+        <div class="scard"><span class="lab">${SPAN_NOW[plan.unit]} + 앞으로 ${spanName}</span><span class="big">${total.toLocaleString()}<small>부품</small></span><span class="sub">${esc(B[0].label)} ~ ${esc(B[B.length - 1].label)}</span></div>
         <div class="scard"><span class="lab">가장 몰리는 때</span><span class="big">${peak.total ? esc(peak.label) : "없음"}${peak.total ? `<small>${peak.total.toLocaleString()}개 · ${Math.round(peak.total / total * 100)}%</small>` : ""}</span><span class="sub">${main ? `그중 ${esc(main.name)} ${peak.counts[main.code].toLocaleString()}개` : "이 기간엔 교체 예정이 없습니다."}</span></div>
-        <div class="scard ${zeroCls(plan.check.total)}"><span class="lab">${pill("확인_필요")}</span><span class="big">${plan.check.total.toLocaleString()}<small>부품</small></span><span class="sub">기록 없이 예정일이 지나 계획에서 뺐습니다. 교체 여부부터 확인하세요.</span></div>
+        ${plan.check.total ? `<div class="scard"><span class="lab">${pill("확인_필요")}</span><span class="big">${plan.check.total.toLocaleString()}<small>부품</small></span><span class="sub">기록 없이 예정일이 지나 계획에서 뺐습니다. 교체 여부부터 확인하세요.</span></div>` : ""}
       </section>`;
     const pk = i => (i === pi ? "pk" : "");
     const rf = plan.recent_failures;
     const table =`<div class="scroll"><table class="vol">
         <tr><th>부품</th>${B.map((b, i) => `<th class="${pk(i)}">${axisLabel(b, i, plan.unit).filter(Boolean).reverse().join(" ")}</th>`).join("")}<th>합계</th><th class="muted" title="예정 교체에는 없는 돌발 고장 — 예비품 수량 참고">지난 1년 고장</th></tr>
-        ${PART_TYPES.map(p => `<tr><td>${esc(p.name)}</td>${B.map((b, i) => `<td class="n ${pk(i)}">${b.counts[p.code] || ""}</td>`).join("")}<td class="n"><b>${B.reduce((a, b) => a + b.counts[p.code], 0).toLocaleString()}</b></td><td class="n muted">${rf[p.code] || "–"}</td></tr>`).join("")}
+        ${PART_TYPES.map(p => `<tr${B.some(b => b.counts[p.code]) ? "" : ' class="muted"'}><td>${esc(p.name)}</td>${B.map((b, i) => `<td class="n ${pk(i)}">${b.counts[p.code] || ""}</td>`).join("")}<td class="n">${(n => n ? `<b>${n.toLocaleString()}</b>` : "–")(B.reduce((a, b) => a + b.counts[p.code], 0))}</td><td class="n muted">${rf[p.code] || "–"}</td></tr>`).join("")}
         <tr><td><b>합계</b></td>${B.map((b, i) => `<td class="n ${pk(i)}"><b>${b.total || ""}</b></td>`).join("")}<td class="n"><b>${total.toLocaleString()}</b></td><td class="n muted">${Object.values(rf).reduce((a, n) => a + n, 0) || "–"}</td></tr>
         ${B[0].total_lo !== undefined ? `<tr class="muted"><td class="small" title="교체주기 80% 범위의 양 끝(빠르게·늦게)으로 세면 이 사이">범위</td>${B.map(b => `<td class="n small">${b.total_lo === b.total_hi ? "" : `${b.total_lo}~${b.total_hi}`}</td>`).join("")}<td class="n small">${B.reduce((a, b) => a + b.total_lo, 0).toLocaleString()}~${B.reduce((a, b) => a + b.total_hi, 0).toLocaleString()}</td><td></td></tr>` : ""}
       </table></div>`;
     const sbars = B.map((b, i) => {
       const mx = Math.max(...b.stations.map(s => s.count), 1);
       return `<div class="sbars" data-pb="${i}" hidden>
-          <div class="headrow"><h3>${esc(b.label)} 역별 물량</h3><span class="small muted">앞당겨 나눌 역을 고를 때 참고 · 다른 기간은 위 막대를 누르세요</span></div>
+          <div class="headrow"><h3>${esc(b.label)} 역별 물량</h3><span class="small muted">다른 기간은 위 막대를 누르세요</span></div>
           ${b.stations.length ? b.stations.map(s => {
             // 그 역에 챙겨 갈 부품: 막대 밑에 부품별 개수를 적는다(역 합계만으론 무엇을 가져갈지 몰랐다)
             const kinds = PART_TYPES.filter(p => s.parts[p.code]).map(p => `${p.name} ${s.parts[p.code]}`).join(" · ");
@@ -2219,15 +1938,14 @@ details.more[open] > summary { margin-bottom: 10px; }
         </div>`;
     }).join("");
     return `<section class="view" id="plan" data-peak="${Math.max(pi, 0)}">
-      <div class="headrow"><div><h2>교체 계획</h2><p class="small muted">기간마다 교체 예정일이 오는 부품 수입니다(교체 후 다음 주기 예정까지 포함). 자재 발주와 작업 배분에 씁니다.</p></div>${seg}</div>
+      <div class="headrow"><div><h2>교체 계획</h2><p class="small muted">기간마다 교체할 부품 수 · 자재 발주와 작업 배분용</p></div>${seg}</div>
       ${cards}
       <div class="panel">
-        <div class="headrow"><h3>${unitName} 교체 물량</h3><span class="small muted">막대 위 숫자 = 부품 수${pi >= 0 ? " · 가장 몰리는 때는 주황" : ""}</span></div>
+        <div class="headrow"><h3>${unitName} 교체 물량</h3><span class="small muted">막대를 누르면 아래에 역별 물량</span></div>
         ${planChart(B, plan.unit, pi)}
       </div>
-      <div class="panel"><div class="headrow"><h3>부품별</h3><a class="btn ghost" href="/api/replacement-plan/export?span=${span}" download style="text-decoration:none">엑셀로 받기</a></div>${table}
-        <p class="small"><b>이 표는 예정일이 오는 교체만 셉니다.</b> 돌발 고장은 언제 날지 몰라 빠져 있으니, 예비품은 오른쪽 "지난 1년 고장"(고장으로 바꾼 개수)을 참고해 따로 잡으세요.</p>
-        <p class="small muted">엑셀에는 부품별·역별·역 x 부품(기간·역·부품·수량 한 줄씩) 시트가 들어 있습니다. 발주서에 옮길 때 쓰세요.</p></div>
+      <div class="panel"><div class="headrow"><h3>부품별</h3><a class="btn ghost" href="/api/replacement-plan/export?span=${span}" download style="text-decoration:none" title="부품별·역별·역 x 부품 시트가 들어 있습니다">엑셀로 받기</a></div>${table}
+        <p class="small muted">돌발 고장은 빠져 있습니다. 예비품은 "지난 1년 고장"을 참고해 따로 잡으세요.</p></div>
       <div class="panel">${sbars}</div>
     </section>`;
   }

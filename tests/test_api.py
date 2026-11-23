@@ -115,14 +115,6 @@ def test_station_list_has_part_summary_only_for_stations_in_service():
 # ---------- 2026-11-02: 교체 계획(기간별 물량)·기준일·계산 방법 ----------
 
 
-def test_replacement_plan_3y_matches_the_home_quarter_chart():
-    plan = client.get("/api/replacement-plan?span=3y").json()
-    vol = client.get("/api/replacement-volume?years_ahead=3").json()
-    assert [b["label"] for b in plan["buckets"]] == [q["label"] for q in vol["quarters"]]
-    assert [b["total"] for b in plan["buckets"]] == [q["total"] for q in vol["quarters"]]
-    assert plan["check"] == vol["check"]
-
-
 def test_replacement_plan_station_counts_add_up_per_period():
     for span, n in [("12m", 13), ("3y", 13), ("5y", 6)]:
         plan = client.get(f"/api/replacement-plan?span={span}").json()
@@ -353,18 +345,6 @@ def test_compare_rejects_date_before_psd_start():
     r = client.post("/api/replacement-records/compare", files={"file": ("t.xlsx", content, XLSX)})
     assert r.status_code == 400
     assert "PSD 사용개시일" in str(r.json()["detail"])
-
-
-def test_simulate_rejects_non_finite_change():
-    assert client.get("/api/weather-impact/simulate?station_id=1&d_temp=nan").status_code == 400
-
-
-def test_sample_preview_has_no_records_missing_from_the_excel():
-    """정비기록 시연 샘플엔 그 역·기간의 기존 기록도 들어 있어, 올려도 "엑셀에 없는 기록"이 없어야 한다
-    (빠져 있으면 시연 때 기존 기록 수백 건이 지울 후보로 뜬다 — 2026-11-02)."""
-    r = client.post("/api/sample-records/preview").json()
-    assert r["counts"]["missing"] == 0 and not r["missing_warn"]
-    assert r["counts"]["new"] + r["counts"]["same"] == len(client.get("/api/sample-records").json()["rows"])
 
 
 def test_template_has_empty_record_sheet_and_separate_examples():

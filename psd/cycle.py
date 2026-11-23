@@ -48,7 +48,6 @@ class Station:
     order: int
     name: str
     open_date: date  # 철도(동해선) 개통일 — 역사적 사실, 김민수 제공(2026-10-14)
-    obs: str  # "부산" 또는 "울산" (ASOS 관측소, DB에서 역 → 관측소 연결(stations.observatory_id)용으로만 남음. 날씨 계산은 aws_stn)
     near_water: bool = False  # 역 근처 바다·하천 인접 여부 (2026-10-24 미팅 답변 Q5 근거, 아래 주석 참고)
     psd_install_date: date | None = None  # 스크린도어(PSD) 실제 사용개시일. None이면 open_date로 대신한다
     # (아래 psd_install_date 주석 참고) — 2026-10-24 미팅 답변 Q3 근거, open_date와 다를 수 있음.
@@ -79,30 +78,30 @@ _PSD_2 = date(2022, 1, 1)  # PSD 사용개시 추정(2022년, 월일 미상→�
 # 코레일에 역 이름 목록을 추가로 확인해야 하는 항목, 설계_v2.md 할 일 참고). 북울산(24번)은 아직
 # 개통 전(open_date 자체가 미정 추정값)이라 제외 — PSD가 역보다 먼저 쓰였을 수는 없다.
 STATIONS: list[Station] = [
-    Station(1, "부전", _D1, "부산", near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(2, "거제해맞이", _D1, "부산", near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(3, "거제", _D1, "부산", near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(4, "교대", _D1, "부산", near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(5, "동래", _D1, "부산", near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(6, "안락", _D1, "부산", near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(7, "부산원동", _D2, "부산", near_water=False, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(8, "재송", _D1, "부산", near_water=False, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(9, "센텀", _D1, "부산", near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(10, "벡스코", _D1, "부산", near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(11, "신해운대", _D1, "부산", near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(12, "송정", _D1, "부산", near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(13, "오시리아", _D1, "부산", near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
-    Station(14, "기장", _D1, "부산", near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
-    Station(15, "일광", _D1, "부산", near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
-    Station(16, "좌천", _D3, "부산", near_water=False, psd_install_date=_PSD_2, aws_stn="923"),
-    Station(17, "월내", _D3, "부산", near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
-    Station(18, "서생", _D3, "울산", near_water=True, psd_install_date=_PSD_2, aws_stn="924"),
-    Station(19, "남창", _D3, "울산", near_water=False, psd_install_date=_PSD_2, aws_stn="954"),
-    Station(20, "망양", _D3, "울산", near_water=False, psd_install_date=_PSD_2, aws_stn="954"),
-    Station(21, "덕하", _D3, "울산", near_water=False, psd_install_date=_PSD_2, aws_stn="954"),
-    Station(22, "개운포", _D3, "울산", near_water=True, psd_install_date=_PSD_2, aws_stn="898"),
-    Station(23, "태화강", _D3, "울산", near_water=True, psd_install_date=_PSD_2, aws_stn="898"),
-    Station(24, "북울산", _D4, "울산", near_water=False, aws_stn="943", in_service=False),
+    Station(1, "부전", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
+    Station(2, "거제해맞이", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
+    Station(3, "거제", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
+    Station(4, "교대", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
+    Station(5, "동래", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
+    Station(6, "안락", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
+    Station(7, "부산원동", _D2, near_water=False, psd_install_date=_PSD_2, aws_stn="937"),
+    Station(8, "재송", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="937"),
+    Station(9, "센텀", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
+    Station(10, "벡스코", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
+    Station(11, "신해운대", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
+    Station(12, "송정", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
+    Station(13, "오시리아", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
+    Station(14, "기장", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
+    Station(15, "일광", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
+    Station(16, "좌천", _D3, near_water=False, psd_install_date=_PSD_2, aws_stn="923"),
+    Station(17, "월내", _D3, near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
+    Station(18, "서생", _D3, near_water=True, psd_install_date=_PSD_2, aws_stn="924"),
+    Station(19, "남창", _D3, near_water=False, psd_install_date=_PSD_2, aws_stn="954"),
+    Station(20, "망양", _D3, near_water=False, psd_install_date=_PSD_2, aws_stn="954"),
+    Station(21, "덕하", _D3, near_water=False, psd_install_date=_PSD_2, aws_stn="954"),
+    Station(22, "개운포", _D3, near_water=True, psd_install_date=_PSD_2, aws_stn="898"),
+    Station(23, "태화강", _D3, near_water=True, psd_install_date=_PSD_2, aws_stn="898"),
+    Station(24, "북울산", _D4, near_water=False, aws_stn="943", in_service=False),
 ]
 
 # aws_stn: 역 → 가장 가까운 AWS 지점을 행정구역 기준으로 매핑한 것이다(2026-10-25, 실측 좌표
@@ -142,8 +141,6 @@ if _unknown_aws_stn:
 # aws_stn별로 이미 다르게 들어가(위 AWS_STATION_NAMES, 4단계_계산공식_근거조사.md 2-1) 같은
 # 효과를 가속 계수(af_hum) 쪽에서 직접 낸다 — 비중까지 또 옮기면 같은 "해안=습함" 효과를 두 번
 # 적용하는 중복이 된다. near_water 필드 자체는 역 화면 표시·참고용으로만 남겨 둔다.
-
-OBS_CODE = {"부산": "159", "울산": "152"}  # ASOS 코드. 날씨 계산에는 안 쓰고 scripts/init_db.py가 역 → 관측소를 연결할 때만 쓴다
 
 PARTS = ["모터", "타이밍벨트", "풀리", "도어 행거", "DCM", "IFM 릴레이", "종합제어반 릴레이"]
 

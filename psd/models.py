@@ -9,39 +9,31 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from psd.db import Base
 
 
-class Observatory(Base):
-    """관측소: ASOS 관측소 2곳(부산 159, 울산 152). 역이 이 표를 참조하는 연결로만 남아 있다.
-
-    2026-10-25부터 날씨 계산은 역마다 가장 가까운 AWS 지점(psd/cycle.py STATIONS의 aws_stn,
-    AWS_STATION_NAMES)을 쓰고, AWS 날씨는 DB가 아니라 data/processed/aws_weather_daily.csv에서 읽는다.
-    """
-
-    __tablename__ = "observatories"
-
-    id: Mapped[str] = mapped_column(String(10), primary_key=True)  # 지점 번호, 예: "159"
-    kind: Mapped[str] = mapped_column(String(10))  # "ASOS" | "AWS"
-    name: Mapped[str] = mapped_column(String(50))  # 이름은 추정(지점정보 API 미승인)
-    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
-    lon: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    stations: Mapped[list["Station"]] = relationship(back_populates="observatory")
-
-
 class Station(Base):
-    """역: 부전 ~ 북울산 24개 역."""
+    """역: 부전 ~ 북울산 24개 역.
+
+    날씨는 DB에 두지 않는다 — 역마다 가장 가까운 AWS 지점(psd/cycle.py STATIONS의 aws_stn)의
+    data/processed/aws_weather_daily.csv를 읽는다. 예전 관측소 표(observatories)와 일별 날씨 표(daily_weather)는
+    쓰는 곳이 없어 2026-11-23에 지웠다(scripts/init_db.py _DROP_TABLES).
+    """
 
     __tablename__ = "stations"
 
     id: Mapped[int] = mapped_column(primary_key=True)  # 역 순서(1~24)를 ID로 씀
     name: Mapped[str] = mapped_column(String(30), unique=True)
     open_date: Mapped[dt.date] = mapped_column(Date)  # 스크린도어 설치일로 가정(멘토 확인 대기)
-    observatory_id: Mapped[str] = mapped_column(ForeignKey("observatories.id"))
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     near_water: Mapped[bool] = mapped_column(default=False)  # 바다·하천 인접 추정(psd/cycle.py STATIONS 주석, 확인 필요)
     in_service: Mapped[bool] = mapped_column(default=True)  # PSD 실제 운영 중인지(psd/cycle.py Station.in_service 참고)
+    # 역 환경(2026-11-23): 나중에 AI가 역 특성별로 가중치를 다르게 주도록 넣을 자리. 정확한 정보가 없어 지금은 전부
+    # 비워 둔다(NULL = 모름). 아직 계산·화면 어디에서도 읽지 않는다. 날씨(습도·기온·일교차)는 AWS 지점으로 이미
+    # 공식에 들어가 있으니, 여기엔 날씨로 설명 안 되는 것만 넣는다(near_water 가중을 걷어낸 이유, psd/cycle.py 맨 위 주석)
+    structure: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 역 구조: "지상" | "지하" | "고가"
+    coast_km: Mapped[float | None] = mapped_column(Float, nullable=True)  # 해안선까지 거리(km)
+    daily_riders: Mapped[int | None] = mapped_column(nullable=True)  # 하루 평균 이용객 수(명)
+    env_note: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 그 밖의 환경 메모(염분·먼지·바람 등)
 
-    observatory: Mapped[Observatory] = relationship(back_populates="stations")
     doors: Mapped[list["Door"]] = relationship(back_populates="station")
     parts: Mapped[list["Part"]] = relationship(back_populates="station")
 

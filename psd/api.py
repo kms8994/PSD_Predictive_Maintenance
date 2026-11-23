@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import io
-import math
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -20,19 +19,14 @@ from sqlalchemy.orm import Session, joinedload
 from psd.calibrate import MAX_YEARS, PSD_START, Calibrated, calibration_map
 from psd.catalog import NAME_TO_CODE, PART_TYPES, SIDES
 from psd.cycle import (
-    IFM_WEIGHT_RANGE,
-    MOTOR_WEIGHT_RANGE,
     SERVICE_INTERVAL_MIN,
     STATIONS,
     AWS_STATION_NAMES,
     daily_af,
-    dcm_cycle,
     load_aws_weather,
     observatory_climate,
     period_average_af,
-    period_average_af_for,
     reference_climate,
-    single_cause_cycle,
 )
 from psd.db import get_session
 from psd.excel_io import (
@@ -67,7 +61,6 @@ app = FastAPI(title="동해선 PSD 교체주기 API")
 # 이 API의 기록·보고서를 읽어 갈 수 있었다(2026-11-02 QA). 로그인은 아직 없다 — 배포 전에 넣는다
 
 NAME_BY_CODE = {p["code"]: p["name"] for p in PART_TYPES}
-WEATHER_PART_CODES = ["DCM", "IFM", "MOTOR"]
 AWS_STN_BY_STATION = {s.name: s.aws_stn for s in STATIONS}  # 역 이름 -> 가장 가까운 AWS 지점 코드
 
 # 고장 원인별 열화 속도·비중 기본값(4단계_계산공식_근거조사.md 1·3장). 부품 상세의 "근거"
@@ -116,21 +109,6 @@ def _af_by_stn() -> dict:
     weather = _weather_df()
     ref = reference_climate(weather)
     return period_average_af(daily_af(weather, ref))
-
-
-def _shifted_period_af(aws_stn: str, d_temp: float, d_rh: float, d_dt: float) -> dict[str, float]:
-    """한 AWS 지점의 날씨를 통째로 (기온·습도·일교차) 바꿔서 다시 기간 평균 가속 계수를 낸다.
-
-    시뮬레이터용. 실제 ta_max가 없는 가상 날씨라 Tmax는 기온 + 일교차/2로 근사한다.
-    """
-    ref = _climate()["ref"]  # 이미 캐시된 기준 기후를 그대로 씀(슬라이더 드래그마다 다시 구하지 않음)
-    g = _weather_df()
-    g = g[g["stn"] == aws_stn].copy()
-    g["ta_avg"] = g["ta_avg"] + d_temp
-    g["hm_avg"] = (g["hm_avg"] + d_rh).clip(lower=0.0, upper=100.0)
-    g["dtr"] = (g["dtr"] + d_dt).clip(lower=0.5)
-    g["ta_max"] = g["ta_avg"] + g["dtr"] / 2
-    return period_average_af_for(daily_af(g, ref), aws_stn)
 
 
 def _cal_dict(cal: Calibrated | None) -> dict | None:
@@ -199,14 +177,6 @@ def _cycle_map(db: Session) -> dict[tuple[int, str], CycleResult]:
     도는 곳에서) 역-부품종류 조합 수만큼 DB를 오간다.
     """
     return {(cr.station_id, cr.part_type_code): cr for cr in db.execute(select(CycleResult)).scalars()}
-
-
-def _require_cycle(cycle_map: dict[tuple[int, str], CycleResult], station_id: int, code: str) -> CycleResult:
-    cycle = cycle_map.get((station_id, code))
-    if cycle is None:
-        raise HTTPException(500, f"계산 결과 없음: station={station_id} part={code}. "
-                                  f"python scripts/compute_cycles.py 를 먼저 실행해야 함")
-    return cycle
 
 
 def _part_cycle(part: Part, db: Session) -> CycleResult:
@@ -280,7 +250,6 @@ def list_stations(db: Session = Depends(get_db)):
                 "id": s.id,
                 "name": s.name,
                 "open_date": s.open_date,
-                "observatory": s.observatory_id,
                 "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[s.name]],
                 "near_water": s.near_water,
                 "in_service": s.in_service,
@@ -553,7 +522,6 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
             "id": station.id,
             "name": station.name,
             "open_date": station.open_date,
-            "observatory": station.observatory_id,
             "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[station.name]],
             "near_water": station.near_water,
             "in_service": station.in_service,
@@ -811,74 +779,6 @@ def risk_ranking(limit: int = 20, station_id: int | None = None, db: Session = D
     return {"model": _risk_model_info(db), "mean_prob": round(sum(probs) / len(probs), 4), "parts": rows}
 
 
-# ---------- 4-5. 날씨 영향 ----------
-
-
-@app.get("/api/weather-impact")
-def weather_impact(db: Session = Depends(get_db)):
-    climate = _climate()
-    cycle_map = _cycle_map(db)
-    stations = []
-    for s in db.execute(select(Station).order_by(Station.id)).scalars():
-        aws_stn = AWS_STN_BY_STATION[s.name]
-        obs_climate = climate["obs"][aws_stn]
-        cycles = {}
-        for code in WEATHER_PART_CODES:
-            cr = _require_cycle(cycle_map, s.id, code)
-            cycles[code] = {"base_years": round(cr.base_years, 2), "lo_years": round(cr.lo_years, 2), "hi_years": round(cr.hi_years, 2), "judgment": cr.judgment}
-        stations.append({"id": s.id, "name": s.name, "in_service": s.in_service, "observatory": AWS_STATION_NAMES[aws_stn], "weather": obs_climate, "cycles": cycles})
-    return {"stations": stations, "reference": climate["ref"]}
-
-
-@app.get("/api/weather-impact/simulate")
-def simulate_weather(station_id: int, d_temp: float = 0.0, d_rh: float = 0.0, d_dt: float = 0.0, db: Session = Depends(get_db)):
-    """한 역의 10년 날씨를 기온 d_temp·습도 d_rh·일교차 d_dt만큼 통째로 바꿔서 다시 계산한다.
-
-    실제 저장된 계산(기간 평균 가속 계수)과 같은 방식을 써야 "지금 날씨" 결과와 비교할 수 있다.
-    """
-    if not all(math.isfinite(x) for x in (d_temp, d_rh, d_dt)):
-        raise HTTPException(400, "d_temp·d_rh·d_dt는 숫자여야 함(nan·inf 안 됨)")
-    station = db.get(Station, station_id)
-    if station is None:
-        raise HTTPException(404, "역 없음")
-    aws_stn = AWS_STN_BY_STATION[station.name]
-    to_dict =lambda c: {"base_years": round(c.base_years, 2), "lo_years": round(c.lo_years, 2), "hi_years": round(c.hi_years, 2), "judgment": c.judgment}
-    return {
-        "station_id": station_id,
-        "change": {"d_temp": d_temp, "d_rh": d_rh, "d_dt": d_dt},
-        "cycles": {k: to_dict(c) for k, c in _weather_cycles(aws_stn, d_temp, d_rh, d_dt).items()},
-        # 비교 기준도 같은 근사(Tmax = 기온 + 일교차/2)로 다시 계산한다. 저장된 값(실제 Tmax)과 비교하면
-        # 슬라이더를 0에 두어도 차이가 조금 생겼다
-        "baseline": {k: to_dict(c) for k, c in _weather_cycles(aws_stn, 0.0, 0.0, 0.0).items()},
-    }
-
-
-@lru_cache(maxsize=512)
-def _weather_cycles(aws_stn: str, d_temp: float, d_rh: float, d_dt: float) -> dict:
-    af = _shifted_period_af(aws_stn, d_temp, d_rh, d_dt)
-    return {"DCM": dcm_cycle(af), "IFM": single_cause_cycle(af["hum"], IFM_WEIGHT_RANGE), "MOTOR": single_cause_cycle(af["mot"], MOTOR_WEIGHT_RANGE)}
-
-
-# 민감도 표에서 "날씨 한 칸"으로 쓰는 변화량. 해안·내륙 지점 습도 차이가 5%p 정도라(psd/cycle.py 머리말) 습도는 5%p로 둔다
-SENSITIVITY_STEPS = {"rh": 5.0, "temp": 1.0, "dt": 1.0}
-
-
-@app.get("/api/weather-impact/sensitivity")
-def weather_sensitivity():
-    """날씨가 한 칸(습도 +5%p, 기온 +1°C, 일교차 +1°C) 바뀌면 부품 주기가 몇 년 바뀌는지.
-
-    운영 중인 역이 쓰는 AWS 지점마다 계산해서 평균 낸다(지점마다 조금씩 다르다).
-    """
-    stns = sorted({s.aws_stn for s in STATIONS if s.in_service})
-    out = {code: {} for code in WEATHER_PART_CODES}
-    for var, step in SENSITIVITY_STEPS.items():
-        shift = {"rh": (0.0, step, 0.0), "temp": (step, 0.0, 0.0), "dt": (0.0, 0.0, step)}[var]
-        for code in WEATHER_PART_CODES:
-            deltas = [_weather_cycles(stn, *shift)[code].base_years - _weather_cycles(stn, 0.0, 0.0, 0.0)[code].base_years for stn in stns]
-            out[code][var] = round(sum(deltas) / len(deltas), 3)
-    return {"steps": SENSITIVITY_STEPS, "parts": out}
-
-
 # ---------- 4-6. 교체 물량 ----------
 
 
@@ -934,22 +834,6 @@ def _plan_counts(db: Session, today: date, buckets: list, bucket_of, which: str 
             by_station[b][key] = by_station[b].get(key, 0) + 1
             d = d + timedelta(days=cycle_days)
     return by_part, by_station, check
-
-
-@app.get("/api/replacement-volume")
-def replacement_volume(years_ahead: int = 5, db: Session = Depends(get_db)):
-    today = date.today()
-    start_q = _quarter(today)
-    quarters = [_next_quarter(start_q, i) for i in range(years_ahead * 4 + 1)]
-    table, _, check = _plan_counts(db, today, quarters, _quarter)
-    return {
-        "current_quarter": _quarter_label(start_q),
-        "check": {"counts": check, "total": sum(check.values())},
-        "quarters": [
-            {"label": _quarter_label(q), "counts": table[q], "total": sum(table[q].values())}
-            for q in quarters
-        ],
-    }
 
 
 # 교체 계획 화면의 기간: 12개월은 월별, 3년은 분기별, 5년은 연도별. 지금 달·분기·해(남은 기간만)를 맨 앞에 넣는다
@@ -1393,49 +1277,6 @@ async def sync_replacement_records(background: BackgroundTasks, file: UploadFile
     db.commit()
     if result["batch_id"]:
         _auto_retrain(background, "upload")  # 기록이 바뀌었으면 AI 모델을 다시 학습해 보고, 나을 때만 바꾼다
-    return result
-
-
-# 정비기록 시연 탭에서 쓰는 샘플: scripts/generate_dummy_records.py가 만든 최근 두 달치(초기 데이터에 안 넣은 기간).
-# 건수가 이름에 들어가 다시 만들면 바뀌므로 data/dummy/의 정비기록_샘플_*건.xlsx 하나를 찾는다
-_SAMPLES = sorted((Path(__file__).resolve().parent.parent / "data" / "dummy").glob("정비기록_샘플_*건.xlsx"))
-SAMPLE_RECORDS_PATH = _SAMPLES[-1] if _SAMPLES else Path("정비기록_샘플_없음.xlsx")
-
-
-def _sample_bytes() -> bytes:
-    if not SAMPLE_RECORDS_PATH.exists():
-        raise HTTPException(404, f"샘플 파일이 없음: {SAMPLE_RECORDS_PATH.name} (scripts/generate_dummy_records.py --save로 만든다)")
-    return SAMPLE_RECORDS_PATH.read_bytes()
-
-
-@app.get("/api/sample-records")
-def sample_records():
-    """정비기록 시연 탭의 입력: 샘플 엑셀의 행을 그대로 보여 준다."""
-    try:
-        parsed = parse_upload(_sample_bytes())
-    except ExcelFormatError as e:
-        raise HTTPException(400, str(e))
-    return {
-        "file": SAMPLE_RECORDS_PATH.name,
-        "rows": [
-            {"station_name": r.station_name, "side_label": r.side_label, "door_no": r.door_no, "replaced_on": r.replaced_on,
-             "reason": REASON_CODE_TO_LABEL[r.reason_code], "parts": ", ".join(r.part_names), "created_by": r.created_by,
-             **{k: v for k, v in zip(("action", "sub_parts", "symptom", "cause"),
-                                     detail_labels(r.action_code, r.sub_part_codes, r.symptom_code, r.cause_code).values())}}
-            for r in parsed
-        ],
-    }
-
-
-@app.post("/api/sample-records/preview")
-def preview_sample_records(db: Session = Depends(get_db)):
-    """샘플을 올렸다고 치고 결과만 계산한 뒤 롤백한다 — 몇 번을 눌러도 DB는 그대로다.
-    샘플엔 그 역·기간의 초기 데이터도 들어 있어 "엑셀에 없는 기록"이 없지만, 만에 하나 있어도 지우지 않는다(delete_missing=False)."""
-    try:
-        result = _sync(db, _sample_bytes(), SAMPLE_RECORDS_PATH.name, delete_missing=False)
-    finally:
-        db.rollback()
-    del result["batch_id"]
     return result
 
 

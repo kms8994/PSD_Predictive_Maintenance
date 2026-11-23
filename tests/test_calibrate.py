@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from psd.calibrate import PRIOR_FAILURES, calibrate, fit_group, part_intervals
+from psd.calibrate import calibrate, fit_group, part_intervals
 
 TODAY = date(2026, 10, 31)
 START = date(2022, 1, 1)
