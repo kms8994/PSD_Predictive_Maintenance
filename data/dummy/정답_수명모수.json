@@ -1,0 +1,1248 @@
+{
+ "seed": 2026,
+ "today": "2026-11-16",
+ "true_shape": {
+  "BELT": 3.0,
+  "PULLEY": 2.5,
+  "HANGER": 2.5,
+  "MOTOR": 2.0,
+  "DCM": 1.6,
+  "PSC": 1.5,
+  "IFM": 1.3
+ },
+ "true_bias": {
+  "MOTOR": 0.9,
+  "BELT": 0.8,
+  "PULLEY": 1.05,
+  "HANGER": 0.9,
+  "DCM": 0.75,
+  "IFM": 1.1,
+  "PSC": 1.0
+ },
+ "station_sigma": 0.15,
+ "frailty_var": 0.3,
+ "weak_door_factor": 3.0,
+ "age_factor": {
+  "full": 0.0,
+  "partial": 0.4,
+  "overhaul": 0.3,
+  "repair": 1.0
+ },
+ "station_part": [
+  {
+   "station": "부전",
+   "part": "MOTOR",
+   "formula_years": 9.561,
+   "true_mean_years": 10.913,
+   "true_shape": 2.0
+  },
+  {
+   "station": "부전",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 6.473,
+   "true_shape": 3.0
+  },
+  {
+   "station": "부전",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 9.376,
+   "true_shape": 2.5
+  },
+  {
+   "station": "부전",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 8.076,
+   "true_shape": 2.5
+  },
+  {
+   "station": "부전",
+   "part": "DCM",
+   "formula_years": 7.42,
+   "true_mean_years": 4.296,
+   "true_shape": 1.6
+  },
+  {
+   "station": "부전",
+   "part": "IFM",
+   "formula_years": 6.74,
+   "true_mean_years": 6.53,
+   "true_shape": 1.3
+  },
+  {
+   "station": "부전",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 10.294,
+   "true_shape": 1.5
+  },
+  {
+   "station": "거제해맞이",
+   "part": "MOTOR",
+   "formula_years": 9.561,
+   "true_mean_years": 7.246,
+   "true_shape": 2.0
+  },
+  {
+   "station": "거제해맞이",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.472,
+   "true_shape": 3.0
+  },
+  {
+   "station": "거제해맞이",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 10.794,
+   "true_shape": 2.5
+  },
+  {
+   "station": "거제해맞이",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 9.358,
+   "true_shape": 2.5
+  },
+  {
+   "station": "거제해맞이",
+   "part": "DCM",
+   "formula_years": 7.42,
+   "true_mean_years": 5.979,
+   "true_shape": 1.6
+  },
+  {
+   "station": "거제해맞이",
+   "part": "IFM",
+   "formula_years": 6.74,
+   "true_mean_years": 9.436,
+   "true_shape": 1.3
+  },
+  {
+   "station": "거제해맞이",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 10.9,
+   "true_shape": 1.5
+  },
+  {
+   "station": "거제",
+   "part": "MOTOR",
+   "formula_years": 9.561,
+   "true_mean_years": 8.138,
+   "true_shape": 2.0
+  },
+  {
+   "station": "거제",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.825,
+   "true_shape": 3.0
+  },
+  {
+   "station": "거제",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 11.499,
+   "true_shape": 2.5
+  },
+  {
+   "station": "거제",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 9.944,
+   "true_shape": 2.5
+  },
+  {
+   "station": "거제",
+   "part": "DCM",
+   "formula_years": 7.42,
+   "true_mean_years": 6.246,
+   "true_shape": 1.6
+  },
+  {
+   "station": "거제",
+   "part": "IFM",
+   "formula_years": 6.74,
+   "true_mean_years": 8.069,
+   "true_shape": 1.3
+  },
+  {
+   "station": "거제",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 10.512,
+   "true_shape": 1.5
+  },
+  {
+   "station": "교대",
+   "part": "MOTOR",
+   "formula_years": 9.561,
+   "true_mean_years": 8.456,
+   "true_shape": 2.0
+  },
+  {
+   "station": "교대",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.583,
+   "true_shape": 3.0
+  },
+  {
+   "station": "교대",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 9.722,
+   "true_shape": 2.5
+  },
+  {
+   "station": "교대",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 8.955,
+   "true_shape": 2.5
+  },
+  {
+   "station": "교대",
+   "part": "DCM",
+   "formula_years": 7.42,
+   "true_mean_years": 6.493,
+   "true_shape": 1.6
+  },
+  {
+   "station": "교대",
+   "part": "IFM",
+   "formula_years": 6.74,
+   "true_mean_years": 9.087,
+   "true_shape": 1.3
+  },
+  {
+   "station": "교대",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 12.051,
+   "true_shape": 1.5
+  },
+  {
+   "station": "동래",
+   "part": "MOTOR",
+   "formula_years": 9.561,
+   "true_mean_years": 8.789,
+   "true_shape": 2.0
+  },
+  {
+   "station": "동래",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.36,
+   "true_shape": 3.0
+  },
+  {
+   "station": "동래",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 12.178,
+   "true_shape": 2.5
+  },
+  {
+   "station": "동래",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 9.882,
+   "true_shape": 2.5
+  },
+  {
+   "station": "동래",
+   "part": "DCM",
+   "formula_years": 7.42,
+   "true_mean_years": 6.076,
+   "true_shape": 1.6
+  },
+  {
+   "station": "동래",
+   "part": "IFM",
+   "formula_years": 6.74,
+   "true_mean_years": 9.467,
+   "true_shape": 1.3
+  },
+  {
+   "station": "동래",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 10.819,
+   "true_shape": 1.5
+  },
+  {
+   "station": "안락",
+   "part": "MOTOR",
+   "formula_years": 9.561,
+   "true_mean_years": 8.315,
+   "true_shape": 2.0
+  },
+  {
+   "station": "안락",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 9.807,
+   "true_shape": 3.0
+  },
+  {
+   "station": "안락",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 9.267,
+   "true_shape": 2.5
+  },
+  {
+   "station": "안락",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 7.088,
+   "true_shape": 2.5
+  },
+  {
+   "station": "안락",
+   "part": "DCM",
+   "formula_years": 7.42,
+   "true_mean_years": 7.566,
+   "true_shape": 1.6
+  },
+  {
+   "station": "안락",
+   "part": "IFM",
+   "formula_years": 6.74,
+   "true_mean_years": 7.268,
+   "true_shape": 1.3
+  },
+  {
+   "station": "안락",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 11.341,
+   "true_shape": 1.5
+  },
+  {
+   "station": "부산원동",
+   "part": "MOTOR",
+   "formula_years": 9.588,
+   "true_mean_years": 10.022,
+   "true_shape": 2.0
+  },
+  {
+   "station": "부산원동",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 9.927,
+   "true_shape": 3.0
+  },
+  {
+   "station": "부산원동",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 9.419,
+   "true_shape": 2.5
+  },
+  {
+   "station": "부산원동",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 10.287,
+   "true_shape": 2.5
+  },
+  {
+   "station": "부산원동",
+   "part": "DCM",
+   "formula_years": 6.769,
+   "true_mean_years": 5.402,
+   "true_shape": 1.6
+  },
+  {
+   "station": "부산원동",
+   "part": "IFM",
+   "formula_years": 5.938,
+   "true_mean_years": 7.131,
+   "true_shape": 1.3
+  },
+  {
+   "station": "부산원동",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 8.349,
+   "true_shape": 1.5
+  },
+  {
+   "station": "재송",
+   "part": "MOTOR",
+   "formula_years": 9.588,
+   "true_mean_years": 8.213,
+   "true_shape": 2.0
+  },
+  {
+   "station": "재송",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 9.716,
+   "true_shape": 3.0
+  },
+  {
+   "station": "재송",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 10.123,
+   "true_shape": 2.5
+  },
+  {
+   "station": "재송",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 9.597,
+   "true_shape": 2.5
+  },
+  {
+   "station": "재송",
+   "part": "DCM",
+   "formula_years": 6.769,
+   "true_mean_years": 5.676,
+   "true_shape": 1.6
+  },
+  {
+   "station": "재송",
+   "part": "IFM",
+   "formula_years": 5.938,
+   "true_mean_years": 5.814,
+   "true_shape": 1.3
+  },
+  {
+   "station": "재송",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 11.277,
+   "true_shape": 1.5
+  },
+  {
+   "station": "센텀",
+   "part": "MOTOR",
+   "formula_years": 9.588,
+   "true_mean_years": 8.071,
+   "true_shape": 2.0
+  },
+  {
+   "station": "센텀",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 9.781,
+   "true_shape": 3.0
+  },
+  {
+   "station": "센텀",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 13.561,
+   "true_shape": 2.5
+  },
+  {
+   "station": "센텀",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 10.577,
+   "true_shape": 2.5
+  },
+  {
+   "station": "센텀",
+   "part": "DCM",
+   "formula_years": 6.769,
+   "true_mean_years": 3.699,
+   "true_shape": 1.6
+  },
+  {
+   "station": "센텀",
+   "part": "IFM",
+   "formula_years": 5.938,
+   "true_mean_years": 6.584,
+   "true_shape": 1.3
+  },
+  {
+   "station": "센텀",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 12.99,
+   "true_shape": 1.5
+  },
+  {
+   "station": "벡스코",
+   "part": "MOTOR",
+   "formula_years": 9.588,
+   "true_mean_years": 7.648,
+   "true_shape": 2.0
+  },
+  {
+   "station": "벡스코",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.385,
+   "true_shape": 3.0
+  },
+  {
+   "station": "벡스코",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 11.136,
+   "true_shape": 2.5
+  },
+  {
+   "station": "벡스코",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 8.412,
+   "true_shape": 2.5
+  },
+  {
+   "station": "벡스코",
+   "part": "DCM",
+   "formula_years": 6.769,
+   "true_mean_years": 4.902,
+   "true_shape": 1.6
+  },
+  {
+   "station": "벡스코",
+   "part": "IFM",
+   "formula_years": 5.938,
+   "true_mean_years": 5.646,
+   "true_shape": 1.3
+  },
+  {
+   "station": "벡스코",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 11.109,
+   "true_shape": 1.5
+  },
+  {
+   "station": "신해운대",
+   "part": "MOTOR",
+   "formula_years": 9.588,
+   "true_mean_years": 7.992,
+   "true_shape": 2.0
+  },
+  {
+   "station": "신해운대",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 6.996,
+   "true_shape": 3.0
+  },
+  {
+   "station": "신해운대",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 11.253,
+   "true_shape": 2.5
+  },
+  {
+   "station": "신해운대",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 8.589,
+   "true_shape": 2.5
+  },
+  {
+   "station": "신해운대",
+   "part": "DCM",
+   "formula_years": 6.769,
+   "true_mean_years": 4.471,
+   "true_shape": 1.6
+  },
+  {
+   "station": "신해운대",
+   "part": "IFM",
+   "formula_years": 5.938,
+   "true_mean_years": 6.538,
+   "true_shape": 1.3
+  },
+  {
+   "station": "신해운대",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 11.337,
+   "true_shape": 1.5
+  },
+  {
+   "station": "송정",
+   "part": "MOTOR",
+   "formula_years": 9.588,
+   "true_mean_years": 12.331,
+   "true_shape": 2.0
+  },
+  {
+   "station": "송정",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 6.623,
+   "true_shape": 3.0
+  },
+  {
+   "station": "송정",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 12.705,
+   "true_shape": 2.5
+  },
+  {
+   "station": "송정",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 7.547,
+   "true_shape": 2.5
+  },
+  {
+   "station": "송정",
+   "part": "DCM",
+   "formula_years": 6.769,
+   "true_mean_years": 5.833,
+   "true_shape": 1.6
+  },
+  {
+   "station": "송정",
+   "part": "IFM",
+   "formula_years": 5.938,
+   "true_mean_years": 6.102,
+   "true_shape": 1.3
+  },
+  {
+   "station": "송정",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 12.379,
+   "true_shape": 1.5
+  },
+  {
+   "station": "오시리아",
+   "part": "MOTOR",
+   "formula_years": 9.612,
+   "true_mean_years": 8.901,
+   "true_shape": 2.0
+  },
+  {
+   "station": "오시리아",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.434,
+   "true_shape": 3.0
+  },
+  {
+   "station": "오시리아",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 11.346,
+   "true_shape": 2.5
+  },
+  {
+   "station": "오시리아",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 10.072,
+   "true_shape": 2.5
+  },
+  {
+   "station": "오시리아",
+   "part": "DCM",
+   "formula_years": 7.259,
+   "true_mean_years": 4.796,
+   "true_shape": 1.6
+  },
+  {
+   "station": "오시리아",
+   "part": "IFM",
+   "formula_years": 5.894,
+   "true_mean_years": 6.74,
+   "true_shape": 1.3
+  },
+  {
+   "station": "오시리아",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 9.946,
+   "true_shape": 1.5
+  },
+  {
+   "station": "기장",
+   "part": "MOTOR",
+   "formula_years": 9.612,
+   "true_mean_years": 7.035,
+   "true_shape": 2.0
+  },
+  {
+   "station": "기장",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.294,
+   "true_shape": 3.0
+  },
+  {
+   "station": "기장",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 11.267,
+   "true_shape": 2.5
+  },
+  {
+   "station": "기장",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 11.484,
+   "true_shape": 2.5
+  },
+  {
+   "station": "기장",
+   "part": "DCM",
+   "formula_years": 7.259,
+   "true_mean_years": 5.246,
+   "true_shape": 1.6
+  },
+  {
+   "station": "기장",
+   "part": "IFM",
+   "formula_years": 5.894,
+   "true_mean_years": 6.038,
+   "true_shape": 1.3
+  },
+  {
+   "station": "기장",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 9.723,
+   "true_shape": 1.5
+  },
+  {
+   "station": "일광",
+   "part": "MOTOR",
+   "formula_years": 9.612,
+   "true_mean_years": 11.583,
+   "true_shape": 2.0
+  },
+  {
+   "station": "일광",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 6.707,
+   "true_shape": 3.0
+  },
+  {
+   "station": "일광",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 11.06,
+   "true_shape": 2.5
+  },
+  {
+   "station": "일광",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 10.024,
+   "true_shape": 2.5
+  },
+  {
+   "station": "일광",
+   "part": "DCM",
+   "formula_years": 7.259,
+   "true_mean_years": 5.911,
+   "true_shape": 1.6
+  },
+  {
+   "station": "일광",
+   "part": "IFM",
+   "formula_years": 5.894,
+   "true_mean_years": 6.396,
+   "true_shape": 1.3
+  },
+  {
+   "station": "일광",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 8.686,
+   "true_shape": 1.5
+  },
+  {
+   "station": "좌천",
+   "part": "MOTOR",
+   "formula_years": 9.612,
+   "true_mean_years": 8.486,
+   "true_shape": 2.0
+  },
+  {
+   "station": "좌천",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 9.441,
+   "true_shape": 3.0
+  },
+  {
+   "station": "좌천",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 9.905,
+   "true_shape": 2.5
+  },
+  {
+   "station": "좌천",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 8.604,
+   "true_shape": 2.5
+  },
+  {
+   "station": "좌천",
+   "part": "DCM",
+   "formula_years": 7.259,
+   "true_mean_years": 4.305,
+   "true_shape": 1.6
+  },
+  {
+   "station": "좌천",
+   "part": "IFM",
+   "formula_years": 5.894,
+   "true_mean_years": 8.526,
+   "true_shape": 1.3
+  },
+  {
+   "station": "좌천",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 10.149,
+   "true_shape": 1.5
+  },
+  {
+   "station": "월내",
+   "part": "MOTOR",
+   "formula_years": 9.612,
+   "true_mean_years": 7.286,
+   "true_shape": 2.0
+  },
+  {
+   "station": "월내",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.916,
+   "true_shape": 3.0
+  },
+  {
+   "station": "월내",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 9.993,
+   "true_shape": 2.5
+  },
+  {
+   "station": "월내",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 7.238,
+   "true_shape": 2.5
+  },
+  {
+   "station": "월내",
+   "part": "DCM",
+   "formula_years": 7.259,
+   "true_mean_years": 3.687,
+   "true_shape": 1.6
+  },
+  {
+   "station": "월내",
+   "part": "IFM",
+   "formula_years": 5.894,
+   "true_mean_years": 6.578,
+   "true_shape": 1.3
+  },
+  {
+   "station": "월내",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 9.818,
+   "true_shape": 1.5
+  },
+  {
+   "station": "서생",
+   "part": "MOTOR",
+   "formula_years": 9.726,
+   "true_mean_years": 10.95,
+   "true_shape": 2.0
+  },
+  {
+   "station": "서생",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 6.852,
+   "true_shape": 3.0
+  },
+  {
+   "station": "서생",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 11.061,
+   "true_shape": 2.5
+  },
+  {
+   "station": "서생",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 8.621,
+   "true_shape": 2.5
+  },
+  {
+   "station": "서생",
+   "part": "DCM",
+   "formula_years": 8.366,
+   "true_mean_years": 4.733,
+   "true_shape": 1.6
+  },
+  {
+   "station": "서생",
+   "part": "IFM",
+   "formula_years": 6.463,
+   "true_mean_years": 6.235,
+   "true_shape": 1.3
+  },
+  {
+   "station": "서생",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 9.013,
+   "true_shape": 1.5
+  },
+  {
+   "station": "남창",
+   "part": "MOTOR",
+   "formula_years": 9.514,
+   "true_mean_years": 9.461,
+   "true_shape": 2.0
+  },
+  {
+   "station": "남창",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.746,
+   "true_shape": 3.0
+  },
+  {
+   "station": "남창",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 12.973,
+   "true_shape": 2.5
+  },
+  {
+   "station": "남창",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 10.256,
+   "true_shape": 2.5
+  },
+  {
+   "station": "남창",
+   "part": "DCM",
+   "formula_years": 7.431,
+   "true_mean_years": 5.611,
+   "true_shape": 1.6
+  },
+  {
+   "station": "남창",
+   "part": "IFM",
+   "formula_years": 6.569,
+   "true_mean_years": 7.099,
+   "true_shape": 1.3
+  },
+  {
+   "station": "남창",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 10.908,
+   "true_shape": 1.5
+  },
+  {
+   "station": "망양",
+   "part": "MOTOR",
+   "formula_years": 9.514,
+   "true_mean_years": 8.733,
+   "true_shape": 2.0
+  },
+  {
+   "station": "망양",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 7.713,
+   "true_shape": 3.0
+  },
+  {
+   "station": "망양",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 10.536,
+   "true_shape": 2.5
+  },
+  {
+   "station": "망양",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 8.177,
+   "true_shape": 2.5
+  },
+  {
+   "station": "망양",
+   "part": "DCM",
+   "formula_years": 7.431,
+   "true_mean_years": 5.625,
+   "true_shape": 1.6
+  },
+  {
+   "station": "망양",
+   "part": "IFM",
+   "formula_years": 6.569,
+   "true_mean_years": 6.706,
+   "true_shape": 1.3
+  },
+  {
+   "station": "망양",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 8.313,
+   "true_shape": 1.5
+  },
+  {
+   "station": "덕하",
+   "part": "MOTOR",
+   "formula_years": 9.514,
+   "true_mean_years": 9.896,
+   "true_shape": 2.0
+  },
+  {
+   "station": "덕하",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.492,
+   "true_shape": 3.0
+  },
+  {
+   "station": "덕하",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 9.565,
+   "true_shape": 2.5
+  },
+  {
+   "station": "덕하",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 9.575,
+   "true_shape": 2.5
+  },
+  {
+   "station": "덕하",
+   "part": "DCM",
+   "formula_years": 7.431,
+   "true_mean_years": 6.254,
+   "true_shape": 1.6
+  },
+  {
+   "station": "덕하",
+   "part": "IFM",
+   "formula_years": 6.569,
+   "true_mean_years": 6.652,
+   "true_shape": 1.3
+  },
+  {
+   "station": "덕하",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 9.462,
+   "true_shape": 1.5
+  },
+  {
+   "station": "개운포",
+   "part": "MOTOR",
+   "formula_years": 9.608,
+   "true_mean_years": 8.653,
+   "true_shape": 2.0
+  },
+  {
+   "station": "개운포",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 8.131,
+   "true_shape": 3.0
+  },
+  {
+   "station": "개운포",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 9.555,
+   "true_shape": 2.5
+  },
+  {
+   "station": "개운포",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 9.622,
+   "true_shape": 2.5
+  },
+  {
+   "station": "개운포",
+   "part": "DCM",
+   "formula_years": 7.781,
+   "true_mean_years": 4.9,
+   "true_shape": 1.6
+  },
+  {
+   "station": "개운포",
+   "part": "IFM",
+   "formula_years": 6.688,
+   "true_mean_years": 6.968,
+   "true_shape": 1.3
+  },
+  {
+   "station": "개운포",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 8.578,
+   "true_shape": 1.5
+  },
+  {
+   "station": "태화강",
+   "part": "MOTOR",
+   "formula_years": 9.608,
+   "true_mean_years": 9.605,
+   "true_shape": 2.0
+  },
+  {
+   "station": "태화강",
+   "part": "BELT",
+   "formula_years": 10.0,
+   "true_mean_years": 7.875,
+   "true_shape": 3.0
+  },
+  {
+   "station": "태화강",
+   "part": "PULLEY",
+   "formula_years": 10.0,
+   "true_mean_years": 13.21,
+   "true_shape": 2.5
+  },
+  {
+   "station": "태화강",
+   "part": "HANGER",
+   "formula_years": 10.0,
+   "true_mean_years": 7.483,
+   "true_shape": 2.5
+  },
+  {
+   "station": "태화강",
+   "part": "DCM",
+   "formula_years": 7.781,
+   "true_mean_years": 6.003,
+   "true_shape": 1.6
+  },
+  {
+   "station": "태화강",
+   "part": "IFM",
+   "formula_years": 6.688,
+   "true_mean_years": 7.495,
+   "true_shape": 1.3
+  },
+  {
+   "station": "태화강",
+   "part": "PSC",
+   "formula_years": 10.0,
+   "true_mean_years": 12.311,
+   "true_shape": 1.5
+  }
+ ],
+ "weak_doors": [
+  {
+   "station": "부전",
+   "door": "부전 방면 1-1",
+   "frailty": 5.02
+  },
+  {
+   "station": "거제해맞이",
+   "door": "부전 방면 4-4",
+   "frailty": 1.9
+  },
+  {
+   "station": "교대",
+   "door": "북울산 방면 2-2",
+   "frailty": 2.43
+  },
+  {
+   "station": "벡스코",
+   "door": "부전 방면 3-3",
+   "frailty": 1.7
+  },
+  {
+   "station": "신해운대",
+   "door": "부전 방면 4-2",
+   "frailty": 5.43
+  },
+  {
+   "station": "송정",
+   "door": "북울산 방면 3-3",
+   "frailty": 3.06
+  },
+  {
+   "station": "송정",
+   "door": "북울산 방면 4-2",
+   "frailty": 10.2
+  },
+  {
+   "station": "일광",
+   "door": "부전 방면 2-2",
+   "frailty": 5.27
+  },
+  {
+   "station": "월내",
+   "door": "북울산 방면 4-1",
+   "frailty": 0.58
+  },
+  {
+   "station": "서생",
+   "door": "부전 방면 2-1",
+   "frailty": 1.94
+  },
+  {
+   "station": "남창",
+   "door": "북울산 방면 3-3",
+   "frailty": 2.96
+  },
+  {
+   "station": "망양",
+   "door": "부전 방면 4-1",
+   "frailty": 1.79
+  },
+  {
+   "station": "망양",
+   "door": "북울산 방면 3-3",
+   "frailty": 1.67
+  },
+  {
+   "station": "망양",
+   "door": "북울산 방면 3-4",
+   "frailty": 1.66
+  },
+  {
+   "station": "개운포",
+   "door": "부전 방면 1-3",
+   "frailty": 2.65
+  },
+  {
+   "station": "태화강",
+   "door": "부전 방면 1-3",
+   "frailty": 4.57
+  },
+  {
+   "station": "태화강",
+   "door": "부전 방면 3-2",
+   "frailty": 4.39
+  }
+ ],
+ "cutoff": "2026-09-16"
+}

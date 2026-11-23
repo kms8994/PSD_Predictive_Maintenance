@@ -246,7 +246,7 @@ def test_report_download_for_all_stations_is_a_readable_excel():
     assert wb.sheetnames == ["요약", "교체 작업", "역별 주문", "전체 부품"]
 
     parts = pd.read_excel(io.BytesIO(r.content), sheet_name="전체 부품")
-    assert list(parts.columns) == ["역", "방향", "문", "부품", "상태", "다음 교체일", "남은 일수", "남은 기간", "교체주기(년)", "마지막 교체일", "기준"]
+    assert list(parts.columns) == ["역", "방향", "문", "부품", "상태", "다음 교체일", "80% 범위 시작", "80% 범위 끝", "남은 일수", "남은 기간", "교체주기(년)", "마지막 교체일", "기준"]
     assert parts["역"].nunique() == len([s for s in STATIONS if s.in_service])  # 개통 전 역(북울산)은 부품이 없다
     assert set(parts["상태"]) <= {"교체 임박", "주의", "안전", "확인 필요"}  # 코드값이 아니라 화면과 같은 이름
     assert pd.api.types.is_datetime64_any_dtype(parts["다음 교체일"])  # 문자열이 아니라 엑셀 날짜형
@@ -378,7 +378,7 @@ def test_template_has_empty_record_sheet_and_separate_examples():
     assert xl.sheet_names == ["기록", "작성 예시"]
     records, examples = (pd.read_excel(xl, s) for s in xl.sheet_names)
     assert list(records.columns) == COLUMNS and records.empty  # 업로드는 첫 시트만 읽는다
-    assert len(examples) == 3
+    assert len(examples) == 5
 
 
 def test_record_list_filters_by_station_and_part_and_pages():
@@ -443,3 +443,23 @@ def test_station_detail_shows_psd_install_date_separately():
 
 def test_undo_unknown_upload_is_404():
     assert client.post("/api/upload-batches/999999/undo").status_code == 404
+
+
+def test_risk_ranking_is_sorted_and_part_detail_has_risk():
+    """2026-11-16 ML 위험도(psd/risk.py). 모델 파일이 없으면 model=None으로 비어 있어야 한다."""
+    r = client.get("/api/risk?limit=5").json()
+    if r["model"] is None:
+        assert r["parts"] == []
+        return
+    probs = [x["prob"] for x in r["parts"]]
+    assert probs == sorted(probs, reverse=True) and [x["rank"] for x in r["parts"]] == [1, 2, 3, 4, 5]
+    assert set(r["model"]["metrics"]) >= {"challenger", "baseline"}
+    d = client.get(f"/api/parts/{r['parts'][0]['part_id']}").json()
+    assert d["risk"]["rank"] == 1
+
+
+def test_risk_models_lists_versions_and_retrain_state():
+    r = client.get("/api/risk-models").json()
+    assert set(r) == {"active", "models", "retrain"}
+    if r["active"]:
+        assert r["active"]["status"] == "active" and r["models"][0]["version"] >= r["active"]["version"]

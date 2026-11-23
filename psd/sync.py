@@ -24,6 +24,11 @@ class RecordSig:
     replaced_on: date
     reason: str
     parts: tuple[str, ...]  # 정렬된 부품 코드
+    # 2026-11-16 정비기록 세부 항목. 기본값은 그 전 기록의 뜻(전체 교체, 세부 항목 없음)
+    action: str = "full"
+    sub_parts: tuple[str, ...] = ()  # 정렬된 세부 부품 코드(catalog.SUB_PARTS)
+    symptom: str | None = None
+    cause: str | None = None
 
     @property
     def slot(self) -> tuple[int, int | None, date]:

@@ -34,8 +34,6 @@ def main() -> None:
                     lo_years=r.cycle.lo_years,
                     hi_years=r.cycle.hi_years,
                     judgment=r.cycle.judgment,
-                    weather_start=start,
-                    weather_end=end,
                 )
             )
         session.commit()

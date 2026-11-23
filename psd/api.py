@@ -11,13 +11,13 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload
 
-from psd.calibrate import PRIOR_FAILURES, PSD_START, Calibrated, calibration_map
+from psd.calibrate import MAX_YEARS, PSD_START, Calibrated, calibration_map
 from psd.catalog import NAME_TO_CODE, PART_TYPES, SIDES
 from psd.cycle import (
     IFM_WEIGHT_RANGE,
@@ -37,6 +37,7 @@ from psd.cycle import (
 from psd.db import get_session
 from psd.excel_io import (
     REASON_CODE_TO_LABEL,
+    detail_labels,
     SIDE_LABEL_TO_CODE,
     ExcelFormatError,
     ParsedRow,
@@ -59,6 +60,7 @@ from psd.status import (
     worst,
 )
 from psd.sync import RecordSig, diff_records
+from psd.catalog import ACTIONS, CAUSES as CAUSE_NAMES, SUB_PART_CODE_TO_NAME, SUB_PART_OF, SYMPTOMS
 
 app = FastAPI(title="동해선 PSD 교체주기 API")
 # CORS는 열지 않는다: 화면(psd/web)은 같은 주소에서 나가서 필요 없고, allow_origins=["*"]로 두면 아무 웹사이트나
@@ -143,7 +145,15 @@ def _cal_dict(cal: Calibrated | None) -> dict | None:
         "units": cal.units,
         "observed_years": round(cal.observed_years, 1),
         "data_share": round(cal.data_share, 2),
-        "prior_failures": PRIOR_FAILURES,
+        "prior_failures": round(cal.prior_weight, 1),
+        "tau": round(cal.tau, 3),
+        # 2026-11-16 v2: 80% 범위(10년 제한 전), 부품 종류 공통 형상모수 β와 공식 치우침 κ
+        "lo_years": round(cal.lo_years, 2),
+        "hi_years": round(cal.hi_years, 2),
+        "shape": round(cal.shape, 2),
+        "shape_lo": round(cal.shape_lo, 2),
+        "shape_hi": round(cal.shape_hi, 2),
+        "bias": round(cal.bias, 2),
     }
 
 
@@ -163,6 +173,8 @@ def _unit_dict(u: UnitStatus) -> dict:
         "cycle_years": round(u.cycle_years, 2),  # 예정일에 쓴 주기(기록 반영)
         "calibration": _cal_dict(u.cal),
         "due": u.due,
+        "due_lo": u.due_lo,  # 예정일 80% 범위(주기 범위로 계산, 2026-11-16)
+        "due_hi": u.due_hi,
         "days_left": u.days_left,
         "status": u.status,
     }
@@ -323,6 +335,8 @@ def work_items(within_days: int = 730, db: Session = Depends(get_db)):
                 "part_type_code": code,
                 "part_name": NAME_BY_CODE[code],
                 "due": due,
+                "due_lo": first.due_lo,
+                "due_hi": first.due_hi,
                 "days_left": first.days_left,
                 "status": status,
                 "count": len(units),
@@ -358,6 +372,7 @@ def recent_replacement_records(
     date_from: date | None = None,
     date_to: date | None = None,
     reason: str | None = None,
+    action: str | None = None,
     db: Session = Depends(get_db),
 ):
     """교체 기록 목록(교체 기록 탭의 기록 찾기, 현황의 "최근 교체 기록").
@@ -365,13 +380,15 @@ def recent_replacement_records(
     order=created(기본): 입력 순서 최신부터. 업로드가 제대로 들어갔는지 확인하는 용도.
     한 번에 올린 기록은 입력 시각이 같아서, 그 안에서는 교체일 최신부터 늘어놓는다.
     order=replaced: 교체일 최신부터.
-    station_id·part(부품 종류 코드)·교체일 기간(date_from~date_to, 양 끝 포함)·reason(사유 코드)으로 거르고
+    station_id·part(부품 종류 코드)·교체일 기간(date_from~date_to, 양 끝 포함)·reason(사유 코드)·action(조치 코드)으로 거르고
     offset으로 쪽을 넘긴다. total은 거른 뒤의 건수.
     """
     if order not in ("created", "replaced"):
         raise HTTPException(400, "order는 created 또는 replaced여야 함")
     if reason is not None and reason not in REASON_CODE_TO_LABEL:
         raise HTTPException(400, f"reason은 {', '.join(REASON_CODE_TO_LABEL)} 중 하나여야 함")
+    if action is not None and action not in ACTIONS:
+        raise HTTPException(400, f"action은 {', '.join(ACTIONS)} 중 하나여야 함")
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
     newest_replaced = (ReplacementRecord.replaced_on.desc(), ReplacementRecord.id.desc())
@@ -387,6 +404,8 @@ def recent_replacement_records(
         where.append(ReplacementRecord.replaced_on <= date_to)
     if reason:
         where.append(ReplacementRecord.reason == reason)
+    if action:
+        where.append(ReplacementRecord.action == action)
     records = (
         db.execute(
             select(ReplacementRecord)
@@ -413,6 +432,7 @@ def recent_replacement_records(
                 "location": r.door.label if r.door else "역 공통(종합제어반)",
                 "reason": r.reason,
                 "parts": [NAME_BY_CODE[p.part_type_code] for p in r.parts],
+                **_detail_dict(_sig_of(r)),
                 "created_by": r.created_by,
                 "created_at": r.created_at,
             }
@@ -642,14 +662,153 @@ def get_part(part_id: int, db: Session = Depends(get_db)):
         "calibration": _cal_dict(cal),
         "install_date": unit.install_date,
         "due": unit.due,
+        "due_lo": unit.due_lo,
+        "due_hi": unit.due_hi,
         "days_left": unit.days_left,
         "status": unit.status,
         "weather_basis": weather_basis,
+        "risk": (lambda r: _risk_dict(r) if r else None)((_risk_preds(db) or {}).get(part.id)),
         "history": [
-            {"replaced_on": rec.replaced_on, "reason": rec.reason, "created_by": rec.created_by}
-            for rec, _rp in history
+            {"replaced_on": rec.replaced_on, "reason": rec.reason, "created_by": rec.created_by,
+             "action": rec.action, "action_label": ACTIONS[rec.action],
+             "sub_parts": [SUB_PART_CODE_TO_NAME[c] for c in _split(rp.sub_parts)],
+             "symptom": SYMPTOMS[rec.symptom]["name"] if rec.symptom else None,
+             "cause": CAUSE_NAMES[rec.cause] if rec.cause else None}
+            for rec, rp in history
         ],
     }
+
+
+# ---------- 4-4b. 고장 위험도 ML 모델 (psd/risk.py, 2026-11-16) ----------
+
+RISK_FACTORS = ["fails_since_full", "fails_total", "door_fail_36m", "age_full", "yrs_since_fail"]  # 화면에 보여 줄 특징
+
+
+def _risk_preds(db: Session) -> dict | None:
+    from psd import risk
+
+    return risk.predict_all(db)
+
+
+def _model_row_dict(m) -> dict:
+    return {"version": m.id, "trained_at": m.trained_at, "trigger": m.trigger, "data_end": m.data_end,
+            "last_train_snapshot": m.last_train_snapshot, "train_rows": m.train_rows, "status": m.status, "reason": m.reason,
+            "metrics": m.metrics, "importance": m.importance[:6]}
+
+
+def _risk_model_info(db: Session) -> dict | None:
+    from psd import risk
+
+    row = risk.active_row(db)
+    return {**_model_row_dict(row), "horizon_days": risk.HORIZON_DAYS} if row is not None else None
+
+
+# 재학습은 업로드·되돌리기가 끝난 뒤 뒤에서 돈다(30초 안팎). 한 번에 하나만 돌고, 도는 중에 또 요청이 오면
+# 끝난 뒤 한 번 더 돈다(그 사이 들어온 기록까지 반영). 테스트처럼 끄고 싶으면 환경변수 PSD_AUTO_RETRAIN=0
+import threading  # noqa: E402
+
+_retrain_lock = threading.Lock()
+_retrain_state: dict = {"running": False, "again": False, "last": None, "error": None, "started_at": None}
+
+
+def _retrain_job(trigger: str, force: bool = False) -> None:
+    from psd import risk
+
+    with _retrain_lock:
+        if _retrain_state["running"]:
+            _retrain_state["again"] = True
+            return
+        _retrain_state.update(running=True, again=False, error=None, started_at=datetime.now())
+    try:
+        while True:
+            db = get_session()
+            try:
+                _retrain_state["last"] = {**risk.retrain(db, trigger, force=force), "finished_at": datetime.now().isoformat(timespec="seconds")}
+            except Exception as e:  # 학습이 실패해도 업로드는 이미 끝났다 — 화면에 알리고 지금 모델을 그대로 쓴다
+                db.rollback()
+                _retrain_state["error"] = f"{type(e).__name__}: {e}"
+            finally:
+                db.close()
+            with _retrain_lock:
+                if not _retrain_state["again"]:
+                    _retrain_state["running"] = False
+                    return
+                _retrain_state["again"] = False
+            force = False
+    except BaseException:
+        _retrain_state["running"] = False
+        raise
+
+
+def _auto_retrain(background: BackgroundTasks, trigger: str) -> None:
+    import os
+
+    if os.environ.get("PSD_AUTO_RETRAIN", "1") != "0":
+        background.add_task(_retrain_job, trigger)
+
+
+@app.get("/api/risk-models")
+def list_risk_models(limit: int = 20, db: Session = Depends(get_db)):
+    """AI 모델 버전 이력(최근부터)과 지금 쓰는 모델, 재학습 상태."""
+    from psd.models import RiskModel
+
+    rows = db.execute(select(RiskModel).order_by(RiskModel.id.desc()).limit(max(1, min(limit, 100)))).scalars().all()
+    st = _retrain_state
+    return {"active": _risk_model_info(db), "models": [_model_row_dict(m) for m in rows],
+            "retrain": {"running": st["running"], "started_at": st["started_at"], "last": st["last"], "error": st["error"]}}
+
+
+@app.get("/api/virtual-field")
+def virtual_field():
+    """가상 현장 결과(scripts/virtual_field.py → data/processed/virtual_field.csv). 없으면 rows=[]."""
+    import csv
+
+    path = Path(__file__).resolve().parent.parent / "data" / "processed" / "virtual_field.csv"
+    if not path.exists():
+        return {"rows": []}
+    num = lambda v: float(v) if v not in ("", None) else None  # noqa: E731
+    with path.open(encoding="utf-8-sig") as fh:
+        rows = [{k: (v if k in ("scenario", "cutoff") else num(v)) for k, v in r.items()} for r in csv.DictReader(fh)]
+    return {"rows": rows}
+
+
+@app.post("/api/risk-models/retrain", status_code=202)
+def retrain_risk_model(background: BackgroundTasks, force: bool = False):
+    """지금 다시 학습(뒤에서 돈다). force면 기록이 그대로여도 학습한다."""
+    background.add_task(_retrain_job, "manual", force)
+    return {"queued": True}
+
+
+def _risk_dict(r: dict) -> dict:
+    f = r["features"]
+    return {"prob": round(r["prob"], 4), "rank": r["rank"], "of": r["of"],
+            "factors": {k: round(f[k], 2) for k in RISK_FACTORS}}
+
+
+@app.get("/api/risk")
+def risk_ranking(limit: int = 20, station_id: int | None = None, db: Session = Depends(get_db)):
+    """6개월 안 고장 확률이 높은 부품(문·부품 하나하나). 모델이 없으면 model=None(scripts/train_risk_model.py로 만든다)."""
+    from psd import risk
+
+    preds = risk.predict_all(db)
+    if preds is None:
+        return {"model": None, "parts": []}
+    limit = max(1, min(limit, 200))
+    ids = sorted(preds, key=lambda i: preds[i]["rank"])
+    parts = {p.id: p for p in db.execute(select(Part).options(joinedload(Part.station), joinedload(Part.door))
+                                          .where(Part.id.in_(ids[:2000]))).scalars()}
+    rows = []
+    for pid in ids:
+        p = parts.get(pid)
+        if p is None or (station_id is not None and p.station_id != station_id):
+            continue
+        rows.append({"part_id": pid, "station_id": p.station_id, "station_name": p.station.name,
+                     "location": p.door.label if p.door else "역 공통(종합제어반)", "part_name": NAME_BY_CODE[p.part_type_code],
+                     **_risk_dict(preds[pid])})
+        if len(rows) >= limit:
+            break
+    probs = [r["prob"] for r in preds.values()]
+    return {"model": _risk_model_info(db), "mean_prob": round(sum(probs) / len(probs), 4), "parts": rows}
 
 
 # ---------- 4-5. 날씨 영향 ----------
@@ -741,12 +900,13 @@ def _next_month(ym: tuple[int, int], n: int) -> tuple[int, int]:
     return idx // 12, idx % 12 + 1
 
 
-def _plan_counts(db: Session, today: date, buckets: list, bucket_of) -> tuple[dict, dict, dict[str, int]]:
+def _plan_counts(db: Session, today: date, buckets: list, bucket_of, which: str = "years") -> tuple[dict, dict, dict[str, int]]:
     """앞으로의 교체 예정을 기간(buckets)마다 부품 종류별·역 x 부품 종류별로 센다.
 
     교체한 뒤 다음 주기 예정일도 기간 안이면 다시 센다. 이미 지난(위험) 부품은 지금 기간에 넣는다.
     확인 필요(기록 없이 예정일 지남)는 언제 바꿀지 알 수 없어 따로 센다.
     역별은 {(역 id, 부품 코드): 개수}로 준다 — 역 합계만 주면 그 역에 무슨 부품을 챙겨 가야 할지 몰랐다(2026-11-02).
+    which: "years"(예정 주기) | "lo_years" | "hi_years"(주기 80% 범위의 양 끝으로 세 보기, 2026-11-16).
     """
     window = set(buckets)
     by_part = {b: {p["code"]: 0 for p in PART_TYPES} for b in buckets}
@@ -755,7 +915,8 @@ def _plan_counts(db: Session, today: date, buckets: list, bucket_of) -> tuple[di
 
     cal_map = calibration_map(db, today)
     for part, _cycle in _joined_parts(db):  # 부품 열 값 캐시(psd/status.py) — 부품을 ORM 객체로 다시 읽지 않는다
-        years = cal_map[(part.station_id, part.part_type_code)].years
+        c = cal_map[(part.station_id, part.part_type_code)]
+        years = c.years if which == "years" else max(0.5, min(getattr(c, which), MAX_YEARS))
         due = next_due_date(part.install_date, years)
         days_left = (due - today).days
         status = judge_status(days_left, part.has_record)
@@ -825,6 +986,10 @@ def _replacement_plan(span: str, db: Session) -> dict:
         buckets = [(today.year + i, 0) for i in range(6)]
         bucket_of, label, unit = (lambda d: (d.year, 0)), (lambda b: f"{b[0]}년"), "year"
     by_part, by_station, check = _plan_counts(db, today, buckets, bucket_of)
+    # 주기 80% 범위의 양 끝으로도 세어 본다 — 물량 계획을 "몇 개 안팎"으로 잡게(2026-11-16)
+    early, _s1, _c1 = _plan_counts(db, today, buckets, bucket_of, "lo_years")
+    late, _s2, _c2 = _plan_counts(db, today, buckets, bucket_of, "hi_years")
+    alt = {b: sorted((sum(early[b].values()), sum(late[b].values()), sum(by_part[b].values()))) for b in buckets}
     names = {s.id: s.name for s in db.execute(select(Station)).scalars()}
     # 계획은 예정 교체만 센다. 돌발 고장 대비 예비품은 지난 1년 고장 교체 수를 참고로 같이 준다 — 3년 계획에 타이밍벨트가
     # 0개로 나와도 실제로는 고장이 나고 있어, 0만 보고 발주하면 예비품이 모자랐다(2026-11-02)
@@ -844,6 +1009,8 @@ def _replacement_plan(span: str, db: Session) -> dict:
                 "sub": b[1],
                 "counts": by_part[b],
                 "total": sum(by_part[b].values()),
+                "total_lo": alt[b][0],  # 주기 범위 양 끝(빠르게·늦게)과 예정 주기로 센 수 중 가장 적은·많은 값
+                "total_hi": alt[b][2],
                 "stations": _station_rows(by_station[b], names),
             }
             for b in buckets
@@ -937,7 +1104,7 @@ def _resolve_rows(db: Session, parsed: list[ParsedRow]) -> list[tuple[ParsedRow,
         # PSD 사용개시 전 날짜(2026을 2016으로 치는 오타 등)가 들어가면 설치일이 그날로 바뀌어 부품이 수천 일 지난
         # "위험"이 됐다 — 주기 보정(psd/calibrate.py part_lives)은 이런 날짜를 빼지만 설치일 계산은 안 뺐다(2026-11-02 QA)
         if row.replaced_on < PSD_START[station.id]:
-            errors.append(f"{row.row_no}행: 교체일 {row.replaced_on}이 {station.name} PSD 사용개시일"
+            errors.append(f"{row.row_no}행: 작업일 {row.replaced_on}이 {station.name} PSD 사용개시일"
                           f"({PSD_START[station.id]})보다 앞섭니다")
             continue
 
@@ -962,15 +1129,32 @@ def _resolve_rows(db: Session, parsed: list[ParsedRow]) -> list[tuple[ParsedRow,
             errors.append(f"{row.row_no}행: 그 역·문에 없는 부품 종류: {missing}")
             continue
 
-        resolved.append((row, RecordSig(station.id, door_id, row.replaced_on, row.reason_code, tuple(part_codes))))
+        resolved.append((row, RecordSig(station.id, door_id, row.replaced_on, row.reason_code, tuple(part_codes),
+                                        row.action_code, row.sub_part_codes, row.symptom_code, row.cause_code)))
 
     if errors:
         raise HTTPException(400, {"message": f"{len(errors)}건 오류 — 아무것도 저장하지 않았습니다", "errors": errors})
     return resolved
 
 
+def _split(sub_parts: str | None) -> list[str]:
+    return [c for c in (sub_parts or "").split(",") if c]
+
+
 def _sig_of(r: ReplacementRecord) -> RecordSig:
-    return RecordSig(r.station_id, r.door_id, r.replaced_on, r.reason, tuple(sorted(p.part_type_code for p in r.parts)))
+    subs = tuple(sorted({c for p in r.parts for c in _split(p.sub_parts)}))
+    return RecordSig(r.station_id, r.door_id, r.replaced_on, r.reason, tuple(sorted(p.part_type_code for p in r.parts)),
+                     r.action or "full", subs, r.symptom, r.cause)
+
+
+def _detail_dict(sig: RecordSig) -> dict:
+    """화면에 보여 줄 조치·세부 부품·증상·원인(이름)."""
+    return {
+        "action": sig.action, "action_label": ACTIONS[sig.action],
+        "sub_parts": [SUB_PART_CODE_TO_NAME[c] for c in sig.sub_parts],
+        "symptom": SYMPTOMS[sig.symptom]["name"] if sig.symptom else None,
+        "cause": CAUSE_NAMES[sig.cause] if sig.cause else None,
+    }
 
 
 def _record_dict(r: ReplacementRecord) -> dict:
@@ -979,15 +1163,21 @@ def _record_dict(r: ReplacementRecord) -> dict:
         "station_id": r.station_id, "door_id": r.door_id, "replaced_on": r.replaced_on.isoformat(), "reason": r.reason,
         "parts": sorted(p.part_type_code for p in r.parts), "created_by": r.created_by,
         "created_at": r.created_at.isoformat() if r.created_at else None, "batch_id": r.batch_id,
+        "action": r.action, "sub_parts": sorted({c for p in r.parts for c in _split(p.sub_parts)}),
+        "symptom": r.symptom, "cause": r.cause,
     }
 
 
 def _add_record(db: Session, sig: RecordSig, created_by: str | None, batch_id: int | None, created_at: datetime | None = None) -> None:
     record = ReplacementRecord(replaced_on=sig.replaced_on, station_id=sig.station_id, door_id=sig.door_id,
-                               reason=sig.reason, created_by=created_by, batch_id=batch_id)
+                               reason=sig.reason, action=sig.action, symptom=sig.symptom, cause=sig.cause,
+                               created_by=created_by, batch_id=batch_id)
     if created_at is not None:
         record.created_at = created_at
-    record.parts = [ReplacementPart(part_type_code=code) for code in sig.parts]
+    record.parts = [
+        ReplacementPart(part_type_code=code, sub_parts=",".join(c for c in sig.sub_parts if SUB_PART_OF[c] == code) or None)
+        for code in sig.parts
+    ]
     db.add(record)
 
 
@@ -998,11 +1188,12 @@ def _delete_record(db: Session, r: ReplacementRecord) -> None:
 
 
 def _recompute_parts(db: Session, part_keys: set[tuple[int, int | None, str]]) -> None:
-    """부품의 설치일(마지막 교체일 — 점검은 빼고)과 기록 여부를 남은 기록으로 다시 맞춘다.
+    """부품의 설치일(마지막 전체 교체일)과 기록 여부를 남은 기록으로 다시 맞춘다.
 
     기록을 넣고 지운 뒤 한 번만 부른다. 넣은 기록마다 설치일을 앞뒤로 비교해 바꾸던 예전 방식은
     지우기가 함께 있으면 순서에 따라 틀릴 수 있어서, 끝난 상태에서 한 번에 다시 센다.
     점검(이상 없음)은 부품을 바꾼 게 아니라 설치일엔 안 들어가고 기록 여부(has_record)만 켠다.
+    2026-11-16: 일부 교체·수리도 부품이 새것이 되는 게 아니라 설치일을 바꾸지 않는다(향후_방향_MVP이후.md 5절).
     """
     if not part_keys:
         return
@@ -1011,7 +1202,7 @@ def _recompute_parts(db: Session, part_keys: set[tuple[int, int | None, str]]) -
         (sid, door_id, code): (last, n)
         for sid, door_id, code, last, n in db.execute(
             select(ReplacementRecord.station_id, ReplacementRecord.door_id, ReplacementPart.part_type_code,
-                   func.max(case((ReplacementRecord.reason != "check", ReplacementRecord.replaced_on))),
+                   func.max(case((ReplacementRecord.action == "full", ReplacementRecord.replaced_on))),
                    func.count(ReplacementRecord.id))
             .join(ReplacementPart, ReplacementPart.record_id == ReplacementRecord.id)
             .where(ReplacementRecord.station_id.in_(station_ids))
@@ -1042,7 +1233,7 @@ class _Labels:
         return {
             "replaced_on": sig.replaced_on, "station_id": sig.station_id, "station_name": self.station[sig.station_id],
             "location": self.door[sig.door_id] if sig.door_id else "역 공통(종합제어반)", "reason": sig.reason,
-            "parts": [NAME_BY_CODE[c] for c in sig.parts], "created_by": created_by,
+            "parts": [NAME_BY_CODE[c] for c in sig.parts], **_detail_dict(sig), "created_by": created_by,
         }
 
 
@@ -1054,7 +1245,7 @@ def _sync(db: Session, content: bytes, file_name: str, delete_missing: bool, upl
     """엑셀을 DB와 비교하고 엑셀에 맞춘다(flush까지만). 커밋·롤백은 부르는 쪽이 정한다 —
     비교 화면·정비기록 시연은 롤백, "반영하기"는 커밋.
 
-    - 엑셀에만 있음 → 넣는다 / 같은 역·문·날짜인데 사유·부품이 다름 → 고친다
+    - 엑셀에만 있음 → 넣는다 / 같은 역·문·날짜인데 사유·조치·부품·세부 항목이 다름 → 고친다
     - DB에만 있음(비교 범위 안) → delete_missing일 때만 지운다(화면에서 체크해야 지움)
     - DB에 같은 기록이 여러 번 → 하나만 남긴다
     """
@@ -1141,8 +1332,8 @@ def _group_snapshot(db: Session, keys: set[tuple[int, str]]) -> dict[tuple[int, 
     today = date.today()
     out: dict[tuple[int, str], dict] = {}
     cycle_map = _cycle_map(db)
+    cal = calibration_map(db, today, use_cache=False)  # 커밋 전 상태를 봐야 한다. 형상·치우침을 전 역으로 함께 추정해 한 번에 계산
     for station_id in {s for s, _ in keys}:
-        cal = calibration_map(db, today, station_id, use_cache=False)  # 커밋 전 상태를 봐야 한다
         units: dict[str, list[UnitStatus]] = {}
         for p in db.execute(select(Part).where(Part.station_id == station_id)).scalars():
             if (station_id, p.part_type_code) in keys:
@@ -1194,22 +1385,26 @@ async def compare_replacement_records(file: UploadFile, delete_missing: bool = F
 
 
 @app.post("/api/replacement-records/sync", status_code=201)
-async def sync_replacement_records(file: UploadFile, delete_missing: bool = Form(False), uploaded_by: str | None = Form(None),
-                                   db: Session = Depends(get_db)):
+async def sync_replacement_records(background: BackgroundTasks, file: UploadFile, delete_missing: bool = Form(False),
+                                   uploaded_by: str | None = Form(None), db: Session = Depends(get_db)):
     """비교 화면의 "반영하기": 엑셀에 맞춰 DB를 고치고 업로드 이력을 남긴다(열 형식은 psd/excel_io.py).
     uploaded_by는 화면에서 적은 올린 사람 이름(선택) — 이력에서 누가 올렸는지 보려고(2026-11-02)."""
     result = _sync(db, await file.read(), file.filename or "업로드.xlsx", delete_missing, uploaded_by)
     db.commit()
+    if result["batch_id"]:
+        _auto_retrain(background, "upload")  # 기록이 바뀌었으면 AI 모델을 다시 학습해 보고, 나을 때만 바꾼다
     return result
 
 
-# 정비기록 시연 탭에서 쓰는 샘플(scripts/make_sample_records.py로 만든 파일)
-SAMPLE_RECORDS_PATH = Path(__file__).resolve().parent.parent / "data" / "dummy" / "정비기록_샘플_329건.xlsx"
+# 정비기록 시연 탭에서 쓰는 샘플: scripts/generate_dummy_records.py가 만든 최근 두 달치(초기 데이터에 안 넣은 기간).
+# 건수가 이름에 들어가 다시 만들면 바뀌므로 data/dummy/의 정비기록_샘플_*건.xlsx 하나를 찾는다
+_SAMPLES = sorted((Path(__file__).resolve().parent.parent / "data" / "dummy").glob("정비기록_샘플_*건.xlsx"))
+SAMPLE_RECORDS_PATH = _SAMPLES[-1] if _SAMPLES else Path("정비기록_샘플_없음.xlsx")
 
 
 def _sample_bytes() -> bytes:
     if not SAMPLE_RECORDS_PATH.exists():
-        raise HTTPException(404, f"샘플 파일이 없음: {SAMPLE_RECORDS_PATH.name} (scripts/make_sample_records.py로 만든다)")
+        raise HTTPException(404, f"샘플 파일이 없음: {SAMPLE_RECORDS_PATH.name} (scripts/generate_dummy_records.py --save로 만든다)")
     return SAMPLE_RECORDS_PATH.read_bytes()
 
 
@@ -1224,7 +1419,9 @@ def sample_records():
         "file": SAMPLE_RECORDS_PATH.name,
         "rows": [
             {"station_name": r.station_name, "side_label": r.side_label, "door_no": r.door_no, "replaced_on": r.replaced_on,
-             "reason": REASON_CODE_TO_LABEL[r.reason_code], "parts": ", ".join(r.part_names), "created_by": r.created_by}
+             "reason": REASON_CODE_TO_LABEL[r.reason_code], "parts": ", ".join(r.part_names), "created_by": r.created_by,
+             **{k: v for k, v in zip(("action", "sub_parts", "symptom", "cause"),
+                                     detail_labels(r.action_code, r.sub_part_codes, r.symptom_code, r.cause_code).values())}}
             for r in parsed
         ],
     }
@@ -1270,7 +1467,7 @@ def list_upload_batches(limit: int = 20, db: Session = Depends(get_db)):
 
 
 @app.post("/api/upload-batches/{batch_id}/undo")
-def undo_upload_batch(batch_id: int, db: Session = Depends(get_db)):
+def undo_upload_batch(batch_id: int, background: BackgroundTasks, db: Session = Depends(get_db)):
     """업로드 한 번을 되돌린다: 그때 넣은 기록은 지우고, 그때 지우거나 고친 기록은 원래대로 다시 넣는다.
 
     나중 업로드가 이 업로드의 기록을 또 고쳤을 수 있어서, 가장 최근 업로드부터 차례로만 되돌린다.
@@ -1288,7 +1485,9 @@ def undo_upload_batch(batch_id: int, db: Session = Depends(get_db)):
         .unique().scalars().all()
     )
     restore = [
-        (RecordSig(x["station_id"], x["door_id"], date.fromisoformat(x["replaced_on"]), x["reason"], tuple(x["parts"])), x)
+        (RecordSig(x["station_id"], x["door_id"], date.fromisoformat(x["replaced_on"]), x["reason"], tuple(x["parts"]),
+                   x.get("action") or ("none" if x["reason"] == "check" else "full"), tuple(x.get("sub_parts") or ()),
+                   x.get("symptom"), x.get("cause")), x)
         for x in batch.removed
     ]
     part_keys = ({(r.station_id, r.door_id, p.part_type_code) for r in added for p in r.parts}
@@ -1302,17 +1501,25 @@ def undo_upload_batch(batch_id: int, db: Session = Depends(get_db)):
     _recompute_parts(db, part_keys)
     batch.undone_at = datetime.now()
     db.commit()
+    _auto_retrain(background, "undo")
     return {"file": batch.file_name, "deleted": len(added), "restored": len(restore)}
 
 
 @app.get("/api/replacement-records/template")
 def download_upload_template():
-    """엑셀 업로드 양식: 첫 시트 "기록"은 열 이름만, 둘째 시트 "작성 예시"에 예시 3행.
+    """엑셀 업로드 양식: 첫 시트 "기록"은 열 이름만, 둘째 시트 "작성 예시"에 예시 5행.
     업로드는 첫 시트만 읽어서, 예시를 안 지워도 가짜 기록이 들어가지 않는다."""
     examples = [
-        {"역": "거제해맞이", "방향": "부전 방면", "문번호": "1-1", "교체일": "2026-10-15", "사유": "고장", "부품": "IFM 릴레이", "입력자": "홍길동"},
-        {"역": "거제해맞이", "방향": "", "문번호": "", "교체일": "2026-10-15", "사유": "예방 교체", "부품": "종합제어반 릴레이", "입력자": "홍길동"},
-        {"역": "거제해맞이", "방향": "부전 방면", "문번호": "1-2", "교체일": "2026-10-16", "사유": "점검(이상 없음)", "부품": "전체", "입력자": "홍길동"},
+        {"역": "거제해맞이", "방향": "부전 방면", "문번호": "1-1", "작업일": "2026-10-15", "사유": "고장", "조치": "전체 교체",
+         "부품": "IFM 릴레이", "증상": "장애물 감지 오작동", "원인": "습기·부식", "입력자": "홍길동"},
+        {"역": "거제해맞이", "방향": "부전 방면", "문번호": "2-3", "작업일": "2026-10-15", "사유": "고장", "조치": "일부 교체",
+         "부품": "DCM", "세부 부품": "전원부 콘덴서", "증상": "제어·통신 이상", "원인": "열", "입력자": "홍길동"},
+        {"역": "거제해맞이", "방향": "부전 방면", "문번호": "3-1", "작업일": "2026-10-15", "사유": "고장", "조치": "일부 수리",
+         "부품": "타이밍벨트", "증상": "소음·진동", "원인": "마모", "입력자": "홍길동"},
+        {"역": "거제해맞이", "방향": "", "문번호": "", "작업일": "2026-10-15", "사유": "예방 정비", "조치": "전체 교체",
+         "부품": "종합제어반 릴레이", "입력자": "홍길동"},
+        {"역": "거제해맞이", "방향": "부전 방면", "문번호": "1-2", "작업일": "2026-10-16", "사유": "점검(이상 없음)", "조치": "없음",
+         "부품": "전체", "입력자": "홍길동"},
     ]
     return _xlsx_response(template_bytes(examples), "PSD_교체기록_업로드양식.xlsx", "PSD_upload_template.xlsx")
 
@@ -1333,9 +1540,10 @@ def export_replacement_records(db: Session = Depends(get_db)):
             "역": r.station.name,
             "방향": SIDES[r.door.side] if r.door else "",
             "문번호": f"{r.door.car}-{r.door.position}" if r.door else "",
-            "교체일": r.replaced_on.isoformat(),
+            "작업일": r.replaced_on.isoformat(),
             "사유": REASON_CODE_TO_LABEL[r.reason],
             "부품": ",".join(NAME_BY_CODE[c] for c in sorted(p.part_type_code for p in r.parts)),
+            **detail_labels(*(lambda g: (g.action, g.sub_parts, g.symptom, g.cause))(_sig_of(r))),
             "입력자": r.created_by or "",
         }
         for r in records
@@ -1427,7 +1635,7 @@ def _station_pdf(db: Session, station: Station) -> bytes:
         statuses=station_unit_statuses(db, station.id),
         doors=doors,
         records=[
-            RecordInfo(r.replaced_on, r.door.label if r.door else "역 공통", [p.part_type_code for p in r.parts], r.reason, r.created_by)
+            RecordInfo(r.replaced_on, r.door.label if r.door else "역 공통", [p.part_type_code for p in r.parts], r.reason, r.created_by, r.action)
             for r in recent
         ],
         record_total=total,

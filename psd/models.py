@@ -125,7 +125,12 @@ class ReplacementRecord(Base):
     replaced_on: Mapped[dt.date] = mapped_column(Date)
     station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"))
     door_id: Mapped[int | None] = mapped_column(ForeignKey("doors.id"), nullable=True)
-    reason: Mapped[str] = mapped_column(String(10))  # "fail" | "prev" | "with" | "check"(점검 이상 없음 — 교체 아님)
+    reason: Mapped[str] = mapped_column(String(10))  # 왜 했나: "fail" | "prev" | "with" | "check"(점검 이상 없음 — 교체 아님)
+    # 무엇을 했나(psd/catalog.py ACTIONS): "full" 전체 교체 | "partial" 일부 교체 | "overhaul" 전체 수리 | "repair" 일부 수리
+    # | "none"(점검만). 2026-11-16 추가, 그 전 기록은 전부 전체 교체로 본다. 설치일은 전체 교체 때만 바뀐다
+    action: Mapped[str] = mapped_column(String(10), default="full")
+    symptom: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 고장 증상 코드(catalog.SYMPTOMS)
+    cause: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 고장 원인 추정 코드(catalog.CAUSES)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
     created_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
     batch_id: Mapped[int | None] = mapped_column(ForeignKey("upload_batches.id"), nullable=True)  # 이 기록을 넣은 업로드
@@ -143,6 +148,8 @@ class ReplacementPart(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     record_id: Mapped[int] = mapped_column(ForeignKey("replacement_records.id"))
     part_type_code: Mapped[str] = mapped_column(ForeignKey("part_types.code"))
+    # 일부 교체·일부 수리한 세부 부품 코드(catalog.SUB_PARTS), 쉼표로 이어 정렬해 둔다. 전체 교체·수리는 비움
+    sub_parts: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     record: Mapped[ReplacementRecord] = relationship(back_populates="parts")
     part_type: Mapped[PartType] = relationship()
@@ -160,8 +167,29 @@ class CycleResult(Base):
     hi_years: Mapped[float] = mapped_column(Float)
     judgment: Mapped[str] = mapped_column(String(10))
     computed_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
-    weather_start: Mapped[dt.date] = mapped_column(Date)
-    weather_end: Mapped[dt.date] = mapped_column(Date)
 
     station: Mapped[Station] = relationship()
     part_type: Mapped[PartType] = relationship()
+
+
+class RiskModel(Base):
+    """AI 고장 위험도 모델 버전(psd/risk.py, 2026-11-16 재학습 흐름). 학습할 때마다 1줄.
+
+    새 모델은 지금 쓰는 모델(status="active")이 학습 때 못 본 최근 기간으로 둘을 함께 맞혀 보고,
+    새 모델이 지지 않을 때만 바꿔 쓴다. 진 모델은 "rejected"로 남기고, 밀려난 모델은 "retired".
+    """
+
+    __tablename__ = "risk_models"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trained_at: Mapped[dt.datetime] = mapped_column(DateTime)
+    trigger: Mapped[str] = mapped_column(String(20))  # "upload" | "undo" | "manual" | "script"
+    data_key: Mapped[str] = mapped_column(String(200))  # 학습한 기록 상태(같으면 다시 학습하지 않음)
+    data_end: Mapped[dt.date] = mapped_column(Date)  # 학습에 쓴 기록의 마지막 날
+    last_train_snapshot: Mapped[dt.date] = mapped_column(Date)  # 최종 모델이 본 마지막 스냅샷 달
+    train_rows: Mapped[int] = mapped_column()
+    status: Mapped[str] = mapped_column(String(10))  # "active" | "rejected" | "retired"
+    reason: Mapped[str] = mapped_column(String(300))  # 바꿨거나 안 바꾼 이유
+    metrics: Mapped[dict] = mapped_column(JSON)  # {"holdout": [from, to], "challenger", "champion", "baseline", ...}
+    importance: Mapped[list] = mapped_column(JSON)
+    file_name: Mapped[str] = mapped_column(String(100))

@@ -97,3 +97,17 @@ def test_counts_tally_all_four_statuses():
         to_unit_status(_part(TODAY, True), _cycle(10.0), today=TODAY),  # 초록
     ]
     assert counts(units) == {"빨강": 1, "노랑": 1, "확인_필요": 1, "초록": 1}
+
+
+def test_due_range_follows_cycle_range_and_caps_at_ten_years():
+    """2026-11-16 7단계: 예정일 범위 = 설치일 + 주기 80% 범위(10년 제한)."""
+    from datetime import date
+
+    from psd.calibrate import Calibrated
+    from psd.status import UnitStatus
+
+    cal = Calibrated(6.0, 6.0, 5, 30, 100.0, 6.0, lo_years=5.0, hi_years=12.0)
+    u = UnitStatus(1, 1, 1, "DCM", date(2022, 1, 1), True, None, date(2028, 1, 1), 0, "초록", cal)
+    assert u.due_lo == date(2027, 1, 1)
+    assert u.due_hi == date(2032, 1, 1)  # 12년이 아니라 10년
+    assert UnitStatus(1, 1, 1, "DCM", date(2022, 1, 1), True, None, date(2028, 1, 1), 0, "초록").due_lo is None

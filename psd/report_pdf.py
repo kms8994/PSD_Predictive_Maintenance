@@ -41,7 +41,8 @@ HEAD_BG = colors.HexColor("#f2f4f6")
 BORDER = colors.HexColor("#bfc6ce")
 FILL = {"빨강": colors.HexColor("#fbd9d6"), "확인_필요": colors.HexColor("#e3e6ea"), "노랑": colors.HexColor("#fdeec4")}
 STATE = {"빨강": ("교체 임박", RED), "확인_필요": ("확인 필요", GRAY), "노랑": ("주의", AMBER), "초록": ("안전", BLUE)}
-REASON = {"fail": "고장", "prev": "예방 교체", "with": "함께 교체", "check": "점검(이상 없음)"}
+REASON = {"fail": "고장", "prev": "예방 정비", "with": "함께 정비", "check": "점검(이상 없음)"}
+ACTION = {"full": "전체 교체", "partial": "일부 교체", "overhaul": "전체 수리", "repair": "일부 수리", "none": ""}
 NAME = {p["code"]: p["name"] for p in PART_TYPES}
 DOOR_CODES = [p["code"] for p in PART_TYPES if p["unit"] == "door"]
 STATION_CODES = [p["code"] for p in PART_TYPES if p["unit"] == "station"]
@@ -64,6 +65,7 @@ class RecordInfo:
     part_type_codes: list[str]
     reason: str
     created_by: str | None
+    action: str = "full"  # 조치(psd/catalog.py ACTIONS)
 
 
 @lru_cache
@@ -129,7 +131,7 @@ def build_station_pdf(
     def ps(size=9, f=None, color=colors.black, lead=None, align=0):
         return ParagraphStyle("p", fontName=f or font, fontSize=size, leading=lead or size * 1.35, textColor=color, alignment=align)
 
-    body, body_c, small, small_c = ps(9), ps(9, align=1), ps(8, color=MUTED), ps(8, color=MUTED, align=1)
+    body, small, small_c = ps(9), ps(8, color=MUTED), ps(8, color=MUTED, align=1)
     th = ps(8.5, bold, align=1)
     P = lambda text, style=body: Paragraph(text, style)  # noqa: E731
 
@@ -283,11 +285,14 @@ def build_station_pdf(
             story += [Spacer(1, 1 * mm), P(f"역 공통 · {NAME[u.part_type_code]}: 다음 교체 {_ymd(u.due)} ({left_text(u.days_left)}, {STATE[u.status][0]})")]
 
     # 5. 최근 교체 이력
-    story += section("5. 최근 교체 이력", f"최근 {len(records)}건 / 전체 {record_total:,}건")
-    rows = [["교체일", "위치", "부품", "사유", "입력"]]
-    rows += [[_ymd(r.replaced_on), r.location, P(escape(", ".join(NAME[c] for c in r.part_type_codes)), ps(8.5)),
-              REASON.get(r.reason, r.reason), r.created_by or "-"] for r in records] or [["교체 기록 없음", "", "", "", ""]]
-    story.append(grid_table(rows, [24 * mm, 36 * mm, CONTENT_W - 118 * mm, 24 * mm, 34 * mm],
+    story += section("5. 최근 정비 이력", f"최근 {len(records)}건 / 전체 {record_total:,}건")
+    rows = [["작업일", "위치", "부품", "사유·조치", "입력"]]
+    # 문 부품 전부를 점검한 줄은 "전체"로 줄인다 — 6종 이름을 다 쓰면 두 줄로 늘어 쪽이 넘어갔다(2026-11-16)
+    part_text = lambda codes: "전체" if set(codes) >= set(DOOR_CODES) else ", ".join(NAME[c] for c in codes)  # noqa: E731
+    rows += [[_ymd(r.replaced_on), r.location, P(escape(part_text(r.part_type_codes)), ps(8.5)),
+              " · ".join(x for x in (REASON.get(r.reason, r.reason), ACTION.get(r.action, r.action)) if x),
+              r.created_by or "-"] for r in records] or [["교체 기록 없음", "", "", "", ""]]
+    story.append(grid_table(rows, [24 * mm, 36 * mm, CONTENT_W - 118 * mm, 34 * mm, 24 * mm],
                             extra=[("ALIGN", (1, 1), (2, -1), "LEFT"), ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5)]
                             + ([("SPAN", (0, 1), (-1, 1))] if not records else [])))
 

@@ -32,6 +32,16 @@ class UnitStatus:
     cal: Calibrated | None = None  # 기록 반영 주기(psd/calibrate.py). 없으면 날씨 공식 주기 그대로
 
     @property
+    def due_lo(self) -> date | None:
+        """예정일 범위 앞 끝: 설치일 + 주기 80% 범위의 아래 끝(10년 제한). 보정이 없으면 None (2026-11-16 7단계)."""
+        return next_due_date(self.install_date, min(self.cal.lo_years, MAX_YEARS)) if self.cal else None
+
+    @property
+    def due_hi(self) -> date | None:
+        """예정일 범위 뒤 끝: 설치일 + 주기 80% 범위의 위 끝(10년 제한)."""
+        return next_due_date(self.install_date, min(self.cal.hi_years, MAX_YEARS)) if self.cal else None
+
+    @property
     def cycle_years(self) -> float:
         """예정일 계산에 쓴 주기: 기록 반영 주기가 있으면 그것, 없으면 날씨 공식 주기(둘 다 10년 이하)."""
         return self.cal.years if self.cal else min(self.cycle.base_years, MAX_YEARS)

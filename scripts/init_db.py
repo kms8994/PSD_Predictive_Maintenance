@@ -41,6 +41,19 @@ _NEW_COLUMNS = [
     ("stations", "in_service", "BOOLEAN NOT NULL DEFAULT TRUE"),
     ("replacement_records", "batch_id", "INT NULL"),  # 2026-11-01 업로드 이력(upload_batches)
     ("upload_batches", "uploaded_by", "VARCHAR(50) NULL"),  # 2026-11-02 업로드 이력에 올린 사람
+    # 2026-11-16 정비기록 세부 항목(데이터셋_v2_설계.md). 그 전 기록은 전체 교체로 보고, 점검은 아래에서 "none"으로 맞춘다
+    ("replacement_records", "action", "VARCHAR(10) NOT NULL DEFAULT 'full'"),
+    ("replacement_records", "symptom", "VARCHAR(10) NULL"),
+    ("replacement_records", "cause", "VARCHAR(10) NULL"),
+    ("replacement_parts", "sub_parts", "VARCHAR(200) NULL"),
+]
+
+
+# 모델에서 뺀 칸. 그대로 두면 NOT NULL이라 새 행을 넣을 때 실패한다 — 있으면 지운다(멱등).
+# cycle_results.weather_start/end: 계산할 때 저장만 하고 읽는 곳이 없었다(2026-11-16 정리)
+_DROP_COLUMNS = [
+    ("cycle_results", "weather_start"),
+    ("cycle_results", "weather_end"),
 ]
 
 
@@ -55,6 +68,12 @@ def sync_schema(engine) -> None:
             if column not in existing_columns:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
                 print(f"스키마 동기화: {table}.{column} 컬럼 추가")
+                if (table, column) == ("replacement_records", "action"):
+                    conn.execute(text("UPDATE replacement_records SET action = 'none' WHERE reason = 'check'"))
+        for table, column in _DROP_COLUMNS:
+            if table in existing_tables and column in {c["name"] for c in inspector.get_columns(table)}:
+                conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
+                print(f"스키마 동기화: {table}.{column} 칸 지움")
 
 
 def seed(session) -> None:

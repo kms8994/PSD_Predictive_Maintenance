@@ -105,6 +105,7 @@ def build_report_workbook(
         "읽는 법",
         "· 교체 임박 = 예정일까지 6개월 이하(이미 지난 것 포함), 주의 = 1년 이하, 확인 필요 = 교체 기록 없이 예정일이 지남(바꿨는지부터 확인).",
         "· 예정일 = 마지막 교체일(기록이 없으면 PSD 사용개시일) + 그 역·부품의 교체주기. 교체주기는 제조사 권장 10년을 역 날씨와 고장 기록으로 보정한 값입니다.",
+        "· 80% 범위 = 교체주기의 80% 범위로 계산한 예정일 범위(실제 교체 시기가 이 사이일 가능성 80%). 늦은 쪽은 권장 10년까지만 씁니다.",
         "· '교체 작업' 시트에 어느 안전문의 무엇을 언제까지 바꿀지 묶어 두었습니다. 완료일·비고 칸에 적어 현장에서 쓰세요.",
     ]
     for i, t in enumerate(notes):
@@ -149,7 +150,7 @@ def build_report_workbook(
 
     # ---------- 4. 전체 부품 ----------
     ws = wb.create_sheet("전체 부품")
-    cols = ["역", "방향", "문", "부품", "상태", "다음 교체일", "남은 일수", "남은 기간", "교체주기(년)", "마지막 교체일", "기준"]
+    cols = ["역", "방향", "문", "부품", "상태", "다음 교체일", "80% 범위 시작", "80% 범위 끝", "남은 일수", "남은 기간", "교체주기(년)", "마지막 교체일", "기준"]
     _header(ws, 1, cols)
 
     def sort_key(u: UnitStatus):
@@ -160,12 +161,12 @@ def build_report_workbook(
         d = doors.get(u.door_id) if u.door_id else None
         replaced = u.install_date != install_dates.get(u.station_id)
         ws.append([station_names[u.station_id], SIDES[d.side] if d else "역 공통", d.no if d else "종합제어반", NAME[u.part_type_code], None,
-                   u.due, u.days_left, left_text(u.days_left), round(u.cycle_years, 1), u.install_date,
+                   u.due, u.due_lo, u.due_hi, u.days_left, left_text(u.days_left), round(u.cycle_years, 1), u.install_date,
                    "마지막 교체일" if replaced else "PSD 사용개시일(교체 기록 없음)"])
         _status_cell(ws.cell(row=i, column=5), u.status)
-        for col in (6, 10):
+        for col in (6, 7, 8, 12):
             ws.cell(row=i, column=col).number_format = "yyyy-mm-dd"
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
-    _widths(ws, [10, 12, 11, 16, 11, 12, 9, 13, 11, 13, 26])
+    _widths(ws, [10, 12, 11, 16, 11, 12, 12, 12, 9, 13, 11, 13, 26])
     return wb

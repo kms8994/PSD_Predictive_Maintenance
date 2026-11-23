@@ -49,3 +49,11 @@ def test_duplicates_in_db_keep_the_oldest():
 def test_input_by_is_not_part_of_the_match():
     """입력자는 비교에 안 쓴다 — RecordSig에 입력자 칸이 없다."""
     assert "created_by" not in RecordSig.__dataclass_fields__
+
+
+def test_same_slot_with_different_action_is_a_change():
+    """2026-11-16: 같은 역·문·날짜에 조치나 세부 부품만 고쳐도 고친 기록으로 잡는다."""
+    db = [(1, sig(3))]
+    from dataclasses import replace
+    d = diff_records([replace(sig(3), action="partial", sub_parts=("DCM_CAP",))], db)
+    assert len(d.changed) == 1 and not d.new and not d.missing

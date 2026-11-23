@@ -77,7 +77,7 @@ def test_parse_upload_rejects_blank_replaced_on():
         {"역": "부전", "방향": "", "문번호": "", "교체일": None,
          "사유": "고장", "부품": "종합제어반 릴레이", "입력자": ""},
     ])
-    with pytest.raises(ExcelFormatError, match="교체일이 비어 있습니다"):
+    with pytest.raises(ExcelFormatError, match="작업일이 비어 있습니다"):
         parse_upload(content)
 
 
@@ -128,3 +128,48 @@ def test_parse_upload_reads_inspection_with_all_parts():
     assert door_row.part_names == ["모터", "타이밍벨트", "풀리", "도어 행거", "DCM", "IFM 릴레이"]
     assert station_row.reason_code == "check"  # 손으로 쓴 표기("이상 없음")도 받는다
     assert station_row.part_names == ["종합제어반 릴레이"]
+
+
+# ---------- 2026-11-16 조치·세부 부품·증상·원인 (데이터셋_v2_설계.md 1장) ----------
+
+def _row(**kw) -> dict:
+    base = {"역": "부전", "방향": "부전 방면", "문번호": "1-1", "작업일": "2026-01-15", "사유": "고장", "부품": "DCM", "입력자": ""}
+    return {**base, **kw}
+
+
+def test_old_template_without_action_reads_as_full_replacement_or_none():
+    """예전 양식(교체일, 조치 칸 없음)도 그대로 받는다: 교체는 전체 교체, 점검은 없음."""
+    old = [{"역": "부전", "방향": "부전 방면", "문번호": "1-1", "교체일": "2026-01-15", "사유": "예방 교체", "부품": "DCM", "입력자": ""},
+           {"역": "부전", "방향": "부전 방면", "문번호": "1-2", "교체일": "2026-01-15", "사유": "점검", "부품": "전체", "입력자": ""}]
+    import io
+
+    import pandas as pd
+    buf = io.BytesIO()
+    pd.DataFrame(old).to_excel(buf, index=False)
+    rows = parse_upload(buf.getvalue())
+    assert [(r.reason_code, r.action_code) for r in rows] == [("prev", "full"), ("check", "none")]
+
+
+def test_reads_action_sub_parts_symptom_cause():
+    r = parse_upload(_xlsx([_row(조치="일부 교체", **{"세부 부품": "제어 보드, 전원부 콘덴서"}, 증상="제어·통신 이상", 원인="열")]))[0]
+    assert (r.action_code, r.sub_part_codes, r.symptom_code, r.cause_code) == ("partial", ("DCM_BRD", "DCM_CAP"), "COMM", "HEAT")
+
+
+def test_action_aliases():
+    assert parse_upload(_xlsx([_row(부품="타이밍벨트", 조치="조정")]))[0].action_code == "repair"
+    assert parse_upload(_xlsx([_row(원인="미상")]))[0].cause_code == "UNKNOWN"
+
+
+@pytest.mark.parametrize("kw, msg", [
+    ({"조치": "일부 교체"}, "세부 부품을 적어야"),
+    ({"조치": "전체 교체", "세부 부품": "제어 보드"}, "일부 교체·일부 수리에만"),
+    ({"조치": "일부 교체", "세부 부품": "행거 롤러"}, "딸린 것이 아닙니다"),
+    ({"조치": "없음"}, r"점검\(이상 없음\)에만"),
+    ({"사유": "점검(이상 없음)", "조치": "전체 교체"}, "예방 정비로"),
+    ({"사유": "예방 정비", "증상": "소음·진동"}, "고장일 때만"),
+    ({"증상": "이상함"}, "증상은"),
+    ({"조치": "갈아끼움"}, "조치는"),
+])
+def test_detail_rules(kw, msg):
+    with pytest.raises(ExcelFormatError, match=msg):
+        parse_upload(_xlsx([_row(**kw)]))
