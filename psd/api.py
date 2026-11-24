@@ -53,6 +53,7 @@ from psd.status import (
     to_unit_status,
     worst,
 )
+from psd.stations import LINE_NAME, STATION_BY_ID, STATION_ID_BY_NAME, environment
 from psd.sync import RecordSig, diff_records
 
 app = FastAPI(title="동해선 PSD 교체주기 API")
@@ -176,7 +177,7 @@ def get_today():
 def list_part_types():
     """예측 단위(장애부위 소분류) 목록과 양식의 조치·장애인지·선로. 화면의 고정 표시용 — 계산값은 아님.
     taxonomy: 어느 분류표를 읽었는지("private" 실제 / "sample" 예시)."""
-    return {"part_types": PART_TYPES, "groups": TAXONOMY.groups, "taxonomy": TAXONOMY.source, "actions": ACTIONS,
+    return {"part_types": PART_TYPES, "groups": TAXONOMY.groups, "taxonomy": TAXONOMY.source, "line": LINE_NAME, "actions": ACTIONS,
             "fault_type": FAULT_TYPE, "reasons": REASONS, "sides": SIDES}
 
 
@@ -249,7 +250,7 @@ def list_stations(db: Session = Depends(get_db)):
 
     rows = []
     totals = {"빨강": 0, "노랑": 0, "확인_필요": 0}
-    for s in db.execute(select(Station).order_by(Station.id)).scalars():
+    for s in db.execute(select(Station).order_by(Station.seq)).scalars():  # 노선 순서(ID는 영구 번호라 순서와 다를 수 있다)
         units = by_station.get(s.id, [])
         c = counts(units)
         for k in totals:
@@ -258,6 +259,7 @@ def list_stations(db: Session = Depends(get_db)):
         rows.append(
             {
                 "id": s.id,
+                "seq": s.seq,
                 "name": s.name,
                 "open_date": s.open_date,
                 "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[s.name]],
@@ -540,7 +542,11 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
             "service_interval_min": SERVICE_INTERVAL_MIN,  # 참고용, 계산에는 안 씀 — psd/cycle.py 주석 참고
             # 장애 이력 양식의 역 정보 칸(기록에서 채움, 2026-11-24 v3). 없으면 None
             "info": {k: getattr(station, k) for k in STATION_INFO_FIELDS},
+            "seq": station.seq,
+            "aliases": list(STATION_BY_ID[station.id].aliases) if station.id in STATION_BY_ID else [],
         },
+        # 역 환경(고정 파일 data/private/역환경.xlsx, psd/stations.py): 카테고리마다 항목·값. 표시용, 계산엔 안 씀
+        "environment": (lambda e: {"source": e.source, "categories": e.for_station(station.id), "warnings": e.warnings[:20]})(environment()),
         "station_units": [_unit_dict(u) for u in sorted(station_units, key=lambda u: list(NAME_BY_CODE).index(u.part_type_code))],
         "sides": {sid: {"label": SIDES[sid], "doors": sides[sid]} for sid in sides},
         "counts": counts(statuses),
@@ -985,7 +991,9 @@ def _resolve_rows(db: Session, parsed: list[ParsedRow]) -> tuple[list[tuple[Pars
     처음 보는 부본선(상부본선·하부본선)이 나오면 그 선로의 문과 부품을 만든다(데이터셋_v3_설계.md 4장) — 커밋은 부르는 쪽이 정한다.
     """
     # 행마다 Door·Station·Part를 따로 조회하면 업로드 1건에 수천 번 DB 왕복이 생긴다(N+1). 미리 한 번씩만 읽어 딕셔너리로 찾는다
-    station_by_name = {s.name: s for s in db.execute(select(Station)).scalars()}
+    station_by_id = {s.id: s for s in db.execute(select(Station)).scalars()}
+    # 역 이름 → 역: 역 목록 파일의 옛 이름도 받는다(예: 선암 → 개운포)
+    station_by_name = {n: station_by_id[i] for n, i in STATION_ID_BY_NAME.items() if i in station_by_id}
     door_by_key = {(d.station_id, d.side, d.car, d.position): d for d in db.execute(select(Door)).scalars()}
     tracks = {(k[0], k[1]) for k in door_by_key}
     part_keys = {(p.station_id, p.door_id, p.part_type_code) for p in db.execute(select(Part)).scalars()}
@@ -1498,11 +1506,11 @@ def _station_pdf(db: Session, station: Station) -> bytes:
         .all()
     )
     total = db.scalar(select(func.count()).select_from(ReplacementRecord).where(ReplacementRecord.station_id == station.id))
-    cfg = next(s for s in STATIONS if s.name == station.name)
     return build_station_pdf(
         station_id=station.id,
         station_name=station.name,
-        psd_install_date=cfg.psd_install_date or cfg.open_date,
+        psd_install_date=PSD_START[station.id],
+        station_seq=station.seq,
         statuses=station_unit_statuses(db, station.id),
         doors=doors,
         records=[
@@ -1540,7 +1548,7 @@ def download_all_stations_report_pdf(db: Session = Depends(get_db)):
     from pypdf import PdfWriter
 
     writer = PdfWriter()
-    for station in db.execute(select(Station).where(Station.in_service).order_by(Station.id)).scalars():
+    for station in db.execute(select(Station).where(Station.in_service).order_by(Station.seq)).scalars():
         writer.append(io.BytesIO(_station_pdf(db, station)))
     buf = io.BytesIO()
     writer.write(buf)

@@ -1580,6 +1580,17 @@ details.more[open] > summary { margin-bottom: 10px; }
   function stationInfo(info) {
     return STATION_INFO.filter(([k]) => info && info[k]).map(([k, l]) => `<dt>${l}</dt><dd>${esc(String(info[k]))}</dd>`).join("");
   }
+  // 역 환경(고정 파일 data/private/역환경.xlsx): 카테고리마다 항목. 아직 안 적은 값은 "미입력"
+  function envPanel(env) {
+    if (!env || !env.categories.length) return "";
+    const filled = env.categories.reduce((n, c) => n + c.items.filter(i => i.value !== null && i.value !== undefined).length, 0);
+    const blocks = env.categories.map(c => `<div><h4 style="margin:6px 0">${esc(c.category)}</h4><dl class="kv">${c.items.map(i =>
+      `<dt title="${esc(i.desc || "")}">${esc(i.name)}</dt><dd>${i.value === null || i.value === undefined ? '<span class="muted small">미입력</span>' : esc(String(i.value)) + (i.unit ? " " + esc(i.unit) : "")}</dd>`).join("")}</dl></div>`).join("");
+    const note = env.source === "sample" ? "예시 파일이라 값이 없습니다 — 실제 값은 data/private/역환경.xlsx에 적습니다." :
+      filled ? "data/private/역환경.xlsx에서 읽은 값 · 계산에는 아직 쓰지 않습니다." : "아직 적은 값이 없습니다 — data/private/역환경.xlsx에 적으면 여기에 보입니다.";
+    const warn = env.warnings.length ? `<details class="more"><summary class="small">역 환경 파일 확인할 것 ${env.warnings.length}건</summary><ul class="small muted" style="margin:0;padding-left:20px">${env.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></details>` : "";
+    return `<details class="more" ${filled ? "open" : ""}><summary><b>역 환경</b> <span class="small muted">${note}</span></summary>${blocks}${warn}</details>`;
+  }
   function partSummary(parts, stName, openCode) {
     const rows = PART_TYPES.filter(p => parts[p.code]).map(p => ({ p, x: parts[p.code] }))
       .sort((a, b) => RANK[a.x.status] - RANK[b.x.status] || a.x.days_left - b.x.days_left)
@@ -1675,10 +1686,10 @@ details.more[open] > summary { margin-bottom: 10px; }
 
     if (!detail.station.in_service) {
       const s = detail.station;
-      const prev = list.stations.find(x => x.id === st - 1), next = list.stations.find(x => x.id === st + 1);
+      const at = list.stations.findIndex(x => x.id === st), prev = list.stations[at - 1], next = list.stations[at + 1];
       const switcher = `<div class="switcher">
           <button class="swbtn" ${prev ? goAttr({ name: "station", st: prev.id }) : "disabled"}>‹ ${prev ? prev.name : "이전 역 없음"}</button>
-          <select id="st-jump" aria-label="다른 역으로 이동">${list.stations.map(x => `<option value="${x.id}" ${x.id === st ? "selected" : ""}>${x.id}. ${x.name}</option>`).join("")}</select>
+          <select id="st-jump" aria-label="다른 역으로 이동">${list.stations.map(x => `<option value="${x.id}" ${x.id === st ? "selected" : ""}>${x.seq}. ${x.name}</option>`).join("")}</select>
           <button class="swbtn" ${next ? goAttr({ name: "station", st: next.id }) : "disabled"}>${next ? next.name : "다음 역 없음"} ›</button>
         </div>`;
       return `<section class="view">
@@ -1706,10 +1717,10 @@ details.more[open] > summary { margin-bottom: 10px; }
     ).join("")}</div></div>`).join("")}</div></div>`;
 
 
-    const prev = list.stations.find(s => s.id === st - 1), next = list.stations.find(s => s.id === st + 1);
+    const at = list.stations.findIndex(x => x.id === st), prev = list.stations[at - 1], next = list.stations[at + 1];
     const switcher = `<div class="switcher">
         <button class="swbtn" ${prev ? goAttr({ name: "station", st: prev.id }) : "disabled"}>‹ ${prev ? prev.name : "이전 역 없음"}</button>
-        <select id="st-jump" aria-label="다른 역으로 이동">${list.stations.map(x => `<option value="${x.id}" ${x.id === st ? "selected" : ""}>${x.id}. ${x.name}</option>`).join("")}</select>
+        <select id="st-jump" aria-label="다른 역으로 이동">${list.stations.map(x => `<option value="${x.id}" ${x.id === st ? "selected" : ""}>${x.seq}. ${x.name}</option>`).join("")}</select>
         <button class="swbtn" ${next ? goAttr({ name: "station", st: next.id }) : "disabled"}>${next ? next.name : "다음 역 없음"} ›</button>
       </div>`;
     const s = detail.station, c = detail.counts;
@@ -1721,8 +1732,9 @@ details.more[open] > summary { margin-bottom: 10px; }
       <div class="stlayout">${stationNav(list.stations, st)}<div class="stmain">
       ${switcher}
       <div class="panel">
-        <h2>${s.name}</h2>
+        <h2>${s.name}${s.aliases && s.aliases.length ? ` <span class="small muted">(옛 이름 ${s.aliases.map(esc).join(", ")})</span>` : ""}</h2>
         <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)}</dd><dt>PSD 설치일</dt><dd>${fmtDateKR(s.psd_install_date)} <span class="small muted">(교체 기록이 없는 부품은 이날부터 셉니다)</span></dd><dt>날씨 지점</dt><dd>AWS ${s.aws_station}</dd><dt>문 수</dt><dd>선로마다 16개 · 선로 ${sideKeys.length}개(${sideKeys.map(k => esc(detail.sides[k].label)).join(", ")})</dd>${stationInfo(s.info)}<dt>운행</dt><dd>방향마다 하루 약 ${dailyTrips(s.service_interval_min)}회</dd></dl>
+        ${envPanel(detail.environment)}
         <div class="legend">${pill("빨강")} ${c.빨강} <span class="${zeroCls(c.확인_필요)}">${pill("확인_필요")} ${c.확인_필요}</span> ${pill("노랑")} ${c.노랑} ${pill("초록")} ${c.초록}</div>
         ${repLine}
         <div class="filters"><span class="small muted">${s.name}역 보고서</span>${reportBox([], s.id)}</div>

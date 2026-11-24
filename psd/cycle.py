@@ -40,107 +40,12 @@ def kelvin(celsius: float) -> float:
     return celsius + 273.15
 
 
-# ---------- 역 목록 (설계_v2.md "역 목록", obs는 목업과 동일한 가정) ----------
-
-
-@dataclass(frozen=True)
-class Station:
-    order: int
-    name: str
-    open_date: date  # 철도(동해선) 개통일 — 역사적 사실, 김민수 제공(2026-10-14)
-    near_water: bool = False  # 역 근처 바다·하천 인접 여부 (2026-10-24 미팅 답변 Q5 근거, 아래 주석 참고)
-    psd_install_date: date | None = None  # 스크린도어(PSD) 실제 사용개시일. None이면 open_date로 대신한다
-    # (아래 psd_install_date 주석 참고) — 2026-10-24 미팅 답변 Q3 근거, open_date와 다를 수 있음.
-    aws_stn: str = ""  # 역에서 가장 가까운 AWS(방재기상관측) 지점 코드 — 날씨 계산은 전부 이걸로 한다
-    in_service: bool = True  # PSD가 실제로 설치·운영 중인지. False면 scripts/init_db.py가 문·부품을 만들지 않는다
-    # (open_date가 미래로 지나가도 자동으로 True가 되지 않는다 — 북울산처럼 개통일 자체가
-    # 미정 추정값인 역을 날짜 비교만으로 "운영 중"으로 잘못 판정하지 않기 위한 명시적 플래그.
-    # 코드 리뷰로 찾은 버그: 이 플래그가 없던 시절엔 _D4(2026-09-01, 북울산 임시 개통일)를
-    # 오늘 날짜가 지나자마자 다른 23개 역과 똑같이 "안전" 상태로 보여주고 있었다.)
-
-
-_D1 = date(2016, 12, 30)
-_D2 = date(2020, 3, 28)
-_D3 = date(2021, 12, 28)
-_D4 = date(2026, 9, 1)  # 북울산: 개통일 미정, 월초로 임시 처리
-_PSD_2 = date(2022, 1, 1)  # PSD 사용개시 추정(2022년, 월일 미상→연초로 임시 처리)
-
-# psd_install_date: 설계_v2.md는 지금까지 "개통일 = 스크린도어 설치일"로 가정해 왔다(철도가 뚫린
-# 날과 PSD가 실제로 쓰이기 시작한 날을 같다고 봄). 2026-10-24 미팅 답변(Q3)으로 실제로는 다르다는
-# 게 확인됐다: "보안사규상 사용기간만 포괄적으로 답변드립니다 - (부전~오시리아 구간) 22년 사용개시
-# 6개역사, 23년 사용개시 9개역사 - (좌천~태화강 구간) 22년 사용개시 8개역사" (hwp 원문 그대로).
-#
-# 좌천~태화강 구간(16~23번, 8개 역)은 전원 22년이라 확실하다. 부전~일광 구간(1~15번, hwp가
-# "부전~오시리아 구간"으로 부른 1차 노선 15개 역 전체로 보인다 — 6+9=15로 정확히 맞아떨어진다)은
-# 6개 역이 22년·9개 역이 23년으로 섞여 있는데, 보안사규상 어느 역인지 이름이 없어 역 단위로 나눌
-# 근거가 없다. **2026-10-24 사용자 지시로, 정확한 구분이 나올 때까지 이 15개 역도 일단 22년으로
-# 통일해 둔다**(실제로는 이 중 9개 역이 23년일 수 있어 그 역들의 주기는 다소 길게 잡힐 수 있음 —
-# 코레일에 역 이름 목록을 추가로 확인해야 하는 항목, 설계_v2.md 할 일 참고). 북울산(24번)은 아직
-# 개통 전(open_date 자체가 미정 추정값)이라 제외 — PSD가 역보다 먼저 쓰였을 수는 없다.
-STATIONS: list[Station] = [
-    Station(1, "부전", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(2, "거제해맞이", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(3, "거제", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(4, "교대", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(5, "동래", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(6, "안락", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="940"),
-    Station(7, "부산원동", _D2, near_water=False, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(8, "재송", _D1, near_water=False, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(9, "센텀", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(10, "벡스코", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(11, "신해운대", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(12, "송정", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="937"),
-    Station(13, "오시리아", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
-    Station(14, "기장", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
-    Station(15, "일광", _D1, near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
-    Station(16, "좌천", _D3, near_water=False, psd_install_date=_PSD_2, aws_stn="923"),
-    Station(17, "월내", _D3, near_water=True, psd_install_date=_PSD_2, aws_stn="923"),
-    Station(18, "서생", _D3, near_water=True, psd_install_date=_PSD_2, aws_stn="924"),
-    Station(19, "남창", _D3, near_water=False, psd_install_date=_PSD_2, aws_stn="954"),
-    Station(20, "망양", _D3, near_water=False, psd_install_date=_PSD_2, aws_stn="954"),
-    Station(21, "덕하", _D3, near_water=False, psd_install_date=_PSD_2, aws_stn="954"),
-    Station(22, "개운포", _D3, near_water=True, psd_install_date=_PSD_2, aws_stn="898"),
-    Station(23, "태화강", _D3, near_water=True, psd_install_date=_PSD_2, aws_stn="898"),
-    Station(24, "북울산", _D4, near_water=False, aws_stn="943", in_service=False),
-]
-
-# aws_stn: 역 → 가장 가까운 AWS 지점을 행정구역 기준으로 매핑한 것이다(2026-10-25, 실측 좌표
-# 비교는 아님 — 코레일/멘토 확인 전까지 가정). 부전~동래/안락(연제·동래구) → 동래(940),
-# 부산원동~송정(해운대구) → 해운대(937), 오시리아~월내(기장군) → 기장(923), 서생(울주군
-# 서생면, 간절곶 바로 옆) → 간절곶(924), 남창~덕하(울주군 온양·온산읍) → 온산(954),
-# 개운포·태화강(울산 남구) → 장생포(898), 북울산(울산 북구, 아직 미개통) → 매곡(943).
-AWS_STATION_NAMES: dict[str, str] = {
-    "160": "부산(레)", "296": "북부산", "904": "사상", "910": "영도", "921": "가덕도",
-    "923": "기장", "937": "해운대", "938": "부산진", "939": "금정구", "940": "동래",
-    "941": "북구", "942": "부산남구", "950": "사하",
-    "854": "삼동", "898": "장생포", "900": "두서", "901": "울기", "924": "간절곶",
-    "943": "매곡", "949": "정자", "954": "온산",
-}
-
-# 코드 리뷰로 찾은 버그: STATIONS의 aws_stn과 AWS_STATION_NAMES는 둘 다 손으로 관리하는
-# 별개 블록이라, 둘이 어긋나도(새 역 추가 시 aws_stn 오타, aws_stn 기본값 ""을 안 채움 등)
-# 아무도 바로 알아채지 못했다 — psd/api.py 여러 곳에서 AWS_STATION_NAMES[aws_stn]을 쓸 때마다
-# KeyError로 흩어져서 터지게 된다. 모듈을 불러오는 시점에 한 번에 검사해 바로 에러를 낸다.
-_unknown_aws_stn = {s.aws_stn for s in STATIONS} - set(AWS_STATION_NAMES)
-if _unknown_aws_stn:
-    raise ValueError(
-        f"STATIONS에 AWS_STATION_NAMES에 없는 aws_stn 코드가 있습니다: {_unknown_aws_stn} "
-        f"(역 목록에 aws_stn을 안 채웠거나 오타일 수 있습니다)"
-    )
-
-# near_water: 공개 지리 정보(역 주변 해변·포구·하천 유무)로 추정한 값이다. 2026-10-24 미팅에서
-# 코레일 담당자가 "역사별 환경(바다 인접)에 따라 특정 부품의 장애건수는 명확히 구분됨"이라고
-# 답변했지만, 정확한 역별 목록은 받지 못했다(보안사규상 상세 데이터 제공 불가, 미팅/[답변]...hwp
-# 질문 5). 위 STATIONS의 near_water는 역 이름·위치로 추정한 임시값이며, 코레일/멘토 확인 전까지는
-# 가정으로 다룬다. 확실한 역: 센텀·벡스코(수영강 하구), 신해운대·송정·오시리아·일광(해수욕장
-# 인접), 월내(포구), 서생(해안 면), 개운포(온산만 하구), 태화강(태화강 바로 옆). 그 외는 내륙으로
-# 보고 false.
-#
-# **2026-10-25: 비중 기본값 계산에는 더 이상 안 쓴다.** near_water는 원래 "역별 실측 습도가
-# 없으니 바다 인접 여부로 비중을 대신 옮기자"는 임시방편이었다. 이제 AWS 실측 습도가
-# aws_stn별로 이미 다르게 들어가(위 AWS_STATION_NAMES, 4단계_계산공식_근거조사.md 2-1) 같은
-# 효과를 가속 계수(af_hum) 쪽에서 직접 낸다 — 비중까지 또 옮기면 같은 "해안=습함" 효과를 두 번
-# 적용하는 중복이 된다. near_water 필드 자체는 역 화면 표시·참고용으로만 남겨 둔다.
+# ---------- 역 목록 ----------
+# 2026-11-24: 역 목록(개통일·PSD 사용개시일·AWS 지점·운영·바다 인접 추정)은 고정 엑셀 data/stations/동해선_역목록.xlsx로
+# 옮겼다(psd/stations.py). 값의 근거(미팅 답변 Q3 "22·23년 사용개시" → 2022-01-01 통일, Q5 바다 인접 추정, AWS 지점 매핑)는
+# 그 파일의 '변경 이력' 시트에 있다. near_water는 표시용이고 계산엔 안 쓴다 — AWS 실측 습도가 지점별로 이미 들어가
+# 같은 "해안 = 습함" 효과를 두 번 넣지 않으려고(2026-10-25).
+from psd.stations import AWS_STATION_NAMES, STATIONS, Station  # noqa: E402,F401
 
 # 2026-11-24 v3: 예측 단위는 장애부위 소분류(psd/catalog.py PART_TYPES)다. 소분류마다 분류표에 적은 공식(formula)으로 계산한다:
 # "motor"(모터&엔코더 ← v2 모터·풀리), "dcm"(DCU ← v2 DCM), "fixed"(날씨 무관 10년), 없음(공식 없음 — 기준 10년을 넓은

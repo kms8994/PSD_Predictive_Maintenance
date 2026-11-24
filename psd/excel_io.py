@@ -24,10 +24,10 @@ from datetime import date, datetime
 from io import BytesIO
 
 from psd.catalog import ACTION_ALIASES, ACTIONS, FAULT_TYPE, GROUPS, PART_TYPES, REASONS, SIDES, TAXONOMY
+from psd.stations import LINE_NAME
 from psd.taxonomy import normalize
 
 SHEET_NAME = "고장현황 전체"
-LINE_NAME = "동해선"
 # 양식 '고장현황 전체' 시트의 칸 순서('일자' 수식 칸은 뺌). 내려받기도 이 순서로 쓴다
 COLUMNS = ["년도", "월", "일", "본부", "노선", "역", "PSD설치", "설치년도", "제조업체", "제어시스템", "DCU(MCU)업체", "관할사업소",
            "장애형태", "장애인지", "승강장 선로", "승강장 홈", "출입문", "장애부위①(대분류)", "장애부위②(소분류)", "장애내용①",

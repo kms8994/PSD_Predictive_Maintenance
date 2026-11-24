@@ -72,7 +72,7 @@ RANGE_PROB = 0.8  # lo~hi는 80% 범위
 N_DRAWS = 4000  # 범위를 낼 때 사후분포에서 뽑는 수(시드 고정이라 같은 기록이면 같은 범위)
 
 # 역 id → PSD 사용개시일. 부품의 첫 설치일이라 기록 사이 기간을 셀 출발점이 된다(scripts/init_db.py와 같은 값)
-PSD_START = {s.order: s.psd_install_date or s.open_date for s in STATIONS}
+PSD_START = {s.id: s.psd_start for s in STATIONS}
 
 Interval = tuple[float, float, bool]  # (시작 가상 나이(년), 쓴 기간(년), 고장으로 끝났는지)
 

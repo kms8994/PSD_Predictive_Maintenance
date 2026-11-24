@@ -10,7 +10,7 @@ from psd.db import Base
 
 
 class Station(Base):
-    """역: 부전 ~ 북울산 24개 역.
+    """역: 고정 파일 data/stations/동해선_역목록.xlsx(psd/stations.py)를 scripts/init_db.py가 옮겨 둔다. id는 영구 번호, seq는 노선 순서.
 
     날씨는 DB에 두지 않는다 — 역마다 가장 가까운 AWS 지점(psd/cycle.py STATIONS의 aws_stn)의
     data/processed/aws_weather_daily.csv를 읽는다. 예전 관측소 표(observatories)와 일별 날씨 표(daily_weather)는
@@ -19,20 +19,17 @@ class Station(Base):
 
     __tablename__ = "stations"
 
-    id: Mapped[int] = mapped_column(primary_key=True)  # 역 순서(1~24)를 ID로 씀
+    id: Mapped[int] = mapped_column(primary_key=True)  # 영구 번호(역 목록 파일의 ID) — 바뀌지 않는다
+    seq: Mapped[int] = mapped_column(default=0)  # 노선 순서(화면·보고서 정렬). 역이 중간에 생기면 이것만 바뀐다
     name: Mapped[str] = mapped_column(String(30), unique=True)
     open_date: Mapped[dt.date] = mapped_column(Date)  # 스크린도어 설치일로 가정(멘토 확인 대기)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     near_water: Mapped[bool] = mapped_column(default=False)  # 바다·하천 인접 추정(psd/cycle.py STATIONS 주석, 확인 필요)
     in_service: Mapped[bool] = mapped_column(default=True)  # PSD 실제 운영 중인지(psd/cycle.py Station.in_service 참고)
-    # 역 환경(2026-11-23): 나중에 AI가 역 특성별로 가중치를 다르게 주도록 넣을 자리. 정확한 정보가 없어 지금은 전부
-    # 비워 둔다(NULL = 모름). 아직 계산·화면 어디에서도 읽지 않는다. 날씨(습도·기온·일교차)는 AWS 지점으로 이미
-    # 공식에 들어가 있으니, 여기엔 날씨로 설명 안 되는 것만 넣는다(near_water 가중을 걷어낸 이유, psd/cycle.py 맨 위 주석)
-    structure: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 역 구조: "지상" | "지하" | "고가"
-    coast_km: Mapped[float | None] = mapped_column(Float, nullable=True)  # 해안선까지 거리(km)
-    daily_riders: Mapped[int | None] = mapped_column(nullable=True)  # 하루 평균 이용객 수(명)
-    env_note: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 그 밖의 환경 메모(염분·먼지·바람 등)
+    # 역 환경(구조 등 카테고리별 고정 값)은 DB가 아니라 고정 파일 data/private/역환경.xlsx에 있다(psd/stations.py environment()).
+    # 2026-11-23에 만든 coast_km·daily_riders·env_note 칸은 그 파일로 옮기며 지웠다(2026-11-24)
+    structure: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 정비기록 양식의 "PSD설치"(지상/지하)
     # 2026-11-24 v3: 장애 이력 양식의 역 정보 칸. 업로드한 기록에서 가장 최근 값으로 채운다(psd/api.py _update_station_info).
     # structure(위)는 양식의 "PSD설치"(지상/지하)로 채운다. 화면 표시와 AI 특징 후보용 — 아직 계산에는 안 쓴다
     hq: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 본부

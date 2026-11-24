@@ -274,7 +274,7 @@ def inputs_without_db() -> SimInputs:
     """DB 없이(데스크탑 학습용): 공식 주기는 psd/cycle.py로 바로 계산하고, 문은 상·하 본선만 scripts/init_db.py와 같은 순서로."""
     from psd.cycle import STATIONS, compute_all
 
-    order = {s.name: s.order for s in STATIONS}
+    order = {s.name: s.id for s in STATIONS}
     base = {(order[r.station], r.part): r.cycle.base_years for r in compute_all()}
     doors: dict[int, list[DoorInfo]] = {}
     did = 0
@@ -285,7 +285,7 @@ def inputs_without_db() -> SimInputs:
             for n in range(1, DOORS_PER_SIDE + 1):
                 did += 1
                 car, pos = (n - 1) // CARS_PER_SIDE + 1, (n - 1) % CARS_PER_SIDE + 1
-                doors.setdefault(s.order, []).append(DoorInfo(did, s.order, side, car, pos, f"{SIDES[side]} {car}-{pos}"))
+                doors.setdefault(s.id, []).append(DoorInfo(did, s.id, side, car, pos, f"{SIDES[side]} {car}-{pos}"))
     return SimInputs([s for s in STATIONS if s.in_service], base, doors)
 
 
@@ -309,7 +309,7 @@ def simulate_all(inputs: SimInputs, today: date, seed: int, truth_seed: int = 20
     truth = truth or make_truth(truth_seed)
     trng = random.Random(f"{truth_seed}-stations")  # 역별 흔들림도 정답이라 사건 씨앗과 따로
     rng = random.Random(seed)
-    day0 = min(PSD_START[s.order] for s in inputs.stations)
+    day0 = min(PSD_START[s.id] for s in inputs.stations)
     n_days = (today - day0).days + 1
     mult, af_by_stn = weather or weather_multipliers(day0, n_days, truth)
     flat = cumulative(np.ones(n_days))
@@ -320,11 +320,11 @@ def simulate_all(inputs: SimInputs, today: date, seed: int, truth_seed: int = 20
               "age_factor": AGE_FACTOR, "station_part": [], "weak_doors": []}
     out: list[SimUnit] = []
     for s in inputs.stations:
-        start = (PSD_START[s.order] - day0).days
-        inspections = inspection_days(s.order, day0, today, rng)
+        start = (PSD_START[s.id] - day0).days
+        inspections = inspection_days(s.seq, day0, today, rng)
         scale0 = {}
         for code, t in truth.items():
-            formula = inputs.base.get((s.order, code), 10.0)
+            formula = inputs.base.get((s.id, code), 10.0)
             mean = (formula * t["bias"] if "bias" in t else t["mean_years"]) * math.exp(trng.gauss(0, STATION_SIGMA))
             scale0[code] = mean / math.gamma(1 + 1 / t["shape"])
             record["station_part"].append({"station": s.name, "part": code, "formula_years": round(formula, 3),
@@ -334,7 +334,7 @@ def simulate_all(inputs: SimInputs, today: date, seed: int, truth_seed: int = 20
             return cumulative(mult[(s.aws_stn, code)][:n_days]) if (s.aws_stn, code) in mult else flat
 
         units = []
-        for door in inputs.doors.get(s.order, []):
+        for door in inputs.doors.get(s.id, []):
             z = rng.gammavariate(1 / FRAILTY_VAR, FRAILTY_VAR)
             if rng.random() < WEAK_DOOR_SHARE:
                 z *= WEAK_DOOR_FACTOR
@@ -390,14 +390,14 @@ def to_rows(units: list[SimUnit], day0: date, seed: int) -> list[dict]:
     rows: list[dict] = []
     for u in units:
         s, door = u.station, u.door
-        info = {**STATION_INFO, "install_year": PSD_START[s.order].year}
+        info = {**STATION_INFO, "install_year": PSD_START[s.id].year}
         for e in u.events:
             d = day0 + timedelta(days=e.day)
             code = e.parts[0]
             rows.append(record_row(
                 day=d, station=s.name, reason=e.reason, unit_code=code, action=e.action,
                 side=door.side if door else None, door_no=f"{door.car}-{door.position}" if door else None,
-                worker=TEAMS[s.order <= 15], station_info=info, **_texts(rng, code, e, d, 1.0 + 0.5 * s.near_water),
+                worker=TEAMS[s.seq <= 15], station_info=info, **_texts(rng, code, e, d, 1.0 + 0.5 * s.near_water),
             ))
     rows.sort(key=lambda r: (r["년도"], r["월"], r["일"], r["역"], r["승강장 선로"], r["출입문"], r["장애부위②(소분류)"]))
     return rows

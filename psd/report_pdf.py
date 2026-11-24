@@ -115,6 +115,7 @@ def _numbered_canvas(footer: str, font: str):
 def build_station_pdf(
     *,
     station_id: int,
+    station_seq: int | None = None,  # 노선 순서(없으면 station_id)
     station_name: str,
     psd_install_date: date,
     statuses: list[UnitStatus],
@@ -177,7 +178,7 @@ def build_station_pdf(
     n_doors = len(doors)
     title = [P("동해선 승강장안전문(PSD) 정비", ps(8.5, bold, BLUE)),
              P(f"{escape(station_name)}역 PSD 부품 교체 현황 보고서", ps(17, bold, lead=23)),
-             P(f"기준일 {today:%Y. %m. %d.} · 동해선 {station_id}번째 역 · PSD 사용개시 {psd_install_date:%Y. %m. %d.}<br/>"
+             P(f"기준일 {today:%Y. %m. %d.} · 동해선 {station_seq or station_id}번째 역 · PSD 사용개시 {psd_install_date:%Y. %m. %d.}<br/>"
                f"안전문 {n_doors}개(선로 {len({d.side for d in doors})}개) · 역 단위 장치 {len(STATION_CODES)}종 · 관리 부품 {len(statuses):,}개", small)]
     head = Table([[title, sign]], colWidths=[CONTENT_W - 66 * mm, 66 * mm])
     head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (0, 0), 0), ("RIGHTPADDING", (1, 0), (1, 0), 0)]))

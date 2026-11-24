@@ -57,7 +57,7 @@ def v1_map(session, today: date) -> dict:
 def main() -> None:
     truth = json.loads(ANSWER.read_text(encoding="utf-8"))
     today = date.fromisoformat(truth["cutoff"])
-    sid = {s.name: s.order for s in STATIONS}
+    sid = {s.name: s.id for s in STATIONS}
     session = get_session()
     try:
         v2 = calibration_map(session, today=today, use_cache=False)

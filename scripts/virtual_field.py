@@ -83,7 +83,7 @@ def flatten(units, day0: date) -> list[SimPart]:
         for ps in u.parts:
             ev = sorted((day0 + timedelta(days=e.day), e.reason, e.action) for e in u.events if ps.code in e.parts)
             pid += 1
-            out.append(SimPart(pid, u.station.order, u.door.id if u.door else None, ps.code, ev, ps, u.start))
+            out.append(SimPart(pid, u.station.id, u.door.id if u.door else None, ps.code, ev, ps, u.start))
     return out
 
 
@@ -115,7 +115,7 @@ def calib_errors(parts: list[SimPart], cutoff: date, base: dict, truth: dict) ->
         groups.setdefault((p.station_id, p.code), []).extend(
             part_intervals(PSD_START[p.station_id], [e for e in p.events if e[0] <= cutoff], cutoff))
     from psd.cycle import STATIONS
-    name = {s.order: s.name for s in STATIONS}
+    name = {s.id: s.name for s in STATIONS}
     ef, ec, cov, nf = [], [], [], 0
     for code in CODES:
         keys = sorted(k for k in groups if k[1] == code)
@@ -161,7 +161,7 @@ def main() -> None:
     n_sc, step = (1, 6) if args.quick else (args.scenarios, args.step)
 
     inputs = inputs_without_db()  # DB 없이 돈다(데스크탑에서 돌리는 작업)
-    day0 = min(PSD_START[s.order] for s in inputs.stations)
+    day0 = min(PSD_START[s.id] for s in inputs.stations)
     weather = weather_multipliers(day0, (HORIZON - day0).days + 1, BASE_TRUTH)  # 시나리오는 날씨 비중을 안 바꾼다
     cutoffs = [d - timedelta(days=1) for d in months(date(2022, 7, 1), HORIZON - timedelta(days=HORIZON_DAYS + 92))][::step]
 

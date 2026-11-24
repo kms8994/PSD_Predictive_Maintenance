@@ -14,7 +14,7 @@ from psd.cycle import STATIONS, compute_all, load_aws_weather  # noqa: E402
 from psd.db import get_session  # noqa: E402
 from psd.models import CycleResult  # noqa: E402
 
-NAME_TO_STATION_ID = {s.name: s.order for s in STATIONS}
+NAME_TO_STATION_ID = {s.name: s.id for s in STATIONS}
 
 
 def main() -> None:

@@ -54,13 +54,13 @@ def line_dataset(args: tuple) -> tuple[np.ndarray, np.ndarray, np.ndarray, int, 
     units, _truth, day0 = simulate_all(inputs, today, seed, truth_seed)
     parts, pid, fails = [], 0, 0
     for u in units:
-        sid = r * STATION_STRIDE + u.station.order
+        sid = r * STATION_STRIDE + u.station.id
         door = r * DOOR_STRIDE + u.door.id if u.door else None
         for ps in u.parts:
             ev = sorted((day0 + timedelta(days=e.day), e.reason, e.action) for e in u.events if e.parts[0] == ps.code)
             fails += sum(1 for e in ev if e[1] == "fail")
             pid += 1
-            parts.append(PartHistory(pid, sid, door, ps.code, ev, PSD_START[u.station.order]))
+            parts.append(PartHistory(pid, sid, door, ps.code, ev, PSD_START[u.station.id]))
     formula = {(r * STATION_STRIDE + sid, code): v for (sid, code), v in inputs.base.items()}
     fb = FeatureBuilder(parts, formula)
     snaps = label_complete_snapshots(today)[::step]
