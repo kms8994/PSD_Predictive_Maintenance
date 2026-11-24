@@ -1,6 +1,6 @@
 """주기 보정이 숨은 정답에 얼마나 가까운지 잰다 (2026-11-16, 데이터셋_v2_설계.md 6장).
 
-DB의 정비 기록(더미)으로 보정한 주기를 data/dummy/정답_수명모수.json의 진짜 평균 수명과 비교한다.
+DB의 정비 기록(더미)으로 보정한 주기를 data/private/dummy/정답_수명모수.json의 진짜 평균 수명과 비교한다.
 v1(형상 2 고정, 전체 교체만 셈)과 v2(psd/calibrate.py — 형상·공식 치우침 추정, 수리 반영)를 나란히 본다.
 더미는 실데이터가 아니므로 "시뮬레이터 가정이 맞다면"의 성능이다.
 
@@ -27,7 +27,7 @@ from psd.cycle import STATIONS  # noqa: E402
 from psd.db import get_session  # noqa: E402
 from psd.models import CycleResult, Part, ReplacementPart, ReplacementRecord  # noqa: E402
 
-ANSWER = ROOT / "data" / "dummy" / "정답_수명모수.json"
+ANSWER = ROOT / "data" / "private" / "dummy" / "정답_수명모수.json"  # v3(2026-11-24): 분류표가 비공개라 더미도 private
 
 
 def v1_map(session, today: date) -> dict:
@@ -85,8 +85,8 @@ def main() -> None:
               f"| {mean(err(r['formula_years'], r['true_mean_years']) for r, *_ in rows):.0%} "
               f"| {mean(err(a, r['true_mean_years']) for r, a, _c in rows):.0%} "
               f"| {mean(err(c.raw_years, r['true_mean_years']) for r, _a, c in rows):.0%} "
-              f"| {cover}/{len(rows)} | {truth['true_shape'][code]} | {c0.shape:.2f} ({c0.shape_lo:.2f}~{c0.shape_hi:.2f}) "
-              f"| {truth['true_bias'][code]} | {c0.bias:.2f} |")
+              f"| {cover}/{len(rows)} | {truth['units'][code]['shape']} | {c0.shape:.2f} ({c0.shape_lo:.2f}~{c0.shape_hi:.2f}) "
+              f"| {truth['units'][code].get('bias', '공식 없음')} | {c0.bias:.2f} |")
     t = lambda r: r["true_mean_years"]  # noqa: E731
     print(f"\n전체 오차: 공식 {mean(err(r['formula_years'], t(r)) for r, *_ in all_rows):.1%} · "
           f"v1 {mean(err(a, t(r)) for r, a, _c in all_rows):.1%} · v2 {mean(err(c.raw_years, t(r)) for r, _a, c in all_rows):.1%}")

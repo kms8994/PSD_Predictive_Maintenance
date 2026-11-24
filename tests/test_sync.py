@@ -4,7 +4,7 @@ from datetime import date
 from psd.sync import RecordSig, diff_records
 
 
-def sig(day: int, door: int | None = 1, reason: str = "fail", parts=("IFM",), station: int = 1) -> RecordSig:
+def sig(day: int, door: int | None = 1, reason: str = "fail", parts=("DCU",), station: int = 1) -> RecordSig:
     return RecordSig(station, door, date(2026, 5, day), reason, tuple(parts))
 
 
@@ -52,8 +52,8 @@ def test_input_by_is_not_part_of_the_match():
 
 
 def test_same_slot_with_different_action_is_a_change():
-    """2026-11-16: 같은 역·문·날짜에 조치나 세부 부품만 고쳐도 고친 기록으로 잡는다."""
+    """같은 역·문·날짜·소분류에 조치나 글 칸(장애내용·원인)만 고쳐도 고친 기록으로 잡는다(2026-11-24 v3)."""
     db = [(1, sig(3))]
     from dataclasses import replace
-    d = diff_records([replace(sig(3), action="partial", sub_parts=("DCM_CAP",))], db)
+    d = diff_records([replace(sig(3), action="partial", cause_text="마모")], db)
     assert len(d.changed) == 1 and not d.new and not d.missing

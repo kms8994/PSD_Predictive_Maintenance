@@ -10,7 +10,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from psd.catalog import NAME_TO_CODE  # noqa: E402
 from psd.cycle import STATIONS, compute_all, load_aws_weather  # noqa: E402
 from psd.db import get_session  # noqa: E402
 from psd.models import CycleResult  # noqa: E402
@@ -29,7 +28,7 @@ def main() -> None:
             session.merge(
                 CycleResult(
                     station_id=NAME_TO_STATION_ID[r.station],
-                    part_type_code=NAME_TO_CODE[r.part],
+                    part_type_code=r.part,  # 소분류 코드
                     base_years=r.cycle.base_years,
                     lo_years=r.cycle.lo_years,
                     hi_years=r.cycle.hi_years,

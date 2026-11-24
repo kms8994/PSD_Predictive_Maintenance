@@ -17,7 +17,7 @@ near_water(바다·하천 인접) 플래그로 DCM·IFM 릴레이 비중의 기�
 있었던 걸 확인하고 비중 가중은 걷어냈다 — near_water는 역 화면 표시용으로만 남아 있다(아래
 near_water 주석).
 
-    python -m psd.cycle          # 24개 역 x 7종 결과 표 출력
+    python -m psd.cycle          # 24개 역 x 소분류 결과 표 출력
 """
 from __future__ import annotations
 
@@ -142,7 +142,9 @@ if _unknown_aws_stn:
 # 효과를 가속 계수(af_hum) 쪽에서 직접 낸다 — 비중까지 또 옮기면 같은 "해안=습함" 효과를 두 번
 # 적용하는 중복이 된다. near_water 필드 자체는 역 화면 표시·참고용으로만 남겨 둔다.
 
-PARTS = ["모터", "타이밍벨트", "풀리", "도어 행거", "DCM", "IFM 릴레이", "종합제어반 릴레이"]
+# 2026-11-24 v3: 예측 단위는 장애부위 소분류(psd/catalog.py PART_TYPES)다. 소분류마다 분류표에 적은 공식(formula)으로 계산한다:
+# "motor"(모터&엔코더 ← v2 모터·풀리), "dcm"(DCU ← v2 DCM), "fixed"(날씨 무관 10년), 없음(공식 없음 — 기준 10년을 넓은
+# 사전값으로만 쓰고 기록으로 배운다, psd/calibrate.py). v2의 IFM 릴레이 습도 공식은 어느 소분류인지 몰라 지금은 안 쓴다.
 
 # 비중 범위 (4단계_계산공식_근거조사.md 3장). 근거가 없으므로 기본값은 균등, 범위는 전체
 # 격자/구간으로 계산한다 — 역 성격과 무관하게 전부 같다(위 near_water 주석 참고: AWS 실측
@@ -345,18 +347,26 @@ def single_cause_cycle(af_value: float, weight_range: tuple[float, float, float]
 
 
 def fixed_cycle() -> Cycle:
-    """날씨와 무관한 부품(타이밍벨트·풀리·도어 행거·종합제어반 릴레이): 10년 유지."""
+    """날씨와 무관한 소분류(밸트·스크류, 행거·레일, 종합제어반): 10년 유지."""
     return Cycle(REPLACEMENT_YEARS, REPLACEMENT_YEARS, REPLACEMENT_YEARS, "날씨무관")
 
 
-def part_cycle(part: str, af: dict[str, float]) -> Cycle:
-    if part == "DCM":
+def no_formula_cycle() -> Cycle:
+    """공식이 없는 소분류: 기준 10년을 사전값으로만 둔다. 보정(psd/calibrate.py)이 이 값을 약하게 믿고 기록으로 옮겨 간다."""
+    return Cycle(REPLACEMENT_YEARS, REPLACEMENT_YEARS, REPLACEMENT_YEARS, "공식없음")
+
+
+def part_cycle(formula: str | None, af: dict[str, float]) -> Cycle:
+    """formula: 분류표의 공식 이름("motor" | "dcm" | "fixed" | None)."""
+    if formula == "dcm":
         return dcm_cycle(af)
-    if part == "IFM 릴레이":
-        return single_cause_cycle(af["hum"], IFM_WEIGHT_RANGE)
-    if part == "모터":
+    if formula == "motor":
         return single_cause_cycle(af["mot"], MOTOR_WEIGHT_RANGE)
-    return fixed_cycle()
+    if formula == "humid":  # v2 IFM 릴레이 공식. 지금 분류표에선 쓰지 않는다(위 주석)
+        return single_cause_cycle(af["hum"], IFM_WEIGHT_RANGE)
+    if formula == "fixed":
+        return fixed_cycle()
+    return no_formula_cycle()
 
 
 # ---------- 전체 계산 ----------
@@ -373,14 +383,16 @@ class StationPartCycle:
 
 
 def compute_all() -> list[StationPartCycle]:
-    """24개 역 x 부품 7종의 권장 주기(2-8). scripts/compute_cycles.py가 이 결과를 DB에 저장한다."""
+    """역 x 소분류의 권장 주기(2-8). scripts/compute_cycles.py가 이 결과를 DB에 저장한다. part는 소분류 코드."""
+    from psd.catalog import PART_TYPES
+
     weather = load_aws_weather()
     ref = reference_climate(weather)
     af_by_stn = period_average_af(daily_af(weather, ref))
     return [
-        StationPartCycle(station.name, part, part_cycle(part, af_by_stn[station.aws_stn]))
+        StationPartCycle(station.name, p["code"], part_cycle(p["formula"], af_by_stn[station.aws_stn]))
         for station in STATIONS
-        for part in PARTS
+        for p in PART_TYPES
     ]
 
 

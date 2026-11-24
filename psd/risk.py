@@ -27,17 +27,19 @@ from pathlib import Path
 import numpy as np
 
 from psd.calibrate import AGE_FACTOR, PSD_START
+from psd.catalog import PART_TYPES
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_DIR = ROOT / "models"  # 버전마다 risk_v{id}.joblib (저장소에 안 올림)
 HORIZON_DAYS = 182  # 6개월
 VAL_MONTHS = 6  # 검증에 숨기는 마지막 스냅샷 달 수
 TOP_K = 100  # "위험도 상위 100개 중 실제로 고장 난 비율"
-PART_CODES = ["MOTOR", "BELT", "PULLEY", "HANGER", "DCM", "IFM", "PSC"]
+# 소분류 코드(분류표 순서). 모델은 이 순서의 번호를 범주로 받는다 — 분류표가 바뀌면 예전 모델은 못 쓴다(import_risk_model.py가 검사)
+PART_CODES = [p["code"] for p in PART_TYPES]
 
 # (이름, 화면 설명). 순서가 모델 입력 순서다
 FEATURES = [
-    ("part", "부품 종류"),
+    ("part", "장애부위(소분류)"),
     ("formula_years", "날씨 공식 주기(년)"),
     ("age_full", "마지막 전체 교체 뒤(년)"),
     ("life_used", "공식 수명 대비 사용 비율"),
@@ -56,10 +58,15 @@ FEATURE_NAMES = [f for f, _ in FEATURES]
 @dataclass
 class PartHistory:
     part_id: int
-    station_id: int
+    station_id: int  # 같은 역 기록끼리 묶는 열쇠(가상 노선 여러 벌로 학습할 때는 벌마다 다른 번호, scripts/pretrain_risk_model.py)
     door_id: int | None
     code: str
-    events: list[tuple[date, str, str]]  # (작업일, 사유, 조치), 날짜순, 점검 제외
+    events: list[tuple[date, str, str]]  # (발생일, 장애인지, 조치), 날짜순
+    start: date | None = None  # PSD 사용개시일. None이면 PSD_START[station_id]
+
+    def __post_init__(self):
+        if self.start is None:
+            self.start = PSD_START[self.station_id]
 
 
 def months(start: date, end: date) -> list[date]:
@@ -107,7 +114,7 @@ class FeatureBuilder:
                 .join(ReplacementPart, ReplacementPart.record_id == ReplacementRecord.id)
                 .where(ReplacementRecord.reason != "check")):
             ev.setdefault((sid, door, code), []).append((day, reason, action))
-        parts = [PartHistory(pid, sid, door, code, sorted(ev.get((sid, door, code), [])))
+        parts = [PartHistory(pid, sid, door, code, sorted(ev.get((sid, door, code), [])), PSD_START[sid])
                  for pid, sid, door, code in session.execute(select(Part.id, Part.station_id, Part.door_id, Part.part_type_code).order_by(Part.id))]
         return FeatureBuilder(parts, formula)
 
@@ -116,7 +123,7 @@ class FeatureBuilder:
         return bisect_left(dates, hi) - bisect_left(dates, lo)
 
     def part_row(self, p: PartHistory, t: date) -> list[float]:
-        start = PSD_START[p.station_id]
+        start = p.start
         formula = self.formula.get((p.station_id, p.code), 10.0)
         last_full, vage, last_ev = start, 0.0, start
         fails_total = fails_since_full = 0
@@ -159,10 +166,14 @@ class FeatureBuilder:
         return int(any(reason == "fail" and t <= d < end for d, reason, _a in p.events))
 
     def rows(self, t: date, with_label: bool = True) -> tuple[np.ndarray, np.ndarray | None]:
-        live = [p for p in self.parts if PSD_START[p.station_id] < t]
+        live = self.live(t)
         X = np.array([self.part_row(p, t) for p in live], dtype=float)
         y = np.array([self.label(p, t) for p in live]) if with_label else None
         return X, y
+
+    def live(self, t: date) -> list[PartHistory]:
+        """t에 이미 쓰고 있던 부품(사용개시 뒤)."""
+        return [p for p in self.parts if p.start < t]
 
     def dataset(self, snapshots: list[date]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         Xs, ys, ts = [], [], []
@@ -370,7 +381,7 @@ def predict_all(session, today: date | None = None) -> dict[int, dict] | None:
     if _pred_cache.get("key") != key:
         fb = FeatureBuilder.load(session)
         X, _ = fb.rows(today, with_label=False)
-        live = [p for p in fb.parts if PSD_START[p.station_id] < today]
+        live = fb.live(today)
         prob = model.predict_proba(X)[:, 1]
         order = np.argsort(-prob)
         rank = np.empty(len(prob), dtype=int)

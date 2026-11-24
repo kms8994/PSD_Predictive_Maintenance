@@ -33,29 +33,39 @@ class Station(Base):
     coast_km: Mapped[float | None] = mapped_column(Float, nullable=True)  # 해안선까지 거리(km)
     daily_riders: Mapped[int | None] = mapped_column(nullable=True)  # 하루 평균 이용객 수(명)
     env_note: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 그 밖의 환경 메모(염분·먼지·바람 등)
+    # 2026-11-24 v3: 장애 이력 양식의 역 정보 칸. 업로드한 기록에서 가장 최근 값으로 채운다(psd/api.py _update_station_info).
+    # structure(위)는 양식의 "PSD설치"(지상/지하)로 채운다. 화면 표시와 AI 특징 후보용 — 아직 계산에는 안 쓴다
+    hq: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 본부
+    line_name: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 노선
+    office: Mapped[str | None] = mapped_column(String(30), nullable=True)  # 관할사업소
+    install_year: Mapped[int | None] = mapped_column(nullable=True)  # 설치년도(사용개시일 추정엔 아직 안 씀 — 멘토 확인)
+    manufacturer: Mapped[str | None] = mapped_column(String(30), nullable=True)  # 제조업체
+    control_system: Mapped[str | None] = mapped_column(String(30), nullable=True)  # 제어시스템
+    dcu_vendor: Mapped[str | None] = mapped_column(String(30), nullable=True)  # DCU(MCU)업체
+    install_owner: Mapped[str | None] = mapped_column(String(30), nullable=True)  # 설치주체
 
     doors: Mapped[list["Door"]] = relationship(back_populates="station")
     parts: Mapped[list["Part"]] = relationship(back_populates="station")
 
 
 class Door(Base):
-    """문: 방향(상행/하행)별 16개(임시값, 역별 실제 문 수 확인 대기)."""
+    """문: 선로별 16개(임시값, 역별 실제 문 수 확인 대기). 처음엔 상·하 본선만 있고, 기록에 부본선이 나오면 자동으로 생긴다."""
 
     __tablename__ = "doors"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"))
-    side: Mapped[str] = mapped_column(String(1))  # "U"(부전 방면) | "D"(북울산 방면)
+    side: Mapped[str] = mapped_column(String(2))  # 선로: "U" 상선 | "D" 하선 | "UB" 상부본선 | "DB" 하부본선 (catalog.SIDES)
     car: Mapped[int] = mapped_column()  # 호차 (1~4)
     position: Mapped[int] = mapped_column()  # 문 번호 (1~4)
-    label: Mapped[str] = mapped_column(String(30))  # 예: "부전 방면 1-1"
+    label: Mapped[str] = mapped_column(String(30))  # 예: "상선 1-1"
 
     station: Mapped[Station] = relationship(back_populates="doors")
     parts: Mapped[list["Part"]] = relationship(back_populates="door")
 
 
 class PartType(Base):
-    """부품 종류: 코레일 표 7종."""
+    """예측 단위: 장애 이력 양식의 장애부위 소분류(2026-11-24 v3, 분류표 파일 psd/taxonomy.py). 이름은 예전 그대로 "부품 종류"."""
 
     __tablename__ = "part_types"
 
@@ -63,6 +73,8 @@ class PartType(Base):
     name: Mapped[str] = mapped_column(String(30))
     unit: Mapped[str] = mapped_column(String(10))  # "door" | "station"
     weather_sensitive: Mapped[bool] = mapped_column()
+    group_name: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 대분류("구동부 장애" ...)
+    formula: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 날씨 공식("motor"|"dcm"|"fixed"|NULL=공식 없음)
     base_years: Mapped[float] = mapped_column(Float, default=10.0)
 
     parts: Mapped[list["Part"]] = relationship(back_populates="part_type")
@@ -109,7 +121,7 @@ class UploadBatch(Base):
 
 
 class ReplacementRecord(Base):
-    """교체 기록: 정비기록 엑셀을 올려 넣는다. 한 기록에 부품(종류) 여러 개가 함께 묶일 수 있다."""
+    """정비 기록: 장애 이력 양식의 한 줄(2026-11-24 v3). 한 줄에 소분류 하나(ReplacementPart 1개)."""
 
     __tablename__ = "replacement_records"
 
@@ -117,14 +129,21 @@ class ReplacementRecord(Base):
     replaced_on: Mapped[dt.date] = mapped_column(Date)
     station_id: Mapped[int] = mapped_column(ForeignKey("stations.id"))
     door_id: Mapped[int | None] = mapped_column(ForeignKey("doors.id"), nullable=True)
-    reason: Mapped[str] = mapped_column(String(10))  # 왜 했나: "fail" | "prev" | "with" | "check"(점검 이상 없음 — 교체 아님)
-    # 무엇을 했나(psd/catalog.py ACTIONS): "full" 전체 교체 | "partial" 일부 교체 | "overhaul" 전체 수리 | "repair" 일부 수리
-    # | "none"(점검만). 2026-11-16 추가, 그 전 기록은 전부 전체 교체로 본다. 설치일은 전체 교체 때만 바뀐다
+    reason: Mapped[str] = mapped_column(String(10))  # 장애인지: "fail" 사후조치 | "prev" 사전조치 (catalog.REASONS)
+    # 조치사항(psd/catalog.py ACTIONS): "full" 교체 | "repair" 수리 | "adjust" 조정 | "partial" 단순교체 | "reset" 리셋 | "other" 기타.
+    # 설치일(새 수명 시작)은 교체 때만 바뀐다. 장애형태(장애/보수/예방보수)는 조치로 정해져 따로 저장하지 않는다(catalog.FAULT_TYPE)
     action: Mapped[str] = mapped_column(String(10), default="full")
-    symptom: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 고장 증상 코드(catalog.SYMPTOMS)
-    cause: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 고장 원인 추정 코드(catalog.CAUSES)
+    symptom: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 장애내용①(분류표의 소분류별 목록)
+    symptom_detail: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 장애내용②(상세), 자유 글
+    cause_text: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 고장원인, 자유 글
+    action_detail: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 조치사항 상세, 자유 글
+    track_raw: Mapped[str | None] = mapped_column(String(30), nullable=True)  # 승강장 선로 원문(예: "상본선(#3)")
+    home: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 승강장 홈 번호
+    receiver: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 접수자
+    received: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 접수일(양식이 "O월 O일 OO:OO" 같은 글이라 글로 둔다)
+    completed: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 완료일(글)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
-    created_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 조치자
     batch_id: Mapped[int | None] = mapped_column(ForeignKey("upload_batches.id"), nullable=True)  # 이 기록을 넣은 업로드
 
     station: Mapped[Station] = relationship()
@@ -133,15 +152,13 @@ class ReplacementRecord(Base):
 
 
 class ReplacementPart(Base):
-    """교체 부품: 교체 기록 1건에 들어간 부품 종류 (1:N)."""
+    """기록의 소분류. v3부터 기록 1건에 1개다(표는 v2의 1:N 구조를 그대로 둔다)."""
 
     __tablename__ = "replacement_parts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     record_id: Mapped[int] = mapped_column(ForeignKey("replacement_records.id"))
     part_type_code: Mapped[str] = mapped_column(ForeignKey("part_types.code"))
-    # 일부 교체·일부 수리한 세부 부품 코드(catalog.SUB_PARTS), 쉼표로 이어 정렬해 둔다. 전체 교체·수리는 비움
-    sub_parts: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     record: Mapped[ReplacementRecord] = relationship(back_populates="parts")
     part_type: Mapped[PartType] = relationship()
@@ -175,7 +192,7 @@ class RiskModel(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     trained_at: Mapped[dt.datetime] = mapped_column(DateTime)
-    trigger: Mapped[str] = mapped_column(String(20))  # "upload" | "undo" | "manual" | "script"
+    trigger: Mapped[str] = mapped_column(String(20))  # "upload" | "undo" | "manual" | "script" | "pretrained"(데스크탑에서 가져옴)
     data_key: Mapped[str] = mapped_column(String(200))  # 학습한 기록 상태(같으면 다시 학습하지 않음)
     data_end: Mapped[dt.date] = mapped_column(Date)  # 학습에 쓴 기록의 마지막 날
     last_train_snapshot: Mapped[dt.date] = mapped_column(Date)  # 최종 모델이 본 마지막 스냅샷 달

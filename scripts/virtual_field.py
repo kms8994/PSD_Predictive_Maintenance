@@ -11,7 +11,7 @@
 결과는 data/processed/virtual_field.csv. 숫자는 "시뮬레이터 가정이 맞다면"이다.
 
     python scripts/virtual_field.py --quick       # 시나리오 1개, 반년 간격(시간 재기용)
-    python scripts/virtual_field.py               # 시나리오 4개, 분기 간격
+    python scripts/virtual_field.py               # 시나리오 4개, 분기 간격 — 데스크탑에서 돌리는 작업(2026-11-24 v3: 소분류 34종이라 오래 걸림)
 """
 import argparse
 import csv
@@ -27,27 +27,42 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from psd.calibrate import PSD_START, fit_group, part_intervals  # noqa: E402
-from psd.db import get_session  # noqa: E402
+from psd.calibrate import BIAS_PRIOR_SIGMA, BIAS_PRIOR_SIGMA_NO_FORMULA, PSD_START, fit_group, part_intervals  # noqa: E402
+from psd.catalog import PART_TYPES  # noqa: E402
 from psd.risk import FEATURE_NAMES, HORIZON_DAYS, FeatureBuilder, PartHistory, _scores, fit, label_complete_snapshots, months  # noqa: E402
 from scripts.generate_dummy_records import (  # noqa: E402
     AGE_FACTOR,
-    TRUE_BIAS,
-    TRUE_SHAPE,
-    load_inputs,
+    inputs_without_db,
+    make_truth,
     simulate_all,
     weather_multipliers,
 )
 
 HORIZON = date(2028, 12, 31)  # 시뮬레이션 끝(마지막 기준일 뒤 6개월까지 정답이 있어야 함)
 OUT = ROOT / "data" / "processed" / "virtual_field.csv"
-CODES = ["MOTOR", "BELT", "PULLEY", "HANGER", "DCM", "IFM", "PSC"]
+CODES = [p["code"] for p in PART_TYPES]  # 2026-11-24 v3: 장애부위 소분류
+NO_FORMULA = {p["code"] for p in PART_TYPES if p["formula"] is None}
 
+
+def _scaled(truth: dict, factor: float) -> dict:
+    """실제 수명을 factor배로: 공식 있는 소분류는 치우침, 없는 소분류는 평균 수명을 곱한다."""
+    out = {}
+    for c, t in truth.items():
+        t = dict(t)
+        if "bias" in t:
+            t["bias"] = factor
+        else:
+            t["mean_years"] = t["mean_years"] * factor
+        out[c] = t
+    return out
+
+
+BASE_TRUTH = make_truth(2026)
 SCENARIOS = [
-    ("기본", 2026, TRUE_SHAPE, TRUE_BIAS),  # 더미 데이터와 같은 정답 설정
-    ("공식이 30% 길게", 11, TRUE_SHAPE, {c: 0.7 for c in CODES}),  # 실제 수명이 공식보다 짧음
-    ("공식이 30% 짧게", 12, TRUE_SHAPE, {c: 1.3 for c in CODES}),
-    ("우연 고장 위주(β 1.2)", 13, {c: 1.2 for c in CODES}, TRUE_BIAS),
+    ("기본", 2026, BASE_TRUTH),  # 더미 데이터와 같은 정답 설정
+    ("실제 수명이 30% 짧음", 11, _scaled(BASE_TRUTH, 0.7)),  # 공식(·사전값)이 길게 잡음
+    ("실제 수명이 30% 김", 12, _scaled(BASE_TRUTH, 1.3)),
+    ("우연 고장 위주(β 1.2)", 13, {c: {**t, "shape": 1.2} for c, t in BASE_TRUTH.items()}),
 ]
 
 
@@ -66,7 +81,7 @@ def flatten(units, day0: date) -> list[SimPart]:
     out, pid = [], 0
     for u in units:
         for ps in u.parts:
-            ev = sorted((day0 + timedelta(days=e.day), e.reason, e.action) for e in u.events if ps.code in e.parts and e.reason != "check")
+            ev = sorted((day0 + timedelta(days=e.day), e.reason, e.action) for e in u.events if ps.code in e.parts)
             pid += 1
             out.append(SimPart(pid, u.station.order, u.door.id if u.door else None, ps.code, ev, ps, u.start))
     return out
@@ -104,7 +119,8 @@ def calib_errors(parts: list[SimPart], cutoff: date, base: dict, truth: dict) ->
     ef, ec, cov, nf = [], [], [], 0
     for code in CODES:
         keys = sorted(k for k in groups if k[1] == code)
-        fits = fit_group([base[k] for k in keys], [groups[k] for k in keys])
+        sigma = BIAS_PRIOR_SIGMA_NO_FORMULA if code in NO_FORMULA else BIAS_PRIOR_SIGMA
+        fits = fit_group([base[k] for k in keys], [groups[k] for k in keys], bias_sigma=sigma)
         for k, f in zip(keys, fits):
             t = true_mean[(name[k[0]], code)]
             ef.append(abs(base[k] / t - 1))
@@ -144,13 +160,9 @@ def main() -> None:
     args = ap.parse_args()
     n_sc, step = (1, 6) if args.quick else (args.scenarios, args.step)
 
-    session = get_session()
-    try:
-        inputs = load_inputs(session)
-    finally:
-        session.close()
+    inputs = inputs_without_db()  # DB 없이 돈다(데스크탑에서 돌리는 작업)
     day0 = min(PSD_START[s.order] for s in inputs.stations)
-    weather = weather_multipliers(day0, (HORIZON - day0).days + 1)
+    weather = weather_multipliers(day0, (HORIZON - day0).days + 1, BASE_TRUTH)  # 시나리오는 날씨 비중을 안 바꾼다
     cutoffs = [d - timedelta(days=1) for d in months(date(2022, 7, 1), HORIZON - timedelta(days=HORIZON_DAYS + 92))][::step]
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -160,9 +172,9 @@ def main() -> None:
     with OUT.open("w", newline="", encoding="utf-8-sig") as fh:
         w = csv.DictWriter(fh, fieldnames=fields)
         w.writeheader()
-        for name, seed, shape, bias in SCENARIOS[:n_sc]:
+        for name, seed, truth_cfg in SCENARIOS[:n_sc]:
             t0 = time.time()
-            units, truth, _ = simulate_all(inputs, HORIZON, seed, shape, bias, weather)
+            units, truth, _ = simulate_all(inputs, HORIZON, seed, truth=truth_cfg, weather=weather)
             parts = flatten(units, day0)
             print(f"[{name}] 시뮬레이션 {time.time() - t0:.0f}초, 부품 {len(parts):,}개, 기준일 {len(cutoffs)}개")
             for c in cutoffs:

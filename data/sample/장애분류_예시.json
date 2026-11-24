@@ -1,0 +1,22 @@
+{
+ "title": "예시 장애부위 분류 — 실제 분류표(data/private/장애분류.json)가 없을 때 앱·테스트가 쓰는 작은 목록",
+ "note": "코레일 양식의 분류표를 옮긴 것이 아니다. 실제 분류표와 같은 형식만 따른다(데이터셋_v3_설계.md 6장). 장애내용·부품 이름은 일반적인 PSD 용어로 임시로 적었다.",
+ "groups": ["구동부 장애", "센서 장애", "제어기 장애", "전원 장애"],
+ "units": [
+  {"code": "MOTOR", "name": "모터&엔코더", "group": "구동부 장애", "unit": "door", "formula": "motor",
+   "symptoms": ["고장", "발열"], "main_parts": ["모터", "엔코더"], "minor_parts": ["커넥터"]},
+  {"code": "BELT", "name": "밸트, 스크류", "group": "구동부 장애", "unit": "door", "formula": "fixed",
+   "symptoms": ["끊어짐", "늘어짐"], "main_parts": ["밸트"], "minor_parts": ["풀리"]},
+  {"code": "HANGER", "name": "행거, 레일", "group": "구동부 장애", "unit": "door", "formula": "fixed",
+   "symptoms": ["롤러 마모", "처짐"], "main_parts": ["행거롤러"], "minor_parts": ["스토퍼"]},
+  {"code": "OBST", "name": "장애물센서", "group": "센서 장애", "unit": "door", "formula": null,
+   "symptoms": ["고장", "오검지"], "main_parts": ["센서"], "minor_parts": ["브라켓"]},
+  {"code": "DCU", "name": "DCU(MCU)", "group": "제어기 장애", "unit": "door", "formula": "dcm",
+   "symptoms": ["통신 장애", "전원 장애", "보드 불량"], "main_parts": ["DCU"], "minor_parts": ["퓨즈", "커넥터"]},
+  {"code": "PSC", "name": "종합제어반", "group": "제어기 장애", "unit": "station", "formula": "fixed",
+   "symptoms": ["제어장치 오류", "모니터 고장"], "main_parts": ["제어 보드"], "minor_parts": ["램프"]},
+  {"code": "UPS", "name": "UPS", "group": "전원 장애", "unit": "station", "formula": null,
+   "symptoms": ["배터리 불량", "전원 장애"], "main_parts": ["배터리"], "minor_parts": ["냉각팬"]}
+ ],
+ "aliases": {"벨트, 스크류": "BELT", "행거레일": "HANGER", "DCU": "DCU", "MCU": "DCU"}
+}

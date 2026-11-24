@@ -1,175 +1,151 @@
-"""psd/excel_io.py 검증: 엑셀 업로드 파싱 (2026-10-25, 고장 데이터 엑셀 입력)."""
-from datetime import date
+"""psd/excel_io.py 검증: 코레일 장애 이력 양식 읽기·쓰기 (2026-11-24 v3, 데이터셋_v3_설계.md 1·5장).
+
+소분류는 예시 분류표와 실제 분류표에 함께 있는 것(모터&엔코더, 밸트·스크류, DCU(MCU), 종합제어반)만 쓴다.
+"""
+from datetime import date, timedelta
+from io import BytesIO
 
 import pytest
 
-from psd.excel_io import COLUMNS, ExcelFormatError, parse_upload, rows_to_excel_bytes
+from psd.excel_io import COLUMNS, ExcelFormatError, parse_track, parse_upload, record_row, rows_to_excel_bytes
+
+
+def _row(**kw) -> dict:
+    base = {"년도": 2026, "월": 1, "일": 15, "노선": "동해선", "역": "부전", "장애인지": "사후조치", "승강장 선로": "상본선(#3)",
+            "출입문": "1-1", "장애부위②(소분류)": "모터&엔코더", "장애내용①": "고장", "조치사항": "교체", "조치자": "정비1팀"}
+    return {**base, **kw}
 
 
 def _xlsx(rows: list[dict]) -> bytes:
     return rows_to_excel_bytes(rows)
 
 
-def test_parse_upload_reads_door_level_row():
-    content = _xlsx([
-        {"역": "부전", "방향": "부전 방면", "문번호": "1-1", "교체일": "2026-01-15",
-         "사유": "고장", "부품": "DCM,IFM 릴레이", "입력자": "홍길동"},
-    ])
-    rows = parse_upload(content)
-    assert len(rows) == 1
-    r = rows[0]
-    assert r.station_name == "부전"
-    assert r.side_label == "부전 방면"
-    assert r.door_no == "1-1"
-    assert r.replaced_on == date(2026, 1, 15)
-    assert r.reason_code == "fail"
-    assert r.part_names == ["DCM", "IFM 릴레이"]
-    assert r.created_by == "홍길동"
+def _one(**kw):
+    return parse_upload(_xlsx([_row(**kw)])).rows[0]
 
 
-def test_parse_upload_reads_station_level_row_with_blank_side_door():
-    content = _xlsx([
-        {"역": "부전", "방향": "", "문번호": "", "교체일": "2026-01-15",
-         "사유": "예방 교체", "부품": "종합제어반 릴레이", "입력자": ""},
-    ])
-    rows = parse_upload(content)
-    assert rows[0].side_label is None
-    assert rows[0].door_no is None
-    assert rows[0].reason_code == "prev"
-    assert rows[0].created_by is None
+def test_reads_door_level_row():
+    r = _one(본부="부산경남", PSD설치="지상", 설치년도=2022, 고장원인="마모", **{"조치사항 상세": "모터 교체"})
+    assert (r.station_name, r.replaced_on, r.reason_code, r.unit_code, r.action_code) == ("부전", date(2026, 1, 15), "fail", "MOTOR", "full")
+    assert (r.side, r.door_no, r.track_raw) == ("U", "1-1", "상본선(#3)")
+    assert (r.symptom, r.cause_text, r.action_detail, r.created_by) == ("고장", "마모", "모터 교체", "정비1팀")
+    assert r.station_info == {"hq": "부산경남", "line_name": "동해선", "structure": "지상", "install_year": 2022}
+    assert r.warnings == []
 
 
-def test_parse_upload_rejects_unknown_part_name():
-    content = _xlsx([
-        {"역": "부전", "방향": "", "문번호": "", "교체일": "2026-01-15",
-         "사유": "고장", "부품": "없는부품", "입력자": ""},
-    ])
-    with pytest.raises(ExcelFormatError, match="알 수 없는 부품"):
-        parse_upload(content)
+def test_station_level_unit_ignores_door():
+    r = _one(**{"장애부위②(소분류)": "종합제어반", "출입문": "", "승강장 선로": "", "장애인지": "사전조치", "조치사항": "단순교체",
+                "장애내용①": ""})
+    assert (r.unit_code, r.side, r.door_no, r.reason_code, r.action_code) == ("PSC", None, None, "prev", "partial")
 
 
-def test_parse_upload_rejects_half_filled_side_and_door():
-    """방향만 있고 문번호가 없으면(또는 반대) 형식 오류다 — 역 단위 부품인지 문 단위인지 애매해진다."""
-    content = _xlsx([
-        {"역": "부전", "방향": "부전 방면", "문번호": "", "교체일": "2026-01-15",
-         "사유": "고장", "부품": "DCM", "입력자": ""},
-    ])
-    with pytest.raises(ExcelFormatError):
-        parse_upload(content)
+@pytest.mark.parametrize("text, side", [("상본선(#3)", "U"), ("하선(#1)", "D"), ("상부본선(#4)", "UB"), ("하부본선(#1)", "DB"),
+                                        ("상", "U"), ("하행", "D"), ("상 본선", "U"), ("1번선", None), ("", None)])
+def test_parse_track(text, side):
+    assert parse_track(text) == side
 
 
-def test_parse_upload_rejects_future_replaced_on():
-    """코드 리뷰로 찾은 버그: 미래 날짜가 날짜로 읽히기만 하면 업로드를 통과하고 있었다."""
-    from datetime import timedelta
-
-    future = (date.today() + timedelta(days=30)).isoformat()
-    content = _xlsx([
-        {"역": "부전", "방향": "", "문번호": "", "교체일": future,
-         "사유": "고장", "부품": "종합제어반 릴레이", "입력자": ""},
-    ])
-    with pytest.raises(ExcelFormatError, match="미래일 수 없습니다"):
-        parse_upload(content)
-
-
-def test_parse_upload_rejects_blank_replaced_on():
-    """2026-11-02 QA: 빈 교체일이 NaT로 검사를 통과해 업로드가 500으로 죽었다."""
-    content = _xlsx([
-        {"역": "부전", "방향": "", "문번호": "", "교체일": None,
-         "사유": "고장", "부품": "종합제어반 릴레이", "입력자": ""},
-    ])
-    with pytest.raises(ExcelFormatError, match="작업일이 비어 있습니다"):
-        parse_upload(content)
-
-
-def test_parse_upload_rejects_non_excel_with_korean_message():
-    with pytest.raises(ExcelFormatError, match="엑셀 파일을 읽을 수 없습니다. .xlsx"):
-        parse_upload(b"not an excel file")
-
-
-def test_parse_upload_rejects_missing_columns():
-    import pandas as pd
-    from io import BytesIO
-
-    buf = BytesIO()
-    pd.DataFrame([{"역": "부전"}]).to_excel(buf, index=False)
-    with pytest.raises(ExcelFormatError, match="필요한 열이 없습니다"):
-        parse_upload(buf.getvalue())
-
-
-def test_rows_to_excel_bytes_round_trips_through_parse_upload():
-    rows = [{
-        "역": "기장", "방향": "부전 방면", "문번호": "2-3", "교체일": "2025-05-01",
-        "사유": "함께 교체", "부품": "모터,타이밍벨트", "입력자": "더미",
-    }]
-    parsed = parse_upload(rows_to_excel_bytes(rows))
-    assert parsed[0].station_name == "기장"
-    assert parsed[0].reason_code == "with"
-    assert parsed[0].part_names == ["모터", "타이밍벨트"]
-
-
-def test_columns_constant_matches_rows_to_excel_bytes_header():
-    import pandas as pd
-    from io import BytesIO
-
-    data = rows_to_excel_bytes([{c: "" for c in COLUMNS}])
-    df = pd.read_excel(BytesIO(data))
-    assert list(df.columns) == COLUMNS
-
-
-def test_parse_upload_reads_inspection_with_all_parts():
-    content = _xlsx([
-        {"역": "부전", "방향": "부전 방면", "문번호": "1-2", "교체일": "2026-06-10",
-         "사유": "점검(이상 없음)", "부품": "전체", "입력자": "정비1팀"},
-        {"역": "부전", "방향": "", "문번호": "", "교체일": "2026-06-10",
-         "사유": "이상 없음", "부품": "전체", "입력자": "정비1팀"},
-    ])
-    door_row, station_row = parse_upload(content)
-    assert door_row.reason_code == "check"
-    assert door_row.part_names == ["모터", "타이밍벨트", "풀리", "도어 행거", "DCM", "IFM 릴레이"]
-    assert station_row.reason_code == "check"  # 손으로 쓴 표기("이상 없음")도 받는다
-    assert station_row.part_names == ["종합제어반 릴레이"]
-
-
-# ---------- 2026-11-16 조치·세부 부품·증상·원인 (데이터셋_v2_설계.md 1장) ----------
-
-def _row(**kw) -> dict:
-    base = {"역": "부전", "방향": "부전 방면", "문번호": "1-1", "작업일": "2026-01-15", "사유": "고장", "부품": "DCM", "입력자": ""}
-    return {**base, **kw}
-
-
-def test_old_template_without_action_reads_as_full_replacement_or_none():
-    """예전 양식(교체일, 조치 칸 없음)도 그대로 받는다: 교체는 전체 교체, 점검은 없음."""
-    old = [{"역": "부전", "방향": "부전 방면", "문번호": "1-1", "교체일": "2026-01-15", "사유": "예방 교체", "부품": "DCM", "입력자": ""},
-           {"역": "부전", "방향": "부전 방면", "문번호": "1-2", "교체일": "2026-01-15", "사유": "점검", "부품": "전체", "입력자": ""}]
-    import io
-
-    import pandas as pd
-    buf = io.BytesIO()
-    pd.DataFrame(old).to_excel(buf, index=False)
-    rows = parse_upload(buf.getvalue())
-    assert [(r.reason_code, r.action_code) for r in rows] == [("prev", "full"), ("check", "none")]
-
-
-def test_reads_action_sub_parts_symptom_cause():
-    r = parse_upload(_xlsx([_row(조치="일부 교체", **{"세부 부품": "제어 보드, 전원부 콘덴서"}, 증상="제어·통신 이상", 원인="열")]))[0]
-    assert (r.action_code, r.sub_part_codes, r.symptom_code, r.cause_code) == ("partial", ("DCM_BRD", "DCM_CAP"), "COMM", "HEAT")
-
-
-def test_action_aliases():
-    assert parse_upload(_xlsx([_row(부품="타이밍벨트", 조치="조정")]))[0].action_code == "repair"
-    assert parse_upload(_xlsx([_row(원인="미상")]))[0].cause_code == "UNKNOWN"
+def test_unit_name_variants_resolve():
+    """띄어쓰기·쉼표·'벨트/밸트' 차이, 괄호 뺀 이름도 같은 소분류로 읽는다."""
+    assert _one(**{"장애부위②(소분류)": "벨트,스크류"}).unit_code == "BELT"
+    assert _one(**{"장애부위②(소분류)": "DCU"}).unit_code == "DCU"
 
 
 @pytest.mark.parametrize("kw, msg", [
-    ({"조치": "일부 교체"}, "세부 부품을 적어야"),
-    ({"조치": "전체 교체", "세부 부품": "제어 보드"}, "일부 교체·일부 수리에만"),
-    ({"조치": "일부 교체", "세부 부품": "행거 롤러"}, "딸린 것이 아닙니다"),
-    ({"조치": "없음"}, r"점검\(이상 없음\)에만"),
-    ({"사유": "점검(이상 없음)", "조치": "전체 교체"}, "예방 정비로"),
-    ({"사유": "예방 정비", "증상": "소음·진동"}, "고장일 때만"),
-    ({"증상": "이상함"}, "증상은"),
-    ({"조치": "갈아끼움"}, "조치는"),
+    ({"장애부위②(소분류)": "없는부위"}, "분류표에 없는"),
+    ({"장애인지": "고장"}, "장애인지는"),
+    ({"조치사항": "갈아끼움"}, "조치사항은"),
+    ({"승강장 선로": ""}, "승강장 선로가 필요"),
+    ({"출입문": "가-1"}, "차량-문"),
+    ({"월": 13}, "날짜로 읽을 수 없습니다"),
+    ({"역": ""}, "역 이름이 비어"),
 ])
-def test_detail_rules(kw, msg):
+def test_rejects_bad_rows(kw, msg):
     with pytest.raises(ExcelFormatError, match=msg):
         parse_upload(_xlsx([_row(**kw)]))
+
+
+def test_rejects_future_date():
+    d = date.today() + timedelta(days=30)
+    with pytest.raises(ExcelFormatError, match="미래일 수 없습니다"):
+        parse_upload(_xlsx([_row(년도=d.year, 월=d.month, 일=d.day)]))
+
+
+def test_collects_all_bad_rows_in_one_error():
+    with pytest.raises(ExcelFormatError, match="2개 줄이 틀렸습니다"):
+        parse_upload(_xlsx([_row(조치사항="x"), _row(), _row(장애인지="x")]))
+
+
+def test_warnings_do_not_block():
+    """장애형태가 조치 규칙과 다름·대분류 불일치·목록에 없는 장애내용은 경고만 하고 받는다."""
+    r = _one(장애형태="예방보수", **{"장애부위①(대분류)": "전원 장애", "장애내용①": "이상한 소리"})
+    assert len(r.warnings) == 3
+    assert r.action_code == "full" and r.symptom == "이상한 소리"
+
+
+def test_door_number_turned_into_date_by_excel_is_recovered():
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "고장현황 전체"
+    ws.append(COLUMNS)
+    row = record_row(day=date(2026, 1, 15), station="부전", reason="fail", unit_code="MOTOR", action="full", side="U", door_no="2-1")
+    values = [row[c] for c in COLUMNS]
+    values[COLUMNS.index("출입문")] = date(2026, 2, 1)  # 엑셀이 "2-1"을 2월 1일로 바꿔 버린 경우
+    ws.append(values)
+    buf = BytesIO()
+    wb.save(buf)
+    r = parse_upload(buf.getvalue()).rows[0]
+    assert r.door_no == "2-1" and r.warnings
+
+
+def test_skips_blank_formula_rows_and_other_lines_and_finds_header_below_title():
+    """양식처럼 위에 제목 줄이 있고 머리글이 아래, 빈 줄(수식만)이 섞이고 다른 노선 줄이 있어도 읽는다."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "고장현황 전체"
+    ws.append(["승강장안전문 장애발생 및 보수이력 현황"])
+    for _ in range(3):
+        ws.append([])
+    ws.append([c.replace("장애부위②(소분류)", "장애부위②\n(소분류)") for c in COLUMNS])
+    for r in (_row(), {}, _row(노선="경부선", 역="서울"), _row(일=16)):
+        ws.append([r.get(c, "") for c in COLUMNS])
+    buf = BytesIO()
+    wb.save(buf)
+    res = parse_upload(buf.getvalue())
+    assert res.header_row == 5 and res.skipped_other_line == 1
+    assert [x.row_no for x in res.rows] == [6, 9]
+
+
+def test_rejects_non_excel_and_missing_columns():
+    with pytest.raises(ExcelFormatError, match="엑셀 파일을 읽을 수 없습니다"):
+        parse_upload(b"not an excel file")
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.active.append(["역", "장애부위②(소분류)"])
+    buf = BytesIO()
+    wb.save(buf)
+    with pytest.raises(ExcelFormatError, match="필요한 칸이 없습니다"):
+        parse_upload(buf.getvalue())
+
+
+def test_record_row_round_trips_through_parse_upload():
+    row = record_row(day=date(2025, 5, 1), station="기장", reason="prev", unit_code="BELT", action="adjust", side="DB", door_no="2-3",
+                     track_raw="하부본선(#4)", symptom="늘어짐", cause_text="마모", action_detail="장력 조정", receiver="홍길동",
+                     received="5월 1일 08:00", completed="5월 1일 09:00", worker="정비2팀", station_info={"structure": "지상"})
+    r = parse_upload(rows_to_excel_bytes([row])).rows[0]
+    assert (r.station_name, r.reason_code, r.unit_code, r.action_code, r.side, r.door_no) == ("기장", "prev", "BELT", "adjust", "DB", "2-3")
+    assert (r.receiver, r.received, r.completed, r.created_by) == ("홍길동", "5월 1일 08:00", "5월 1일 09:00", "정비2팀")
+    assert row["장애형태"] == "보수" and r.warnings == []
+
+
+def test_header_matches_columns():
+    from openpyxl import load_workbook
+
+    ws = load_workbook(BytesIO(rows_to_excel_bytes([]))).active
+    assert ws.title == "고장현황 전체"
+    assert [c.value for c in ws[1]] == COLUMNS

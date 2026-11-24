@@ -53,17 +53,21 @@ SHAPE_GRID = np.round(np.arange(0.8, 4.0001, 0.05), 2)  # β 후보
 SHAPE_PRIOR_MEDIAN, SHAPE_PRIOR_SIGMA = 2.0, 0.35  # β 사전분포(로그정규): 90%가 약 1.1~3.6 — 전자(1 근처)~기계 마모(3 근처)
 # 공식 치우침 κ: 그 부품 종류 전 역의 사전 평균 수명 = 공식 주기 × κ. 공식이 부품 종류 전체로 틀렸을 때(예: 실제로는 다 25% 짧음)
 # 역마다 따로 옮겨 가면 느리다 — 전 역 기록으로 κ를 함께 추정한다(2026-11-16, 정답 있는 더미에서 확인)
-BIAS_GRID = np.exp(np.linspace(math.log(0.4), math.log(2.5), 61))
+BIAS_GRID = np.exp(np.linspace(-math.log(3.0), math.log(3.0), 71))  # 1/3~3배, log 대칭(기록이 없으면 정확히 공식 값이 되게)
 BIAS_PRIOR_SIGMA = 0.3  # κ 사전분포(로그정규, 중앙값 1): 90%가 약 0.6~1.6배
+# 2026-11-24 v3: 날씨 공식이 없는 소분류(분류표 formula가 null)는 사전값 10년 자체가 근거 없는 기준이라 κ를 넓게 둔다
+# (90%가 약 0.3~3.7배). 기록이 쌓이면 κ가 그 소분류 전체의 실제 수명 쪽으로 빨리 옮겨 간다
+BIAS_PRIOR_SIGMA_NO_FORMULA = 0.8
 # 역 사이 흩어짐 τ: 같은 부품 종류라도 날씨 공식으로 설명 안 되는 역 차이(log 평균 수명의 표준편차). 이것도 전 역 기록으로
 # 추정해 사전값의 무게를 정한다(2026-11-16 5단계). 전에는 "고장 8건만큼"으로 고정이라 β가 작은(우연 고장) 부품에선 너무 가벼워
 # 역마다 몇 건 안 되는 고장의 우연한 차이를 그대로 따라갔다(가상 현장 "우연 고장 위주" 시나리오에서 오차가 안 줄던 원인)
 TAU_GRID = np.exp(np.linspace(math.log(0.04), math.log(0.6), 12))
 TAU_PRIOR_MEDIAN, TAU_PRIOR_SIGMA = 0.15, 0.7
-# 조치 뒤 남는 나이의 비율(가상 나이). 0과 1은 신뢰성 용어의 표준 정의(새것과 같음 / 고장 직전과 같음)이고,
-# 일부 교체·전체 수리의 0.5는 근거 없는 가정이다 — 현장 판단으로 바꿀 값(향후_방향_MVP이후.md 5절).
-# 더미 생성기(scripts/generate_dummy_records.py)의 값(0.4, 0.3)과 일부러 맞추지 않았다: 맞추면 정답을 알려 주는 셈이다
-AGE_FACTOR = {"full": 0.0, "partial": 0.5, "overhaul": 0.5, "repair": 1.0}
+# 조치 뒤 남는 나이의 비율(가상 나이). 0과 1은 신뢰성 용어의 표준 정의(새것과 같음 / 고장 직전과 같음)이다.
+# 2026-11-24 v3(양식의 조치사항, 데이터셋_v3_설계.md 3장): 교체(주요 부품) 0, 단순교체(부속 부품) 0.5(근거 없는 가정),
+# 수리·조정·리셋·기타는 1(고장 직전과 같음). 현장 판단으로 바꿀 값(향후_방향_MVP이후.md 5절).
+# 더미 생성기(scripts/generate_dummy_records.py)의 단순교체 0.4와 일부러 맞추지 않았다: 맞추면 정답을 알려 주는 셈이다
+AGE_FACTOR = {"full": 0.0, "partial": 0.5, "repair": 1.0, "adjust": 1.0, "reset": 1.0, "other": 1.0}
 RANGE_PROB = 0.8  # lo~hi는 80% 범위
 N_DRAWS = 4000  # 범위를 낼 때 사후분포에서 뽑는 수(시드 고정이라 같은 기록이면 같은 범위)
 
@@ -114,13 +118,14 @@ def _tau_log_prior() -> np.ndarray:
     return -0.5 * ((np.log(TAU_GRID) - math.log(TAU_PRIOR_MEDIAN)) / TAU_PRIOR_SIGMA) ** 2
 
 
-def _bias_log_prior() -> np.ndarray:
-    return -0.5 * (np.log(BIAS_GRID) / BIAS_PRIOR_SIGMA) ** 2  # 격자가 log 간격이라 log 공간 밀도 그대로
+def _bias_log_prior(sigma: float = BIAS_PRIOR_SIGMA) -> np.ndarray:
+    return -0.5 * (np.log(BIAS_GRID) / sigma) ** 2  # 격자가 log 간격이라 log 공간 밀도 그대로
 
 
-def fit_group(formulas: list[float], groups: list[list[tuple]], seed: int = 0) -> list[Calibrated]:
+def fit_group(formulas: list[float], groups: list[list[tuple]], seed: int = 0, bias_sigma: float = BIAS_PRIOR_SIGMA) -> list[Calibrated]:
     """같은 부품 종류의 여러 역을 함께 보정한다. formulas[g]는 역 g의 공식 주기, groups[g]는 그 역 구간 목록.
-    β(형상)·κ(공식 치우침)·τ(역 사이 흩어짐)는 모두 함께 추정하고, 척도·주기·범위는 역마다 낸다."""
+    β(형상)·κ(공식 치우침)·τ(역 사이 흩어짐)는 모두 함께 추정하고, 척도·주기·범위는 역마다 낸다.
+    bias_sigma: κ 사전분포의 폭(공식이 없는 소분류는 BIAS_PRIOR_SIGMA_NO_FORMULA)."""
     G = len(formulas)
     F = np.asarray(formulas, dtype=float)
     ints = [[_as_interval(i) for i in g if _as_interval(i)[1] > 0] for g in groups]
@@ -146,7 +151,7 @@ def fit_group(formulas: list[float], groups: list[list[tuple]], seed: int = 0) -
     a = a0 + n[None, None, None, :]
     b = b0 + S
     log_m = n * np.log(B) + (B - 1) * T + a0 * np.log(b0) - gammaln(a0) + gammaln(a) - a * np.log(b)
-    log_post = (log_m.sum(axis=3) + _shape_log_prior()[:, None, None] + _bias_log_prior()[None, :, None]
+    log_post = (log_m.sum(axis=3) + _shape_log_prior()[:, None, None] + _bias_log_prior(bias_sigma)[None, :, None]
                 + _tau_log_prior()[None, None, :])  # (K, J, L)
     w = np.exp(log_post - log_post.max())
     w /= w.sum()
@@ -182,10 +187,9 @@ def calibrate(formula_years: float, intervals: list[tuple]) -> Calibrated:
 def part_intervals(start: date, records: list[tuple], today: date, age_factor: dict[str, float] = AGE_FACTOR) -> list[Interval]:
     """부품 하나의 구간 목록. records는 (작업일, 사유 코드[, 조치 코드]). 마지막은 지금 쓰는 중인 구간(중도절단).
 
-    - 고장 → 그 구간은 고장으로 끝남. 예방·함께 정비 → 그때까지 멀쩡했음(중도절단).
-    - 조치 뒤 다음 구간은 가상 나이 = (그때 나이) × age_factor[조치]에서 시작한다. 조치가 없는 예전 기록은 전체 교체.
-    - 점검(이상 없음)은 "그날까지 멀쩡했다"는 기록이라 구간을 끊지 않는다. 지금 쓰는 부품은 이미 오늘까지 버틴 것으로
-      세고 있어 계산 값은 바뀌지 않는다 — 점검 기록은 그 가정(기록 없음 = 고장 없음)의 근거가 된다.
+    - 사후조치(고장) → 그 구간은 고장으로 끝남. 사전조치(예방) → 그때까지 멀쩡했음(중도절단).
+    - 조치 뒤 다음 구간은 가상 나이 = (그때 나이) × age_factor[조치]에서 시작한다. 조치가 없는 기록은 교체로 본다.
+    - v2의 점검(이상 없음, 조치 "none")은 v3 양식에 없다. 들어오면 구간을 끊지 않고 건너뛴다.
     """
     out: list[Interval] = []
     age = 0.0
@@ -247,8 +251,12 @@ def _compute(session: Session, today: date) -> dict[tuple[int, str], Calibrated]
         intervals.setdefault((sid, code), []).extend(part_intervals(PSD_START[sid], records.get((sid, door_id, code), []), today))
 
     out: dict[tuple[int, str], Calibrated] = {}
+    from psd.catalog import PART_TYPES
+
+    no_formula = {p["code"] for p in PART_TYPES if p["formula"] is None}
     for code in sorted({c for _s, c in formula}):
         keys = sorted(k for k in formula if k[1] == code)
-        fits = fit_group([formula[k] for k in keys], [intervals.get(k, []) for k in keys])
+        sigma = BIAS_PRIOR_SIGMA_NO_FORMULA if code in no_formula else BIAS_PRIOR_SIGMA
+        fits = fit_group([formula[k] for k in keys], [intervals.get(k, []) for k in keys], bias_sigma=sigma)
         out.update(zip(keys, fits))
     return out

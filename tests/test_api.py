@@ -9,6 +9,8 @@ psd/api.py 자체가 DB 없이는 응답을 만들 수 없기 때문이다(psd/d
 (2026-10-25), weather_basis.causes에 실제로 어떤 값이 나오는지 검증하는 테스트가 하나도
 없었다 — CAUSES의 비중 문자열에 오타가 나도 아무 테스트도 못 잡는 상태였다.
 """
+from datetime import date
+
 from fastapi.testclient import TestClient
 
 from psd.api import CAUSES, app
@@ -16,13 +18,21 @@ from psd.api import CAUSES, app
 client = TestClient(app)
 
 
+def _xlsx(*specs: dict) -> bytes:
+    """양식 줄 엑셀(2026-11-24 v3). spec 기본값: 부전 역 단위 종합제어반(PSC), 사후조치·교체."""
+    from psd.excel_io import record_row, rows_to_excel_bytes
+
+    base = dict(day=date(2026, 1, 1), station="부전", reason="fail", unit_code="PSC", action="full")
+    return rows_to_excel_bytes([record_row(**{**base, **sp}) for sp in specs])
+
+
 def _first_weather_sensitive_part_id() -> int:
-    """역 1(부전)의 문 하나에서 DCM 부품 id를 찾는다."""
+    """역 1(부전)의 문 하나에서 DCU 부품 id를 찾는다(날씨 공식 dcm)."""
     station = client.get("/api/stations/1").json()
     door_id = station["sides"]["U"]["doors"][0]["id"]
     door = client.get(f"/api/doors/{door_id}").json()
-    dcm = next(u for u in door["units"] if u["part_type_code"] == "DCM")
-    return dcm["part_id"]
+    dcu = next(u for u in door["units"] if u["part_type_code"] == "DCU")
+    return dcu["part_id"]
 
 
 def test_part_detail_weather_basis_causes_match_causes_dict():
@@ -31,7 +41,7 @@ def test_part_detail_weather_basis_causes_match_causes_dict():
     wb = data["weather_basis"]
     assert wb is not None
 
-    expected = CAUSES["DCM"]
+    expected = CAUSES["dcm"]
     assert len(wb["causes"]) == len(expected)
     for shown, (name, var, key, weight) in zip(wb["causes"], expected):
         assert shown["name"] == name
@@ -102,9 +112,11 @@ def test_station_part_summary_lists_every_door_most_urgent_first():
         assert len(us) == p["total"]
         assert us[0]["part_id"] == p["part_id"]  # 맨 앞 = 표에 보이는 가장 급한 부품
         assert [(RANK[u["status"]], u["days_left"]) for u in us] == sorted((RANK[u["status"]], u["days_left"]) for u in us)
-    assert all(u["side"] in ("U", "D") and u["no"] for u in parts["IFM"]["units"])
+    from psd.catalog import SIDES
+
+    assert all(u["side"] in SIDES and u["no"] for u in parts["DCU"]["units"])
     assert parts["PSC"]["units"][0]["no"] is None
-    assert "units" not in client.get("/api/stations").json()["stations"][0]["parts"].get("IFM", {})
+    assert "units" not in client.get("/api/stations").json()["stations"][0]["parts"].get("DCU", {})
 
 
 def test_station_list_has_part_summary_only_for_stations_in_service():
@@ -183,7 +195,7 @@ def test_recent_replacement_records_by_replaced_date():
 # ---------- 2026-10-27: 역별 PDF 보고서 ----------
 
 
-def test_station_report_pdf_is_a_readable_two_page_pdf():
+def test_station_report_pdf_is_a_readable_pdf():
     import io
 
     from pypdf import PdfReader
@@ -193,7 +205,7 @@ def test_station_report_pdf_is_a_readable_two_page_pdf():
     assert r.headers["content-type"] == "application/pdf"
     assert "filename*=UTF-8''" in r.headers["content-disposition"]
     reader = PdfReader(io.BytesIO(r.content))
-    assert len(reader.pages) == 2
+    assert len(reader.pages) >= 2  # v3: 소분류가 많아 2~3쪽
     text = reader.pages[0].extract_text()
     assert "부전역 PSD 부품 교체 현황 보고서" in text
 
@@ -238,7 +250,7 @@ def test_report_download_for_all_stations_is_a_readable_excel():
     assert wb.sheetnames == ["요약", "교체 작업", "역별 주문", "전체 부품"]
 
     parts = pd.read_excel(io.BytesIO(r.content), sheet_name="전체 부품")
-    assert list(parts.columns) == ["역", "방향", "문", "부품", "상태", "다음 교체일", "80% 범위 시작", "80% 범위 끝", "남은 일수", "남은 기간", "교체주기(년)", "마지막 교체일", "기준"]
+    assert list(parts.columns) == ["역", "선로", "문", "장애부위", "상태", "다음 교체일", "80% 범위 시작", "80% 범위 끝", "남은 일수", "남은 기간", "교체주기(년)", "마지막 교체일", "기준"]
     assert parts["역"].nunique() == len([s for s in STATIONS if s.in_service])  # 개통 전 역(북울산)은 부품이 없다
     assert set(parts["상태"]) <= {"교체 임박", "주의", "안전", "확인 필요"}  # 코드값이 아니라 화면과 같은 이름
     assert pd.api.types.is_datetime64_any_dtype(parts["다음 교체일"])  # 문자열이 아니라 엑셀 날짜형
@@ -276,12 +288,7 @@ def test_report_download_for_unknown_station_is_404():
 
 
 def test_upload_unknown_station_name_is_rejected_without_saving_anything():
-    from psd.excel_io import rows_to_excel_bytes
-
-    content = rows_to_excel_bytes([{
-        "역": "존재하지않는역", "방향": "", "문번호": "", "교체일": "2026-01-01",
-        "사유": "고장", "부품": "종합제어반 릴레이", "입력자": "",
-    }])
+    content = _xlsx({"station": "존재하지않는역"})
     r = client.post(
         "/api/replacement-records/sync",
         files={"file": ("t.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
@@ -302,7 +309,7 @@ def test_upload_rejects_excel_missing_required_columns():
         files={"file": ("t.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
     assert r.status_code == 400
-    assert "필요한 열" in r.json()["detail"]
+    assert "머리글" in r.json()["detail"]
 
 
 # ---------- 2026-11-01: 엑셀이 원본(올리면 DB를 엑셀에 맞춘다) ----------
@@ -321,13 +328,8 @@ def test_exported_records_compare_as_unchanged():
 
 
 def test_compare_does_not_save_anything():
-    from psd.excel_io import rows_to_excel_bytes
-
     before = client.get("/api/replacement-records?limit=1").json()["total"]
-    content = rows_to_excel_bytes([{
-        "역": "부전", "방향": "", "문번호": "", "교체일": "2026-01-01",
-        "사유": "고장", "부품": "종합제어반 릴레이", "입력자": "",
-    }])
+    content = _xlsx({})
     r = client.post("/api/replacement-records/compare", files={"file": ("t.xlsx", content, XLSX)}).json()
     assert r["counts"]["new"] + r["counts"]["same"] == 1
     assert "batch_id" not in r
@@ -336,12 +338,7 @@ def test_compare_does_not_save_anything():
 
 def test_compare_rejects_date_before_psd_start():
     """2026-11-02 QA: 사용개시 전 날짜(연도 오타)가 들어가면 설치일이 그날로 바뀌어 부품이 수천 일 지난 위험이 됐다."""
-    from psd.excel_io import rows_to_excel_bytes
-
-    content = rows_to_excel_bytes([{
-        "역": "부전", "방향": "", "문번호": "", "교체일": "1990-01-01",
-        "사유": "고장", "부품": "종합제어반 릴레이", "입력자": "",
-    }])
+    content = _xlsx({"day": date(1990, 1, 1)})
     r = client.post("/api/replacement-records/compare", files={"file": ("t.xlsx", content, XLSX)})
     assert r.status_code == 400
     assert "PSD 사용개시일" in str(r.json()["detail"])
@@ -354,19 +351,30 @@ def test_template_has_empty_record_sheet_and_separate_examples():
 
     from psd.excel_io import COLUMNS
 
-    xl = pd.ExcelFile(io.BytesIO(client.get("/api/replacement-records/template").content))
-    assert xl.sheet_names == ["기록", "작성 예시"]
-    records, examples = (pd.read_excel(xl, s) for s in xl.sheet_names)
-    assert list(records.columns) == COLUMNS and records.empty  # 업로드는 첫 시트만 읽는다
-    assert len(examples) == 5
+    from psd.excel_io import parse_upload
+
+    content = client.get("/api/replacement-records/template").content
+    xl = pd.ExcelFile(io.BytesIO(content))
+    assert xl.sheet_names == ["고장현황 전체", "작성 예시", "목록"]
+    records, examples = (pd.read_excel(xl, s) for s in xl.sheet_names[:2])
+    assert list(records.columns) == COLUMNS and records.empty  # 업로드는 "고장현황 전체" 시트만 읽는다
+    assert len(examples) == 3
+    import pytest
+
+    from psd.excel_io import ExcelFormatError
+
+    with pytest.raises(ExcelFormatError, match="한 줄도 없습니다"):  # 빈 양식을 그대로 올리면 아무것도 안 들어간다
+        parse_upload(content)
 
 
 def test_record_list_filters_by_station_and_part_and_pages():
-    first = client.get("/api/replacement-records?limit=3&order=replaced&station_id=3&part=IFM").json()
-    second = client.get("/api/replacement-records?limit=3&offset=3&order=replaced&station_id=3&part=IFM").json()
+    from psd.catalog import CODE_TO_NAME
+
+    first = client.get("/api/replacement-records?limit=3&order=replaced&station_id=3&part=DCU").json()
+    second = client.get("/api/replacement-records?limit=3&offset=3&order=replaced&station_id=3&part=DCU").json()
     assert first["total"] == second["total"]
     for r in first["records"] + second["records"]:
-        assert r["station_id"] == 3 and "IFM 릴레이" in r["parts"]
+        assert r["station_id"] == 3 and CODE_TO_NAME["DCU"] in r["parts"]
     assert not {r["id"] for r in first["records"]} & {r["id"] for r in second["records"]}
 
 
@@ -379,10 +387,8 @@ def test_record_list_filters_by_date_range_and_reason():
 
 def test_compare_scope_names_the_excel_rows_at_both_ends():
     """2026-11-02: 범위가 왜 넓어졌는지 찾을 수 있게 가장 이른·늦은 날짜가 엑셀 몇 행인지 준다."""
-    from psd.excel_io import rows_to_excel_bytes
-
-    row = {"역": "부전", "방향": "", "문번호": "", "사유": "점검(이상 없음)", "부품": "전체", "입력자": ""}
-    content = rows_to_excel_bytes([{**row, "교체일": "2026-10-01"}, {**row, "교체일": "2024-03-05"}, {**row, "교체일": "2026-10-20"}])
+    row = {"reason": "prev", "action": "reset"}
+    content = _xlsx({**row, "day": date(2026, 10, 1)}, {**row, "day": date(2024, 3, 5)}, {**row, "day": date(2026, 10, 20)})
     scope = client.post("/api/replacement-records/compare", files={"file": ("t.xlsx", content, XLSX)}).json()["scope"]
     assert (scope["from"], scope["from_row"], scope["to"], scope["to_row"]) == ("2024-03-05", 3, "2026-10-20", 4)
 
@@ -391,11 +397,9 @@ def test_sync_records_who_uploaded():
     """2026-11-02: 업로드 이력에 올린 사람을 남긴다. 저장하지 않게 세션을 직접 열고 롤백한다."""
     from psd.api import _sync
     from psd.db import get_session
-    from psd.excel_io import rows_to_excel_bytes
     from psd.models import UploadBatch
 
-    content = rows_to_excel_bytes([{"역": "부전", "방향": "", "문번호": "", "교체일": "2026-10-02",
-                                    "사유": "점검(이상 없음)", "부품": "전체", "입력자": ""}])
+    content = _xlsx({"day": date(2026, 10, 2), "reason": "prev", "action": "reset"})
     s = get_session()
     try:
         r = _sync(s, content, "t.xlsx", False, uploaded_by="  홍길동 ")
@@ -443,3 +447,28 @@ def test_risk_models_lists_versions_and_retrain_state():
     assert set(r) == {"active", "models", "retrain"}
     if r["active"]:
         assert r["active"]["status"] == "active" and r["models"][0]["version"] >= r["active"]["version"]
+
+
+# ---------- 2026-11-24 v3: 코레일 장애 이력 양식 ----------
+
+
+def test_compare_creates_unseen_sub_track_and_skips_other_lines_without_saving():
+    """처음 보는 부본선은 문을 만들고, 동해선이 아닌 줄은 건너뛴다. 비교는 롤백이라 문도 남지 않는다."""
+    from psd.excel_io import record_row, rows_to_excel_bytes
+
+    before = client.get("/api/stations/12").json()["sides"]
+    rows = [record_row(day=date(2026, 10, 1), station="송정", reason="fail", unit_code="MOTOR", action="full", side="DB",
+                       door_no="1-2", track_raw="하부본선(#7)")]
+    rows.append({**rows[0], "노선": "경부선", "역": "서울"})
+    r = client.post("/api/replacement-records/compare", files={"file": ("t.xlsx", rows_to_excel_bytes(rows), XLSX)}).json()
+    if "DB" not in before:
+        assert r["added_tracks"] == ["송정 하부본선"]
+    assert r["skipped_other_line"] == 1 and r["counts"]["new"] + r["counts"]["same"] == 1
+    assert client.get("/api/stations/12").json()["sides"].keys() == before.keys()
+
+
+def test_part_types_endpoint_gives_form_vocabulary():
+    r = client.get("/api/part-types").json()
+    assert r["reasons"] == {"fail": "사후조치", "prev": "사전조치"}
+    assert r["actions"]["full"] == "교체" and r["fault_type"]["reset"] == "예방보수"
+    assert r["taxonomy"] in ("private", "sample") and r["part_types"]

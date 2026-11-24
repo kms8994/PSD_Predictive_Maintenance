@@ -10,8 +10,8 @@ START = date(2022, 1, 1)  # PSD_START 역 1(부전)
 
 
 def _fb(events_a, events_b=()):
-    parts = [PartHistory(1, 1, 10, "DCM", sorted(events_a)), PartHistory(2, 1, 10, "IFM", sorted(events_b))]
-    return FeatureBuilder(parts, {(1, "DCM"): 7.0, (1, "IFM"): 6.0})
+    parts = [PartHistory(1, 1, 10, "DCU", sorted(events_a)), PartHistory(2, 1, 10, "MOTOR", sorted(events_b))]
+    return FeatureBuilder(parts, {(1, "DCU"): 7.0, (1, "MOTOR"): 6.0})
 
 
 def feat(fb, pid, t):
@@ -32,7 +32,7 @@ def test_features_use_only_the_past():
 
 def test_door_history_counts_other_parts_on_the_same_door():
     fb = _fb([], [(date(2024, 5, 1), "fail", "full"), (date(2025, 5, 1), "fail", "full")])
-    f = feat(fb, 1, date(2025, 6, 1))  # DCM 자신은 고장 없음
+    f = feat(fb, 1, date(2025, 6, 1))  # DCU 자신은 고장 없음
     assert f["fails_total"] == 0 and f["door_fail_12m"] == 1 and f["door_fail_36m"] == 2
 
 
@@ -40,7 +40,7 @@ def test_label_is_failure_in_the_next_six_months():
     fb = _fb([(date(2024, 5, 1), "fail", "full"), (date(2024, 9, 1), "prev", "full")])
     p = fb.parts[0]
     assert fb.label(p, date(2024, 1, 1)) == 1
-    assert fb.label(p, date(2024, 5, 2)) == 0  # 그 뒤 6개월엔 예방 정비만
+    assert fb.label(p, date(2024, 5, 2)) == 0  # 그 뒤 6개월엔 사전조치만
     assert fb.label(p, date(2023, 1, 1)) == 0
 
 

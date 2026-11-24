@@ -539,25 +539,26 @@ details.more[open] > summary { margin-bottom: 10px; }
     return data;
   }
 
-  // 부품 종류: 화면 표시용 고정 목록(이름·단위). 값은 아니라 한 번만 받아 둔다
-  let PART_TYPES = [], PART = {}, DOOR_PART_CODES = [], STATION_PART_CODES = [];
+  // 예측 단위(장애부위 소분류, 2026-11-24 v3): 화면 표시용 고정 목록(이름·대분류·단위). 값은 아니라 한 번만 받아 둔다.
+  // 조치·장애인지·선로 이름도 서버(psd/catalog.py)에서 받는다
+  let PART_TYPES = [], PART = {}, DOOR_PART_CODES = [], STATION_PART_CODES = [], TAXONOMY = "";
+  let REASONS = {}, ACTIONS = {}, FAULT_TYPE = {}, SIDE_LABEL = {};
   async function loadPartTypes() {
     if (PART_TYPES.length) return;
-    const [{ part_types }, { today }] = await Promise.all([api("/api/part-types"), api("/api/today")]);
-    document.getElementById("asof").textContent = dotDate(today) + " 기준";
+    const [pt, { today }] = await Promise.all([api("/api/part-types"), api("/api/today")]);
+    const { part_types } = pt;
+    REASONS = pt.reasons; ACTIONS = pt.actions; FAULT_TYPE = pt.fault_type; SIDE_LABEL = pt.sides; TAXONOMY = pt.taxonomy;
+    document.getElementById("asof").textContent = dotDate(today) + " 기준" + (TAXONOMY === "sample" ? " · 예시 분류표" : "");
     PART_TYPES = part_types;
     PART = Object.fromEntries(PART_TYPES.map(p => [p.code, p]));
     DOOR_PART_CODES = PART_TYPES.filter(p => p.unit === "door").map(p => p.code);
     STATION_PART_CODES = PART_TYPES.filter(p => p.unit === "station").map(p => p.code);
   }
 
-  const REASONS = { fail: "고장", prev: "예방 정비", with: "함께 정비", check: "점검(이상 없음)" };
-  // 조치(2026-11-16, psd/catalog.py ACTIONS): 설치일·주기 보정은 전체 교체만 새 수명 시작으로 본다
-  const ACTIONS = { full: "전체 교체", partial: "일부 교체", overhaul: "전체 수리", repair: "일부 수리", none: "없음" };
-  // 조치 + 세부 부품·증상·원인 한 줄(점검은 비움)
+  // 조치사항(양식) + 장애내용·고장원인·조치 상세 한 줄. 설치일·주기 보정은 "교체"만 새 수명 시작으로 본다
   function actText(r) {
-    if (!r.action || r.action === "none") return "";
-    const extra = [(r.sub_parts || []).join(", "), r.symptom, r.cause].filter(Boolean).map(esc).join(" · ");
+    if (!r.action) return "";
+    const extra = [r.symptom, r.symptom_detail, r.cause_text, r.action_detail].filter(Boolean).map(esc).join(" · ");
     return `${ACTIONS[r.action] || esc(r.action)}${extra ? `<div class="small muted">${extra}</div>` : ""}`;
   }
   const STATE = { 빨강: ["교체 임박", "s-red"], 노랑: ["주의", "s-amber"], 초록: ["안전", "s-green"], 확인_필요: ["확인 필요", "s-check"] };
@@ -568,12 +569,14 @@ details.more[open] > summary { margin-bottom: 10px; }
     짧음_확실: ["10년보다 짧음", "s-info", "원인 비중을 어떻게 잡아도 10년보다 짧습니다."],
     김_확실: ["10년보다 김", "s-check", "원인 비중을 어떻게 잡아도 10년보다 깁니다. 10년보다 늦은 교체는 권고하지 않고 참고로만 보여 줍니다."],
     불확실: ["10년 안팎", "s-check", "원인 비중에 따라 10년보다 짧게도, 길게도 나옵니다."],
-    날씨무관: ["날씨 보정 없음", "s-check", "날씨가 수명을 줄인다는 정량 근거를 찾지 못해 제조사 권장 10년을 씁니다."]
+    날씨무관: ["날씨 보정 없음", "s-check", "날씨가 수명을 줄인다는 정량 근거를 찾지 못해 제조사 권장 10년을 씁니다."],
+    공식없음: ["기록으로 배움", "s-info", "이 장애부위는 수명을 계산할 공식이 없어 기준 10년을 약하게만 믿고, 고장 기록이 쌓일수록 기록 쪽으로 옮겨 갑니다(공식이 있는 부위보다 빨리 움직입니다)."]
   };
+  // 날씨 공식의 근거 링크(열쇠 = 분류표의 공식 이름: dcm → DCU, motor → 모터&엔코더)
   const SRC = {
-    DCM: [["Nichicon 콘덴서 수명 계산기", "https://www.nichicon.com/en-us/design-support/lifetime-calculator/"], ["Norris-Landzberg 납땜 피로", "https://accendoreliability.com/norris-landzberg-solder-joint-fatigue/"], ["Peck 습도 모델", "https://metricgate.com/docs/peck-temperature-humidity-bias/"]],
-    IFM: [["Peck 습도 모델", "https://metricgate.com/docs/peck-temperature-humidity-bias/"]],
-    MOTOR: [["NSWC-98 식 14-4 권선 온도 계수", "https://everyspec.com/USN/NSWC/NSWC-98_RELIABILITY_HDBK_SEP1998_55321/"]]
+    dcm: [["Nichicon 콘덴서 수명 계산기", "https://www.nichicon.com/en-us/design-support/lifetime-calculator/"], ["Norris-Landzberg 납땜 피로", "https://accendoreliability.com/norris-landzberg-solder-joint-fatigue/"], ["Peck 습도 모델", "https://metricgate.com/docs/peck-temperature-humidity-bias/"]],
+    humid: [["Peck 습도 모델", "https://metricgate.com/docs/peck-temperature-humidity-bias/"]],
+    motor: [["NSWC-98 식 14-4 권선 온도 계수", "https://everyspec.com/USN/NSWC/NSWC-98_RELIABILITY_HDBK_SEP1998_55321/"]]
   };
 
   // ---------- 유틸 ----------
@@ -955,7 +958,7 @@ details.more[open] > summary { margin-bottom: 10px; }
   function recRows(records) {
     return records.map(r => `<tr><td class="num">${dotDate(r.replaced_on)}</td><td><button class="linkbtn" style="padding:0" ${goAttr({ name: "station", st: r.station_id })}>${esc(r.station_name)}</button></td><td>${esc(r.location)}</td><td>${r.parts.map(esc).join(", ")}</td><td><span class="pill s-check">${REASONS[r.reason] || esc(r.reason)}</span></td><td>${actText(r)}</td><td class="muted">${esc(r.created_by || "-")}</td></tr>`).join("");
   }
-  const recHead = `<tr><th>작업일</th><th>역</th><th>위치</th><th>부품</th><th>사유</th><th>조치</th><th>입력자</th></tr>`;
+  const recHead = `<tr><th>발생일</th><th>역</th><th>위치</th><th>장애부위</th><th>장애인지</th><th>조치사항</th><th>조치자</th></tr>`;
   const ITEM_CLS = { 빨강: "r", 노랑: "y", 확인_필요: "c", 초록: "" };
   function dday(days) { return days < 0 ? `+${-days}일` : `D-${days}`; }
   function stationDot(s) {
@@ -1246,7 +1249,7 @@ details.more[open] > summary { margin-bottom: 10px; }
   }
   // ---------- AI 모델: 고장 위험도 모델의 버전·검증·재학습(psd/risk.py, 2026-11-16) ----------
   const MODEL_STATUS = { active: ["사용 중", "s-green"], rejected: ["보류", "s-amber"], retired: ["이전", "s-check"] };
-  const TRIGGER = { upload: "기록 업로드", undo: "업로드 되돌리기", manual: "직접 다시 학습", script: "스크립트" };
+  const TRIGGER = { upload: "기록 업로드", undo: "업로드 되돌리기", manual: "직접 다시 학습", script: "스크립트", pretrained: "데스크탑 사전 학습" };
   // 꺾은선(가상 현장 결과). 축 하나, 2px 선, 열마다 마우스를 올리면 그 기준일의 모든 계열 값(data-tip)
   function lineChart(xs, series, { fmt, yMin = 0, yMax, aria }) {
     const W = 640, H = 200, L = 44, R = 96, T = 10, B = 26;
@@ -1395,24 +1398,15 @@ details.more[open] > summary { margin-bottom: 10px; }
       <form class="panel form" id="xlsxform" novalidate>
         <div class="headrow"><h2>정비기록 엑셀 올리기</h2><a class="linkbtn" href="/api/replacement-records/template" download>빈 양식 내려받기 ›</a></div>
         <p class="small muted">현장 엑셀에 계속 적고, 한 달에 한 번 누적 파일을 통째로 올리세요. 먼저 비교해 보여 주고 "반영하기"를 눌러야 저장합니다.</p>
-        <label class="drop" id="xf-drop"><input type="file" id="xf-file" accept=".xlsx" class="vh"><b id="xf-name">엑셀 파일을 여기에 끌어다 놓거나, 눌러서 고르세요</b><span class="small muted">.xlsx · 빈 양식과 같은 열로</span></label>
+        <label class="drop" id="xf-drop"><input type="file" id="xf-file" accept=".xlsx" class="vh"><b id="xf-name">엑셀 파일을 여기에 끌어다 놓거나, 눌러서 고르세요</b><span class="small muted">.xlsx · 코레일 장애 이력 양식 그대로</span></label>
         <details class="more"><summary>작성 규칙</summary><ul class="small muted" style="margin:0;padding-left:20px">
-          <li>첫 시트만 읽습니다. 열: 역, 방향, 문번호, 작업일, 사유, 조치, 부품, 세부 부품, 증상, 원인, 입력자 (조치~원인은 비워도 됨)</li>
+          <li><b>현장에서 쓰는 코레일 "장애 이력 관리 현황" 양식 파일을 그대로 올리면 됩니다.</b> "고장현황 전체" 시트에서 머리글 줄(양식은 12행)을 찾아 그 아래를 읽고, 수식만 깔린 빈 줄과 동해선이 아닌 줄은 건너뜁니다.</li>
+          <li>꼭 있어야 하는 칸: 년도·월·일, 역, 장애인지, 장애부위②(소분류), 조치사항. 문마다 있는 소분류(구동부·가동문·DCU 등)는 승강장 선로(예: "상본선(#3)")와 출입문(예: "2-1")도 적습니다.</li>
           <li>이미 들어간 줄은 그대로 넘어가고 새로 적은 줄만 들어갑니다. 같은 파일을 다시 올려도 기록이 늘지 않습니다.</li>
-          <li>방향은 "부전 방면" 또는 "북울산 방면", 문번호는 "호차-문"(예: 1-1)으로 씁니다.</li>
-          <li>역 공통 부품(종합제어반 릴레이)은 방향·문번호를 비워 둡니다.</li>
-          <li>사유(왜 했나)는 넷 중 하나입니다.
-            <b>고장</b> = 고장 나서 손봄 ·
-            <b>예방 정비</b> = 고장 나기 전에 미리 손봄(예정일이 됐거나 점검에서 상태가 나빠서) ·
-            <b>함께 정비</b> = 다른 부품을 고치는 김에 같이 손봄(예: 모터를 바꾸며 벨트도 새것으로) ·
-            <b>점검(이상 없음)</b> = 손대지 않고 점검만 함.</li>
-          <li>조치(무엇을 했나)는 <b>전체 교체</b> · <b>일부 교체</b>(세부 부품만 바꿈) · <b>전체 수리</b>(분해 정비) · <b>일부 수리</b>(조정·청소·재체결) · <b>없음</b>(점검) 중 하나입니다.
-            비우면 점검은 없음, 나머지는 전체 교체로 읽습니다. 일부 교체는 바꾼 세부 부품(예: "전원부 콘덴서")을 꼭 적습니다.</li>
-          <li>고장이면 증상(예: "열림·닫힘 불량")과 짐작한 원인(예: "습기·부식")을 적을 수 있습니다. 빈 양식의 "작성 예시" 시트에 예가 있습니다.</li>
-          <li>교체주기 계산에서는 <b>고장 + 전체 교체</b>만 "그 부품이 수명을 다했다"로 세고, 예방·함께 정비의 전체 교체는 "그때까지 멀쩡했다"로 셉니다.
-            일부 교체·수리는 부품이 새것이 되지 않아 설치일을 바꾸지 않습니다.</li>
-          <li>점검(이상 없음)은 작업일 칸에 점검일을 씁니다. 설치일은 바뀌지 않습니다.</li>
-          <li>부품은 쉼표로 여러 개 쓸 수 있습니다(예: "DCM,IFM 릴레이"). "전체"는 그 문의 부품 전부입니다.</li>
+          <li>장애인지: <b>사후조치</b> = 신고를 받고 출동해 조치(고장으로 셈) · <b>사전조치</b> = 점검 중 발견하거나 미리 조치.</li>
+          <li>조치사항: <b>교체</b>(주요 부품) · <b>단순교체</b>(부속 부품) · <b>수리</b> · <b>조정</b> · <b>리셋</b> · <b>기타</b>. 장애형태(장애/보수/예방보수)는 조치사항으로 정해집니다 — 규칙과 다르게 적혀 있으면 받되 경고로 알려 줍니다.</li>
+          <li>교체주기 계산에서는 <b>사후조치</b>를 고장 한 번으로 셉니다. 설치일(새 수명 시작)은 <b>교체</b>일 때만 바뀌고, 단순교체·수리·조정·리셋·기타는 부품이 새것이 되지 않습니다.</li>
+          <li>기록에 처음 나온 부본선(상부본선·하부본선)은 그 선로의 문을 자동으로 만듭니다. 본부·PSD설치·설치년도·업체 칸은 역 정보로 저장합니다.</li>
           <li>잘못 적은 기록은 엑셀에서 고치거나 지운 뒤 다시 올립니다.</li>
           <li>비교는 파일에 나온 역들의, 파일의 가장 이른 날짜~가장 늦은 날짜 사이 기록하고만 합니다. 누적 파일이면 전체, 한 달 파일이면 그 달만 봅니다.
             한 달 파일에 옛날 기록을 고친 줄을 섞으면 범위가 그 날짜까지 넓어지니, 옛날 기록은 누적 파일에서 고쳐 올리세요.</li>
@@ -1430,21 +1424,21 @@ details.more[open] > summary { margin-bottom: 10px; }
         <div class="headrow"><h3>정비 기록</h3><a class="linkbtn" href="/api/replacement-records/export" download>전체 기록 엑셀로 받기 ›</a></div>
         <div class="filters">
           <select id="rf-st" aria-label="역으로 거르기"><option value="">모든 역</option>${opened.map(s => `<option value="${s.id}" ${view.rst === s.id ? "selected" : ""}>${s.name}</option>`).join("")}</select>
-          <select id="rf-part" aria-label="부품으로 거르기"><option value="">모든 부품</option>${PART_TYPES.map(t => `<option value="${t.code}" ${view.rpart === t.code ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
-          <select id="rf-reason" aria-label="사유로 거르기"><option value="">모든 사유</option>${Object.entries(REASONS).map(([k, l]) => `<option value="${k}" ${view.rreason === k ? "selected" : ""}>${l}</option>`).join("")}</select>
-          <select id="rf-action" aria-label="조치로 거르기"><option value="">모든 조치</option>${Object.entries(ACTIONS).map(([k, l]) => `<option value="${k}" ${view.raction === k ? "selected" : ""}>${l}</option>`).join("")}</select>
-          <label class="small muted">작업일 <input type="date" id="rf-from" value="${view.rfrom || ""}" aria-label="작업일 시작"> ~ <input type="date" id="rf-to" value="${view.rto || ""}" aria-label="작업일 끝"></label>
+          <select id="rf-part" aria-label="장애부위로 거르기"><option value="">모든 장애부위</option>${PART_TYPES.map(t => `<option value="${t.code}" ${view.rpart === t.code ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+          <select id="rf-reason" aria-label="장애인지로 거르기"><option value="">사후·사전조치 모두</option>${Object.entries(REASONS).map(([k, l]) => `<option value="${k}" ${view.rreason === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+          <select id="rf-action" aria-label="조치사항으로 거르기"><option value="">모든 조치사항</option>${Object.entries(ACTIONS).map(([k, l]) => `<option value="${k}" ${view.raction === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+          <label class="small muted">발생일 <input type="date" id="rf-from" value="${view.rfrom || ""}" aria-label="발생일 시작"> ~ <input type="date" id="rf-to" value="${view.rto || ""}" aria-label="발생일 끝"></label>
           ${filtered ? `<button type="button" class="linkbtn" id="rf-clear">조건 지우기</button>` : ""}
-          <span class="small muted">${n0(rec.total)}건 · 작업일 최신순</span>
+          <span class="small muted">${n0(rec.total)}건 · 발생일 최신순</span>
         </div>
-        ${rec.records.length ? `<div class="scroll"><table>${recHead}${recRows(rec.records)}</table></div>${pager}` : `<p class="muted">${filtered ? "조건에 맞는 기록이 없습니다." : "입력된 교체 기록이 없습니다."}</p>`}
+        ${rec.records.length ? `<div class="scroll"><table>${recHead}${recRows(rec.records)}</table></div>${pager}` : `<p class="muted">${filtered ? "조건에 맞는 기록이 없습니다." : "입력된 정비 기록이 없습니다."}</p>`}
       </div>
     </section>`;
   }
 
   // 비교 결과(아직 저장 안 함): 새 기록·고친 기록·엑셀에 없는 기록 + 반영하면 바뀌는 교체주기
   function changedRows(list) {
-    const what = r => `${r.parts.map(esc).join(", ")} · ${REASONS[r.reason] || esc(r.reason)}${r.action && r.action !== "none" ? ` · ${actText(r)}` : ""}`;
+    const what = r => `${r.parts.map(esc).join(", ")} · ${REASONS[r.reason] || esc(r.reason)}${r.action ? ` · ${actText(r)}` : ""}`;
     return list.map(({ before: b, after: a }) => `<tr><td class="num">${dotDate(a.replaced_on)}</td><td>${esc(a.station_name)}</td><td>${esc(a.location)}</td><td class="muted">${what(b)}</td><td><b>${what(a)}</b></td></tr>`).join("");
   }
   function moreNote(shown, total) { return total > shown ? `<p class="small muted">처음 ${n0(shown)}건만 보여 줍니다(전체 ${n0(total)}건).</p>` : ""; }
@@ -1454,7 +1448,10 @@ details.more[open] > summary { margin-bottom: 10px; }
     const notes = [
       c.file_duplicates && `엑셀 안에 똑같은 줄이 ${n0(c.file_duplicates)}개 더 있어 한 번만 넣습니다.`,
       c.db_duplicates && `지금 기록에 두 번 들어간 기록 ${n0(c.db_duplicates)}건은 하나만 남깁니다.`,
-    ].filter(Boolean).map(t => `<p class="small">${t}</p>`).join("");
+      r.skipped_other_line && `동해선이 아닌 줄 ${n0(r.skipped_other_line)}개는 건너뛰었습니다.`,
+      r.added_tracks && r.added_tracks.length && `기록에 처음 나온 선로의 문을 만듭니다: ${r.added_tracks.map(esc).join(", ")}`,
+      r.station_info_changed && r.station_info_changed.length && `역 정보(본부·PSD설치·업체 등)를 고칩니다: ${r.station_info_changed.map(esc).join(", ")}`,
+    ].filter(Boolean).map(t => `<p class="small">${t}</p>`).join("") + (r.warning_count ? `<details class="more"><summary class="small">확인할 것 ${n0(r.warning_count)}건 — 받았지만 양식 규칙과 다른 줄</summary><ul class="small muted" style="margin:0;padding-left:20px">${r.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul>${moreNote(r.warnings.length, r.warning_count)}</details>` : "");
     const missing = c.missing ? `<div class="panel" style="padding:12px;border-color:${r.missing_warn ? "var(--red)" : "var(--line)"}">
         <b>엑셀에 없는 기록 ${n0(c.missing)}건</b>
         <p class="small ${r.missing_warn ? "err" : "muted"}" style="margin:0">${r.missing_warn ? `꽤 많습니다. 다른 역·기간의 파일을 고른 건 아닌지, 엑셀 ${r.scope.from_row}행(${dotDate(r.scope.from)})처럼 동떨어진 날짜 한 줄 때문에 범위가 넓어진 건 아닌지 확인하세요. ` : ""}비교 범위 안에 있는데 이 엑셀에는 없는 기록입니다. 엑셀에서 지운 기록이 맞을 때만 지우세요.</p>
@@ -1536,7 +1533,6 @@ details.more[open] > summary { margin-bottom: 10px; }
   }
 
   // ---------- 역 ----------
-  const SIDE_LABEL = { U: "부전 방면", D: "북울산 방면" };
   function stationNav(stations, st) {
     return `<nav class="stnav" aria-label="역 바꾸기">${stations.map(x => {
       const c = x.counts, n = c.빨강 + c.확인_필요 + c.노랑;
@@ -1578,6 +1574,12 @@ details.more[open] > summary { margin-bottom: 10px; }
         <div class="plist-foot"><span class="small muted">${safe ? `나머지 ${safe}개는 안전 · ` : ""}문 번호를 누르면 그 부품 상세</span><button type="button" class="btn ghost" data-plcopy="${esc(doorListText(stName, p, groups))}">작업 지시용으로 복사</button></div></td></tr>`;
   }
   // 역 전체를 부품 종류별로: 가장 급한 상태, 그 상태인 부품 수 / 전체, 그 예정일. 줄을 누르면 가장 급한 그 부품 상세로
+  // 장애 이력 양식에서 저장한 역 정보(기록을 올리면 채워진다). 빈 칸은 안 보인다
+  const STATION_INFO = [["structure", "PSD 설치"], ["install_year", "설치년도"], ["manufacturer", "제조업체"], ["control_system", "제어시스템"],
+    ["dcu_vendor", "DCU(MCU) 업체"], ["office", "관할사업소"], ["install_owner", "설치주체"]];
+  function stationInfo(info) {
+    return STATION_INFO.filter(([k]) => info && info[k]).map(([k, l]) => `<dt>${l}</dt><dd>${esc(String(info[k]))}</dd>`).join("");
+  }
   function partSummary(parts, stName, openCode) {
     const rows = PART_TYPES.filter(p => parts[p.code]).map(p => ({ p, x: parts[p.code] }))
       .sort((a, b) => RANK[a.x.status] - RANK[b.x.status] || a.x.days_left - b.x.days_left)
@@ -1588,8 +1590,8 @@ details.more[open] > summary { margin-bottom: 10px; }
         return `<tr class="prow" tabindex="0" ${goAttr({ name: "part", partId: x.part_id })}><td><b>${esc(p.name)}</b>${p.unit === "station" ? ' <span class="small muted">역 공통</span>' : ""}</td><td>${pill(x.status)}</td><td class="num">${x.counts[x.status]} <span class="muted">/ ${x.total}</span></td><td class="num">${dotDate(x.due)}</td><td class="num">${dur(x.days_left)}</td><td>${btn}</td></tr>${listable ? doorListRow(stName, p, x, open) : ""}`;
       }).join("");
     return `<div class="panel" id="partsum">
-        <div class="headrow"><h3>부품별 상태</h3><span class="small muted">대상 = 그 상태인 부품 수 / 전체 · 줄을 누르면 가장 급한 부품 상세 · "문 목록"은 어느 문인지</span></div>
-        <div class="scroll"><table class="ptable"><tr><th>부품</th><th>상태</th><th>대상</th><th>다음 교체</th><th>남은 기간</th><th></th></tr>${rows}</table></div>
+        <div class="headrow"><h3>장애부위별 상태</h3><span class="small muted">대상 = 그 상태인 부품 수 / 전체 · 줄을 누르면 가장 급한 부품 상세 · "문 목록"은 어느 문인지</span></div>
+        <div class="scroll"><table class="ptable"><tr><th>장애부위</th><th>상태</th><th>대상</th><th>다음 교체</th><th>남은 기간</th><th></th></tr>${rows}</table></div>
       </div>`;
   }
   async function copyText(text) {
@@ -1623,11 +1625,11 @@ details.more[open] > summary { margin-bottom: 10px; }
   function doorPanel(doorDetail) {
     const door = doorDetail.door;
     const u = code => doorDetail.units.find(x => x.part_type_code === code);
-    const chip = (code, label, x, y, w) => { const x0 = u(code); return `<g class="chip c-${x0.status}" tabindex="0" role="link" aria-label="${esc(x0.part_name + " " + STATE[x0.status][0])}" ${goAttr({ name: "part", partId: x0.part_id })}><rect x="${x}" y="${y}" width="${w}" height="24" rx="5"/><text x="${x + w / 2}" y="${y + 16}" text-anchor="middle">${label}</text></g>`; };
+    const chip = (code, label, x, y, w) => { const x0 = u(code); if (!x0) return ""; return `<g class="chip c-${x0.status}" tabindex="0" role="link" aria-label="${esc(x0.part_name + " " + STATE[x0.status][0])}" ${goAttr({ name: "part", partId: x0.part_id })}><rect x="${x}" y="${y}" width="${w}" height="24" rx="5"/><text x="${x + w / 2}" y="${y + 16}" text-anchor="middle">${label}</text></g>`; };
     const doorSvg = `<svg class="doorsvg" viewBox="0 0 360 250" role="img" aria-label="안전문 ${door.no} 구조와 부품 상태">
         <rect class="hdr" x="16" y="8" width="328" height="62" rx="6"/>
         <text class="hdrcap" x="24" y="22">기계함</text>
-        ${chip("MOTOR", "모터", 24, 32, 56)}${chip("BELT", "벨트", 86, 32, 56)}${chip("PULLEY", "풀리", 148, 32, 56)}${chip("DCM", "DCM", 210, 32, 60)}${chip("IFM", "IFM", 276, 32, 60)}
+        ${chip("MOTOR", "모터", 24, 32, 56)}${chip("BELT", "벨트", 86, 32, 56)}${chip("ELOCK", "전자정", 148, 32, 56)}${chip("OCSENS", "개폐센서", 210, 32, 60)}${chip("DCU", "DCU", 276, 32, 60)}
         <rect class="rail" x="16" y="76" width="328" height="4" rx="2"/>
         ${chip("HANGER", "행거", 148, 84, 64)}
         <rect class="fixed" x="16" y="112" width="72" height="122"/>
@@ -1636,15 +1638,16 @@ details.more[open] > summary { margin-bottom: 10px; }
         <rect class="fixed" x="272" y="112" width="72" height="122"/>
         <line class="stripe" x1="96" x2="173" y1="168" y2="168"/><line class="stripe" x1="187" x2="264" y1="168" y2="168"/>
         <line class="floor" x1="8" x2="352" y1="238" y2="238"/>
+        ${chip("SLDOOR", "가동문", 148, 130, 64)}${chip("OBST", "장애물센서", 20, 130, 64)}${chip("DDET", "검지센서", 276, 130, 64)}${chip("SILL", "도어턱", 148, 206, 64)}
       </svg>`;
     const order = [...doorDetail.units].sort((a, b) => RANK[a.status] - RANK[b.status] || a.days_left - b.days_left);
-    const partRows = order.map(x => `<tr class="prow" tabindex="0" ${goAttr({ name: "part", partId: x.part_id })}><td><b>${x.part_name}</b></td><td>${pill(x.status)}</td><td class="num">${yr(x.cycle_years)}</td><td class="num">${dotDate(x.due)}</td><td class="num">${dur(x.days_left)}</td></tr>`).join("");
+    const partRows = order.map(x => `<tr class="prow" tabindex="0" ${goAttr({ name: "part", partId: x.part_id })}><td><b>${esc(x.part_name)}</b> <span class="small muted">${esc((x.group || "").replace(" 장애", ""))}</span></td><td>${pill(x.status)}</td><td class="num">${yr(x.cycle_years)}</td><td class="num">${dotDate(x.due)}</td><td class="num">${dur(x.days_left)}</td></tr>`).join("");
     return `<div class="psdhead"><h2>안전문 ${door.no}</h2><span class="muted small">${door.side_label}</span></div>
         ${repeatNote(doorDetail)}
         <div class="doorgrid">
           <figure class="doorfig">${doorSvg}</figure>
           <div class="doorparts">
-            <div class="scroll"><table class="ptable"><tr><th>부품</th><th>상태</th><th>교체주기</th><th>다음 교체</th><th>남은 기간</th></tr>${partRows}</table></div>
+            <div class="scroll"><table class="ptable"><tr><th>장애부위</th><th>상태</th><th>교체주기</th><th>다음 교체</th><th>남은 기간</th></tr>${partRows}</table></div>
           </div>
         </div>`;
   }
@@ -1690,12 +1693,14 @@ details.more[open] > summary { margin-bottom: 10px; }
       </section>`;
     }
 
-    const sid = view.side || (view.door && detail.sides.D.doors.some(d => d.id === view.door) ? "D" : "U");
+    const sideKeys = Object.keys(detail.sides);  // 이 역의 선로(상·하 본선 + 기록에 나온 부본선)
+    const sid = (view.side && detail.sides[view.side]) ? view.side
+      : (view.door && sideKeys.find(k => detail.sides[k].doors.some(d => d.id === view.door))) || sideKeys[0];
     const sideDoors = detail.sides[sid].doors;
     const doorId = sideDoors.find(d => d.id === view.door) ? view.door : worstDoor(sideDoors).id;
     const doorDetail = await api(`/api/doors/${doorId}`);
 
-    const dirTabs = `<div class="dirtabs" role="group" aria-label="방향 선택">${Object.entries(SIDE_LABEL).map(([k, v]) => `<button class="dirtab" aria-pressed="${k === sid}" ${goAttr({ name: "station", st, side: k, plist: view.plist, keep: true })}>${v}</button>`).join("")}</div>`;
+    const dirTabs = `<div class="dirtabs" role="group" aria-label="선로 선택">${sideKeys.map(k => [k, detail.sides[k].label]).map(([k, v]) => `<button class="dirtab" aria-pressed="${k === sid}" ${goAttr({ name: "station", st, side: k, plist: view.plist, keep: true })}>${v}</button>`).join("")}</div>`;
     const strip = `<div class="strip-wrap"><div class="strip">${[1, 2, 3, 4].map(car => `<div class="car"><div class="carlabel">${car}호차</div><div class="cardoors">${sideDoors.filter(d => d.car === car).map(d =>
       `<button class="psd c-${d.worst_status} ${d.repeat ? "rep" : ""}" aria-pressed="${d.id === doorId}" aria-label="${esc(d.no + " · " + STATE[d.worst_status][0] + (d.repeat ? " · 반복 고장 의심" : ""))}" data-door="${d.id}" data-side="${sid}"><span class="psd-head"></span><span class="psd-glass"><i></i><i></i></span>${d.repeat ? `<span class="psd-no rep" title="반복 고장 의심">↻ ${d.no}</span>` : `<span class="psd-no">${d.no}</span>`}</button>`
     ).join("")}</div></div>`).join("")}</div></div>`;
@@ -1717,7 +1722,7 @@ details.more[open] > summary { margin-bottom: 10px; }
       ${switcher}
       <div class="panel">
         <h2>${s.name}</h2>
-        <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)}</dd><dt>PSD 설치일</dt><dd>${fmtDateKR(s.psd_install_date)} <span class="small muted">(교체 기록이 없는 부품은 이날부터 셉니다)</span></dd><dt>날씨 지점</dt><dd>AWS ${s.aws_station}</dd><dt>문 수</dt><dd>방향마다 16개</dd><dt>운행</dt><dd>방향마다 하루 약 ${dailyTrips(s.service_interval_min)}회</dd></dl>
+        <dl class="kv"><dt>개통일</dt><dd>${openLabel(s)}</dd><dt>PSD 설치일</dt><dd>${fmtDateKR(s.psd_install_date)} <span class="small muted">(교체 기록이 없는 부품은 이날부터 셉니다)</span></dd><dt>날씨 지점</dt><dd>AWS ${s.aws_station}</dd><dt>문 수</dt><dd>선로마다 16개 · 선로 ${sideKeys.length}개(${sideKeys.map(k => esc(detail.sides[k].label)).join(", ")})</dd>${stationInfo(s.info)}<dt>운행</dt><dd>방향마다 하루 약 ${dailyTrips(s.service_interval_min)}회</dd></dl>
         <div class="legend">${pill("빨강")} ${c.빨강} <span class="${zeroCls(c.확인_필요)}">${pill("확인_필요")} ${c.확인_필요}</span> ${pill("노랑")} ${c.노랑} ${pill("초록")} ${c.초록}</div>
         ${repLine}
         <div class="filters"><span class="small muted">${s.name}역 보고서</span>${reportBox([], s.id)}</div>
@@ -1789,17 +1794,17 @@ details.more[open] > summary { margin-bottom: 10px; }
     const lo = Math.max(0, Math.floor((Math.min(...rvals) - rpad) * 2) / 2);
     const hi = Math.ceil((Math.max(...rvals) + rpad) * 2) / 2;
     const pos = x => ((Math.min(Math.max(x, lo), hi) - lo) / (hi - lo) * 100).toFixed(2) + "%";
-    const range = cycle.judgment === "날씨무관" ? "" : `
+    const range = (cycle.judgment === "날씨무관" || cycle.judgment === "공식없음") ? "" : `
       <div class="rangebar" aria-hidden="true"><div class="track"></div><div class="band" style="left:${pos(cycle.lo_years)};width:calc(${pos(cycle.hi_years)} - ${pos(cycle.lo_years)})"></div><div class="tick" style="left:${pos(10)}"></div><div class="base" style="left:${pos(cycle.base_years)}"></div></div>
       <div class="rangeaxis"><span>${yr(lo)}</span><span>${yr(hi)}</span></div>
       <p class="small muted">고장 원인(부식·노화 등)이 각각 얼마나 차지한다고 가정하느냐에 따라 ${yr(cycle.lo_years)}–${yr(cycle.hi_years)}까지 달라집니다 · 세로선 = 제조사 권장 10년</p>`;
 
     let basis;
     if (!weather_basis) {
-      basis = `<p>${JUDGE.날씨무관[2]}${part.part_type_code === "PSC" ? " 종합제어반은 실내 설비입니다." : ""}</p>
+      basis = cycle.judgment === "공식없음" ? `<p>${JUDGE.공식없음[2]}</p>` : `<p>${JUDGE.날씨무관[2]}${part.part_type_code === "PSC" ? " 종합제어반은 실내 설비입니다." : ""}</p>
         <ol class="src"><li>NSWC-98 기계부품 신뢰성 핸드북: 벨트 장 없음, 베어링 계수에 날씨 입력 없음 — <a href="https://everyspec.com/USN/NSWC/NSWC-98_RELIABILITY_HDBK_SEP1998_55321/" target="_blank" rel="noopener">EverySpec</a></li></ol>`;
     } else {
-      const wb = weather_basis, src = SRC[part.part_type_code] || [];
+      const wb = weather_basis, src = SRC[part.formula] || [];
       // 권장 주기 = 10년 ÷ Σ(비중 × 열화 속도). 비중은 기본값(문자열 맨 앞 %), 열화 속도는 24개 역 평균 날씨 대비
       const formula = `10년 ÷ (${wb.causes.map(c => `${c.name} ${parseFloat(c.weight_default)}% × ${c.af.toFixed(2)}`).join(" + ")}) ≈ ${yr(cycle.base_years)}`;
       basis = `<div class="formula">${esc(formula)}</div>
@@ -1815,8 +1820,8 @@ details.more[open] > summary { margin-bottom: 10px; }
     // 예정일 = 마지막 전체 교체일 + 교체주기(점검·일부 교체·수리는 안 셈), 교체 기록이 없으면 PSD 설치일부터 센다.
     // "기준일"이라고 쓰면 머리글의 "2026.11.02 기준"(오늘)과 같은 말이라 헷갈려 실제 날짜 이름으로 쓴다(2026-11-02)
     const lastRep = history.find(r => r.action === "full");
-    const baseNote = lastRep && lastRep.replaced_on === p.install_date ? "마지막 전체 교체일" : history.length ? "PSD 설치일(전체 교체 기록 없음)" : "PSD 설치일(교체 기록 없음)";
-    const hist = history.length ? `<div class="list">${history.map(r => `<div class="row" style="cursor:default"><span class="pill s-check">${REASONS[r.reason]}</span><span class="what">${dotDate(r.replaced_on)}${r.action !== "none" ? ` · ${actText(r)}` : ""}</span><span></span></div>`).join("")}</div>` : `<p class="muted small">기록 없음</p>`;
+    const baseNote = lastRep && lastRep.replaced_on === p.install_date ? "마지막 교체일" : history.length ? "PSD 설치일(교체 기록 없음)" : "PSD 설치일(기록 없음)";
+    const hist = history.length ? `<div class="list">${history.map(r => `<div class="row" style="cursor:default"><span class="pill s-check">${REASONS[r.reason]}</span><span class="what">${dotDate(r.replaced_on)} · ${actText(r)}</span><span class="small muted">${esc(r.created_by || "")}</span></div>`).join("")}</div>` : `<p class="muted small">기록 없음</p>`;
     const left = days_left < 0 ? `${-days_left}일 지남` : `D-${days_left}`;
     const onStation = view.name === "station" && view.st === part.station_id;
     // 2026-11-02 관리자 검토: 문 하나 고장에 같은 역 문 수십 개 상태가 바뀌는 이유, "고장 N건 반영"이 아래 이력(이 문)과

@@ -1,245 +1,341 @@
-"""정비(교체·수리·점검) 기록 엑셀 입출력.
+"""정비 기록 엑셀 입출력 — 코레일 "승강장안전문 장애 이력 관리 현황" 양식 (2026-11-24 v3, 데이터셋_v3_설계.md 1·5장).
 
-업로드 API(psd/api.py의 POST /api/replacement-records/compare·sync)와 더미데이터 생성
-(scripts/generate_dummy_records.py)이 같은 열 구성을 쓰게 한다 — 설계_v2.md 5-2
-"교체 기록 입력 항목"(교체일, 역, 문, 부품(여러 개), 사유)에 2026-11-16 조치·세부 부품·증상·원인을 더했다
-(데이터셋_v2_설계.md 1장).
+현장이 쓰는 양식 파일을 그대로 읽는다:
+- 시트: "고장현황 전체"가 있으면 그것, 없으면 첫 시트
+- 머리글 행: 위에서 40줄 안에서 "장애부위②" 칸이 있는 줄(양식은 12행, 우리 내려받기 양식은 1행)
+- 년·월·일·역이 모두 빈 줄은 건너뛴다(양식은 수식만 깔린 빈 줄이 1만 줄쯤 있다). 양식의 '일자' 칸(수식)은 읽지 않는다
+- 노선이 동해선이 아닌 줄은 건너뛰고 몇 줄인지 알려 준다(양식은 전 노선 공통)
 
-열: 역, 방향, 문번호, 작업일, 사유, 조치, 부품, 세부 부품, 증상, 원인, 입력자
-- 방향·문번호: 역 단위 부품(종합제어반 릴레이)만 손봤으면 비움
-- 방향: "부전 방면" | "북울산 방면" (psd/catalog.py SIDES의 값)
-- 문번호: "차량-문" 형식, 예: "1-1"
-- 작업일: 교체·수리·점검한 날. 예전 양식의 "교체일" 열도 같은 뜻으로 받는다
-- 사유(왜 했나): "고장" | "예방 정비" | "함께 정비" | "점검(이상 없음)". 예전 표기("예방 교체", "함께 교체")도 받는다.
-  점검(이상 없음)은 정기 점검에서 문제가 없었다는 기록이다 — 부품을 손본 게 아니라서 설치일은 그대로다.
-  "점검", "이상 없음"으로 써도 같은 뜻으로 받는다
-- 조치(무엇을 했나): "전체 교체" | "일부 교체" | "전체 수리" | "일부 수리" | "없음"(점검만). 비우거나 열이 없으면
-  점검은 없음, 나머지는 전체 교체로 읽는다(예전 양식 그대로 올려도 되게). "조정"·"청소"는 일부 수리로 받는다
-- 부품: 쉼표로 여러 개, 예: "DCM,IFM 릴레이" (psd/catalog.py PART_TYPES의 이름).
-  "전체"라고 쓰면 그 문의 부품 6종 전부(방향·문번호를 비웠으면 종합제어반 릴레이) — 문 단위 점검용
-- 세부 부품: 일부 교체·일부 수리에만, 쉼표로 여러 개(psd/catalog.py SUB_PARTS). 일부 교체는 꼭 적는다.
-  그 줄의 부품에 딸린 것이어야 한다
-- 증상·원인: 고장일 때만, 하나씩(psd/catalog.py SYMPTOMS·CAUSES). 비워도 된다
+읽는 칸(머리글 이름. 띄어쓰기·줄바꿈은 무시하고, 양식 '작성기준' 시트의 다른 이름도 받는다):
+    년도·월·일, 역, 장애인지, 장애부위②(소분류), 조치사항 — 꼭 있어야 한다
+    승강장 선로·출입문 — 문 단위 소분류면 꼭 있어야 한다(예: "상본선(#3)", "2-1")
+    나머지(본부·노선·PSD설치·설치년도·제조업체·제어시스템·DCU(MCU)업체·관할사업소·장애형태·승강장 홈·장애부위①·
+    장애내용①②·고장원인·조치사항 상세·접수자·접수일·완료일·설치주체·조치자)는 비워도 된다
+
+틀리면 멈추는 것(ExcelFormatError): 날짜, 역 이름 빈 칸, 모르는 장애인지·소분류·조치사항, 문 단위인데 선로·출입문이 없거나 형식이 틀림.
+경고만 하고 받는 것(ParsedRow.warnings): 장애형태가 조치와 맞지 않음, 대분류가 소분류와 맞지 않음, 분류표에 없는 장애내용①,
+출입문이 엑셀에서 날짜로 바뀐 것("2-1" → 2월 1일)을 되돌린 것. 현장 파일이 조금 흐트러져도 한 줄 때문에 전부 막지 않으려고.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
+import re
+from dataclasses import dataclass, field
+from datetime import date, datetime
 from io import BytesIO
 
-import pandas as pd
+from psd.catalog import ACTION_ALIASES, ACTIONS, FAULT_TYPE, GROUPS, PART_TYPES, REASONS, SIDES, TAXONOMY
+from psd.taxonomy import normalize
 
-from psd.catalog import (
-    ACTION_ALIASES,
-    ACTIONS,
-    CAUSE_ALIASES,
-    CAUSE_NAME_TO_CODE,
-    CAUSES,
-    DOOR_PART_CODES,
-    NAME_TO_CODE,
-    SIDES,
-    STATION_PART_CODES,
-    SUB_PART_ACTIONS,
-    SUB_PART_CODE_TO_NAME,
-    SUB_PART_NAME_TO_CODE,
-    SUB_PART_OF,
-    SYMPTOM_NAME_TO_CODE,
-    SYMPTOMS,
-)
+SHEET_NAME = "고장현황 전체"
+LINE_NAME = "동해선"
+# 양식 '고장현황 전체' 시트의 칸 순서('일자' 수식 칸은 뺌). 내려받기도 이 순서로 쓴다
+COLUMNS = ["년도", "월", "일", "본부", "노선", "역", "PSD설치", "설치년도", "제조업체", "제어시스템", "DCU(MCU)업체", "관할사업소",
+           "장애형태", "장애인지", "승강장 선로", "승강장 홈", "출입문", "장애부위①(대분류)", "장애부위②(소분류)", "장애내용①",
+           "장애내용②(상세)", "고장원인", "조치사항", "조치사항 상세", "접수자", "접수일", "완료일", "설치주체", "조치자"]
+REQUIRED = ["년도", "월", "일", "역", "장애인지", "장애부위②(소분류)", "조치사항"]
+# 같은 칸의 다른 이름(양식 '작성기준' 시트, 줄여 쓴 것)
+_ALIASES = {"DCU업체": "DCU(MCU)업체", "장애원인": "고장원인", "조치사항(상세)": "조치사항 상세", "조치사항상세": "조치사항 상세",
+            "장애부위①": "장애부위①(대분류)", "장애부위②": "장애부위②(소분류)", "장애내용②": "장애내용②(상세)",
+            "선로": "승강장 선로", "홈": "승강장 홈", "승강장홈": "승강장 홈", "승강장선로": "승강장 선로", "연도": "년도",
+            "장애부위1": "장애부위①(대분류)", "장애부위2": "장애부위②(소분류)", "장애내용1": "장애내용①", "장애내용2": "장애내용②(상세)"}
+_HEADER_KEY = {**{re.sub(r"\s", "", c): c for c in COLUMNS}, **{re.sub(r"\s", "", k): v for k, v in _ALIASES.items()}}
 
-COLUMNS = ["역", "방향", "문번호", "작업일", "사유", "조치", "부품", "세부 부품", "증상", "원인", "입력자"]
-REQUIRED_COLUMNS = ["역", "방향", "문번호", "작업일", "사유", "부품", "입력자"]  # 조치·세부 부품·증상·원인은 없어도 된다(예전 양식)
-OLD_DATE_COLUMN = "교체일"  # 2026-11-16 전 양식의 날짜 열 이름
-REASON_LABEL_TO_CODE = {"고장": "fail", "예방 정비": "prev", "함께 정비": "with", "점검(이상 없음)": "check"}
-REASON_CODE_TO_LABEL = {v: k for k, v in REASON_LABEL_TO_CODE.items()}
-REASON_ALIASES = {"점검": "check", "이상 없음": "check", "점검 이상 없음": "check",  # 손으로 쓸 때 흔한 표기
-                  "예방 교체": "prev", "함께 교체": "with", "예방": "prev", "함께": "with"}  # 2026-11-16 전 표기
+REASON_LABEL_TO_CODE = {v: k for k, v in REASONS.items()} | {"사후": "fail", "사전": "prev"}
+REASON_CODE_TO_LABEL = dict(REASONS)
 ACTION_LABEL_TO_CODE = {v: k for k, v in ACTIONS.items()}
-ALL_PARTS = "전체"
-CODE_TO_NAME = {code: name for name, code in NAME_TO_CODE.items()}
-SIDE_LABEL_TO_CODE = {label: code for code, label in SIDES.items()}
+UNIT_BY_CODE = {p["code"]: p for p in PART_TYPES}
+_DOOR_NO = re.compile(r"^(\d+)-(\d+)$")
+_TRACK = re.compile(r"^(상|하)(부)?(본)?(선|행)?(\(?#?\d+\)?)?$")
 
 
 class ExcelFormatError(Exception):
-    """행 단위 파싱 에러. row_no는 엑셀 기준 줄 번호(1행=헤더)."""
+    """행 단위 파싱 에러. row_no는 엑셀 기준 줄 번호(0이면 파일 전체 문제)."""
 
     def __init__(self, row_no: int, message: str):
         self.row_no = row_no
-        super().__init__(f"{row_no}행: {message}")
+        super().__init__(f"{row_no}행: {message}" if row_no else message)
 
 
 @dataclass
 class ParsedRow:
     row_no: int
     station_name: str
-    side_label: str | None  # None이면 역 단위 부품
-    door_no: str | None  # "차량-문", 예: "1-1"
-    replaced_on: date  # 작업일
-    reason_code: str
-    part_names: list[str]
-    created_by: str | None
-    action_code: str = "full"
-    sub_part_codes: tuple[str, ...] = ()  # 정렬된 세부 부품 코드
-    symptom_code: str | None = None
-    cause_code: str | None = None
+    replaced_on: date  # 발생일(년·월·일)
+    reason_code: str  # 장애인지: fail | prev
+    unit_code: str  # 장애부위②(소분류) 코드
+    action_code: str  # 조치사항 코드(catalog.ACTIONS)
+    side: str | None = None  # 선로 코드(catalog.SIDES), 역 단위 소분류면 None
+    door_no: str | None = None  # "차량-문", 예: "1-1". 역 단위 소분류면 None
+    track_raw: str | None = None
+    home: str | None = None
+    symptom: str | None = None
+    symptom_detail: str | None = None
+    cause_text: str | None = None
+    action_detail: str | None = None
+    receiver: str | None = None
+    received: str | None = None
+    completed: str | None = None
+    created_by: str | None = None  # 조치자
+    station_info: dict = field(default_factory=dict)  # 역 정보 칸(본부·노선·PSD설치·설치년도·업체 ...)
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def part_names(self) -> list[str]:
+        return [UNIT_BY_CODE[self.unit_code]["name"]]
 
 
-def _cell(row: pd.Series, col: str) -> str:
-    v = row.get(col)
-    return str(v).strip() if pd.notna(v) else ""
+@dataclass
+class ParseResult:
+    rows: list[ParsedRow]
+    skipped_other_line: int = 0  # 동해선이 아니라 건너뛴 줄
+    sheet: str = ""
+    header_row: int = 0
+
+    @property
+    def warnings(self) -> list[str]:
+        return [f"{r.row_no}행: {w}" for r in self.rows for w in r.warnings]
 
 
-def parse_upload(content: bytes) -> list[ParsedRow]:
-    """엑셀 바이트를 읽어 행마다 검사한다. 형식이 잘못되면 ExcelFormatError를 낸다
-    (DB 조회가 필요한 검사 — 역 이름이 실제 있는지, 그 문에 그 부품이 있는지 등 — 는
-    psd/api.py가 담당한다. 여기서는 엑셀 자체의 형식만 본다). 첫 시트만 읽는다(양식의 "작성 예시" 시트는 무시)."""
+def parse_track(text: str) -> str | None:
+    """승강장 선로 글 → 선로 코드. "상본선(#3)"·"하선(#1)"·"상부본선(#4)"·"상"·"하행" 등. 못 읽으면 None."""
+    m = _TRACK.match(re.sub(r"\s", "", text or ""))
+    if not m:
+        return None
+    return ("U" if m.group(1) == "상" else "D") + ("B" if m.group(2) else "")
+
+
+def _text(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return str(v).strip()
+
+
+def _int(v) -> int | None:
+    t = _text(v)
+    if not t:
+        return None
     try:
-        df = pd.read_excel(BytesIO(content), sheet_name=0, dtype=str)
+        return int(float(t))
+    except ValueError:
+        return None
+
+
+def _open_sheet(content: bytes):
+    from openpyxl import load_workbook
+
+    try:
+        wb = load_workbook(BytesIO(content), read_only=True, data_only=True)
     except Exception:
-        # pandas 오류 문구(영어, 예: "Excel file format cannot be determined")를 그대로 보여 주면 현장에서 알아보기 어렵다
         raise ExcelFormatError(0, "엑셀 파일을 읽을 수 없습니다. .xlsx 파일인지, 다른 프로그램에서 열려 있거나 손상되지 않았는지 확인하세요")
+    return wb[SHEET_NAME] if SHEET_NAME in wb.sheetnames else wb.worksheets[0]
 
-    if "작업일" not in df.columns and OLD_DATE_COLUMN in df.columns:
-        df = df.rename(columns={OLD_DATE_COLUMN: "작업일"})
-    missing_cols = set(REQUIRED_COLUMNS) - set(df.columns)
-    if missing_cols:
-        raise ExcelFormatError(0, f"필요한 열이 없습니다: {sorted(missing_cols)} (필요한 열: {REQUIRED_COLUMNS}, "
-                                  "더 적을 수 있는 열: 조치·세부 부품·증상·원인)")
-    if df.empty:
-        raise ExcelFormatError(0, "행이 하나도 없습니다")
 
-    rows = []
-    for i, r in df.iterrows():
-        row_no = i + 2  # 1행은 헤더
+def parse_upload(content: bytes) -> ParseResult:
+    """엑셀 바이트를 읽어 행마다 검사한다. 형식이 틀린 행이 있으면 전부 모아 ExcelFormatError 하나로 낸다
+    (역 이름이 실제 있는지, 그 문이 있는지 같은 DB 검사는 psd/api.py가 한다)."""
+    ws = _open_sheet(content)
+    rows_iter = ws.iter_rows(values_only=True)
+    header_row, cols = 0, {}
+    for i, row in enumerate(rows_iter, start=1):
+        keys = {_HEADER_KEY.get(re.sub(r"\s", "", _text(v))): j for j, v in enumerate(row or ()) if _text(v)}
+        if "장애부위②(소분류)" in keys:
+            header_row, cols = i, {k: j for k, j in keys.items() if k}
+            break
+        if i >= 40:
+            break
+    if not header_row:
+        raise ExcelFormatError(0, f"머리글 줄을 찾지 못했습니다 — '{SHEET_NAME}' 시트 위쪽 40줄 안에 '장애부위②(소분류)' 칸이 있어야 합니다")
+    missing = [c for c in REQUIRED if c not in cols]
+    if missing:
+        raise ExcelFormatError(header_row, f"필요한 칸이 없습니다: {missing}")
 
-        station_name = _cell(r, "역")
-        if not station_name:
-            raise ExcelFormatError(row_no, "역 이름이 비어 있습니다")
-
-        replaced_on_raw = r.get("작업일")
-        # 빈 칸은 pd.to_datetime이 에러 대신 NaT를 돌려줘 아래 검사를 모두 통과하고 DB에 넣을 때 500으로 죽었다(2026-11-02 QA)
-        if pd.isna(replaced_on_raw) or not str(replaced_on_raw).strip():
-            raise ExcelFormatError(row_no, "작업일이 비어 있습니다")
+    out = ParseResult([], sheet=ws.title, header_row=header_row)
+    errors: list[str] = []
+    for row_no, row in enumerate(rows_iter, start=header_row + 1):
+        get = lambda c: row[cols[c]] if c in cols and cols[c] < len(row) else None  # noqa: E731
+        if not any(_text(get(c)) for c in ("년도", "월", "일", "역")):
+            continue  # 빈 줄(양식의 수식만 있는 줄 포함)
+        line = _text(get("노선"))
+        if line and normalize(line) != normalize(LINE_NAME):
+            out.skipped_other_line += 1
+            continue
         try:
-            replaced_on = pd.to_datetime(replaced_on_raw).date()
-        except Exception:
-            raise ExcelFormatError(row_no, f"작업일을 날짜로 읽을 수 없습니다: {replaced_on_raw!r}")
-        # 코드 리뷰로 찾은 버그: 미래 날짜가 날짜로 읽히기만 하면 통과하고 있었다. 여기서 막는다
-        # — 전체가 한 트랜잭션(all-or-nothing)이라 한 행만 틀려도 전부 막힌다.
-        if replaced_on > date.today():
-            raise ExcelFormatError(row_no, f"작업일은 미래일 수 없습니다: {replaced_on}")
-
-        reason_label = _cell(r, "사유")
-        reason_code = REASON_LABEL_TO_CODE.get(reason_label) or REASON_ALIASES.get(reason_label)
-        if reason_code is None:
-            raise ExcelFormatError(row_no, f"사유는 {list(REASON_LABEL_TO_CODE)} 중 하나여야 합니다: {reason_label!r}")
-
-        side_label = _cell(r, "방향") or None
-        door_no = _cell(r, "문번호") or None
-        if side_label and side_label not in SIDE_LABEL_TO_CODE:
-            raise ExcelFormatError(row_no, f"방향은 {list(SIDE_LABEL_TO_CODE)} 중 하나이거나 비어 있어야 합니다: {side_label!r}")
-        if bool(side_label) != bool(door_no):
-            raise ExcelFormatError(row_no, "방향과 문번호는 둘 다 채우거나 둘 다 비워야 합니다")
-
-        parts_raw = _cell(r, "부품")
-        if parts_raw == ALL_PARTS:
-            part_names = [CODE_TO_NAME[c] for c in (DOOR_PART_CODES if side_label else STATION_PART_CODES)]
-        else:
-            part_names = [p.strip() for p in parts_raw.split(",") if p.strip()]
-        if not part_names:
-            raise ExcelFormatError(row_no, "부품이 비어 있습니다")
-        unknown = [p for p in part_names if p not in NAME_TO_CODE]
-        if unknown:
-            raise ExcelFormatError(row_no, f"알 수 없는 부품 이름: {unknown} (가능한 값: {sorted(NAME_TO_CODE)} 또는 {ALL_PARTS!r})")
-
-        action_code, sub_codes, symptom_code, cause_code = _detail(row_no, r, reason_code, part_names)
-
-        rows.append(ParsedRow(
-            row_no=row_no,
-            station_name=station_name,
-            side_label=side_label,
-            door_no=door_no,
-            replaced_on=replaced_on,
-            reason_code=reason_code,
-            part_names=part_names,
-            created_by=_cell(r, "입력자") or None,
-            action_code=action_code,
-            sub_part_codes=sub_codes,
-            symptom_code=symptom_code,
-            cause_code=cause_code,
-        ))
-    return rows
+            out.rows.append(_parse_row(row_no, get))
+        except ExcelFormatError as e:
+            errors.append(str(e))
+    if errors:
+        raise ExcelFormatError(0, f"{len(errors)}개 줄이 틀렸습니다 — " + " / ".join(errors[:30]) + (" ..." if len(errors) > 30 else ""))
+    if not out.rows:
+        raise ExcelFormatError(0, "읽을 기록이 한 줄도 없습니다" + (f"(동해선이 아닌 줄 {out.skipped_other_line}개는 건너뜀)" if out.skipped_other_line else ""))
+    return out
 
 
-def _detail(row_no: int, r: pd.Series, reason_code: str, part_names: list[str]) -> tuple[str, tuple[str, ...], str | None, str | None]:
-    """조치·세부 부품·증상·원인 칸을 읽고 사유·부품과 맞는지 본다."""
-    action_label = _cell(r, "조치")
-    if not action_label:
-        action_code = "none" if reason_code == "check" else "full"
+def _parse_row(row_no: int, get) -> ParsedRow:
+    warnings: list[str] = []
+    y, m, d = _int(get("년도")), _int(get("월")), _int(get("일"))
+    try:
+        day = date(y, m, d)
+    except (TypeError, ValueError):
+        raise ExcelFormatError(row_no, f"년·월·일을 날짜로 읽을 수 없습니다: {_text(get('년도'))}-{_text(get('월'))}-{_text(get('일'))}")
+    if day > date.today():
+        raise ExcelFormatError(row_no, f"발생일은 미래일 수 없습니다: {day}")
+
+    station = _text(get("역"))
+    if not station:
+        raise ExcelFormatError(row_no, "역 이름이 비어 있습니다")
+
+    reason_label = _text(get("장애인지"))
+    reason = REASON_LABEL_TO_CODE.get(re.sub(r"\s", "", reason_label))
+    if reason is None:
+        raise ExcelFormatError(row_no, f"장애인지는 {list(REASONS.values())} 중 하나여야 합니다: {reason_label!r}")
+
+    unit_text = _text(get("장애부위②(소분류)"))
+    code = TAXONOMY.resolve(unit_text)
+    if code is None:
+        raise ExcelFormatError(row_no, f"분류표에 없는 장애부위②(소분류): {unit_text!r}")
+    unit = UNIT_BY_CODE[code]
+    group_text = _text(get("장애부위①(대분류)"))
+    if group_text and TAXONOMY.resolve_group(group_text) != unit["group"]:
+        warnings.append(f"대분류 {group_text!r}가 소분류 {unit['name']!r}의 대분류({unit['group']})와 다름 — 소분류를 따름")
+
+    action_text = _text(get("조치사항"))
+    action = ACTION_LABEL_TO_CODE.get(action_text) or ACTION_ALIASES.get(re.sub(r"\s", "", action_text))
+    if action is None:
+        raise ExcelFormatError(row_no, f"조치사항은 {list(ACTIONS.values())} 중 하나여야 합니다: {action_text!r}")
+    fault = _text(get("장애형태"))
+    if fault and re.sub(r"\s", "", fault) != FAULT_TYPE[action]:
+        warnings.append(f"장애형태 {fault!r}가 조치사항 {ACTIONS[action]!r}의 규칙({FAULT_TYPE[action]})과 다름 — 조치사항을 따름")
+
+    symptom = _text(get("장애내용①")) or None
+    if symptom and unit["symptoms"] and normalize(symptom) not in {normalize(s) for s in unit["symptoms"]}:
+        warnings.append(f"장애내용① {symptom!r}는 {unit['name']}의 목록에 없음 — 그대로 받음")
+
+    track_raw = _text(get("승강장 선로")) or None
+    door_raw = get("출입문")
+    if isinstance(door_raw, (date, datetime)):  # 엑셀이 "2-1"을 2월 1일로 바꿔 버린 경우
+        door_no = f"{door_raw.month}-{door_raw.day}"
+        warnings.append(f"출입문이 날짜({door_raw:%m-%d})로 저장돼 있어 {door_no!r}로 읽음 — 엑셀에서 텍스트로 바꿔 두세요")
     else:
-        action_code = ACTION_LABEL_TO_CODE.get(action_label) or ACTION_ALIASES.get(action_label)
-        if action_code is None:
-            raise ExcelFormatError(row_no, f"조치는 {list(ACTION_LABEL_TO_CODE)} 중 하나여야 합니다: {action_label!r}")
-    if reason_code == "check" and action_code != "none":
-        raise ExcelFormatError(row_no, f"점검(이상 없음)인데 조치가 {ACTIONS[action_code]!r}입니다 — 손봤으면 사유를 예방 정비로 적으세요")
-    if reason_code != "check" and action_code == "none":
-        raise ExcelFormatError(row_no, "조치 '없음'은 점검(이상 없음)에만 씁니다")
+        door_no = _text(door_raw) or None
+    side = None
+    if unit["unit"] == "door":
+        side = parse_track(track_raw or "")
+        if side is None:
+            raise ExcelFormatError(row_no, f"{unit['name']}은(는) 문 단위라 승강장 선로가 필요합니다(예: '상본선(#3)', '하선'): {track_raw!r}")
+        if not door_no or not _DOOR_NO.match(door_no):
+            raise ExcelFormatError(row_no, f"{unit['name']}은(는) 문 단위라 출입문이 '차량-문' 형식이어야 합니다(예: '2-1'): {door_no!r}")
+    else:
+        door_no = None  # 역 단위 소분류는 문을 쓰지 않는다(선로 글은 그대로 남긴다)
 
-    sub_names = [x.strip() for x in _cell(r, "세부 부품").split(",") if x.strip()]
-    unknown = [x for x in sub_names if x not in SUB_PART_NAME_TO_CODE]
-    if unknown:
-        raise ExcelFormatError(row_no, f"알 수 없는 세부 부품: {unknown} (가능한 값: {list(SUB_PART_NAME_TO_CODE)})")
-    sub_codes = tuple(sorted({SUB_PART_NAME_TO_CODE[x] for x in sub_names}))
-    if sub_codes and action_code not in SUB_PART_ACTIONS:
-        raise ExcelFormatError(row_no, f"세부 부품은 일부 교체·일부 수리에만 적습니다(조치: {ACTIONS[action_code]})")
-    if action_code == "partial" and not sub_codes:
-        raise ExcelFormatError(row_no, "일부 교체는 바꾼 세부 부품을 적어야 합니다")
-    part_codes = {NAME_TO_CODE[n] for n in part_names}
-    stray = [SUB_PART_CODE_TO_NAME[c] for c in sub_codes if SUB_PART_OF[c] not in part_codes]
-    if stray:
-        raise ExcelFormatError(row_no, f"세부 부품 {stray}은(는) 이 줄의 부품({', '.join(part_names)})에 딸린 것이 아닙니다")
-
-    symptom_label, cause_label = _cell(r, "증상"), _cell(r, "원인")
-    if (symptom_label or cause_label) and reason_code != "fail":
-        raise ExcelFormatError(row_no, "증상·원인은 사유가 고장일 때만 적습니다")
-    symptom_code = None
-    if symptom_label:
-        symptom_code = SYMPTOM_NAME_TO_CODE.get(symptom_label)
-        if symptom_code is None:
-            raise ExcelFormatError(row_no, f"증상은 {list(SYMPTOM_NAME_TO_CODE)} 중 하나여야 합니다: {symptom_label!r}")
-    cause_code = None
-    if cause_label:
-        cause_code = CAUSE_NAME_TO_CODE.get(cause_label) or CAUSE_ALIASES.get(cause_label)
-        if cause_code is None:
-            raise ExcelFormatError(row_no, f"원인은 {list(CAUSE_NAME_TO_CODE)} 중 하나여야 합니다: {cause_label!r}")
-    return action_code, sub_codes, symptom_code, cause_code
+    info = {"hq": _text(get("본부")) or None, "line_name": _text(get("노선")) or None, "office": _text(get("관할사업소")) or None,
+            "structure": (_text(get("PSD설치")) or None), "install_year": _int(get("설치년도")),
+            "manufacturer": _text(get("제조업체")) or None, "control_system": _text(get("제어시스템")) or None,
+            "dcu_vendor": _text(get("DCU(MCU)업체")) or None, "install_owner": _text(get("설치주체")) or None}
+    cut = lambda c, n: (_text(get(c))[:n] or None)  # noqa: E731
+    return ParsedRow(
+        row_no=row_no, station_name=station, replaced_on=day, reason_code=reason, unit_code=code, action_code=action,
+        side=side, door_no=door_no, track_raw=(track_raw or "")[:30] or None, home=cut("승강장 홈", 10),
+        symptom=(symptom or "")[:50] or None, symptom_detail=cut("장애내용②(상세)", 500), cause_text=cut("고장원인", 500),
+        action_detail=cut("조치사항 상세", 500), receiver=cut("접수자", 50), received=cut("접수일", 50), completed=cut("완료일", 50),
+        created_by=cut("조치자", 50), station_info={k: v for k, v in info.items() if v is not None}, warnings=warnings,
+    )
 
 
-def detail_labels(action: str, sub_parts, symptom: str | None, cause: str | None) -> dict[str, str]:
-    """코드 → 엑셀 표기(조치·세부 부품·증상·원인 칸). 내려받기·더미 생성이 같은 표기를 쓰게 한다."""
+# ---------- 내려받기 ----------
+
+
+def record_row(*, day: date, station: str, reason: str, unit_code: str, action: str, side: str | None = None,
+               door_no: str | None = None, track_raw: str | None = None, home: str | None = None, symptom: str | None = None,
+               symptom_detail: str | None = None, cause_text: str | None = None, action_detail: str | None = None,
+               receiver: str | None = None, received: str | None = None, completed: str | None = None,
+               worker: str | None = None, station_info: dict | None = None) -> dict:
+    """기록 하나 → 양식 한 줄(COLUMNS 키). 내려받기·더미 생성이 같은 표기를 쓰게 한다."""
+    unit = UNIT_BY_CODE[unit_code]
+    info = station_info or {}
     return {
-        "조치": ACTIONS[action],
-        "세부 부품": ",".join(SUB_PART_CODE_TO_NAME[c] for c in sub_parts),
-        "증상": SYMPTOMS[symptom]["name"] if symptom else "",
-        "원인": CAUSES[cause] if cause else "",
+        "년도": day.year, "월": day.month, "일": day.day, "본부": info.get("hq") or "", "노선": info.get("line_name") or LINE_NAME,
+        "역": station, "PSD설치": info.get("structure") or "", "설치년도": info.get("install_year") or "",
+        "제조업체": info.get("manufacturer") or "", "제어시스템": info.get("control_system") or "",
+        "DCU(MCU)업체": info.get("dcu_vendor") or "", "관할사업소": info.get("office") or "",
+        "장애형태": FAULT_TYPE[action], "장애인지": REASONS[reason],
+        "승강장 선로": track_raw or (SIDES[side] if side else ""), "승강장 홈": home or "", "출입문": door_no or "",
+        "장애부위①(대분류)": unit["group"], "장애부위②(소분류)": unit["name"], "장애내용①": symptom or "",
+        "장애내용②(상세)": symptom_detail or "", "고장원인": cause_text or "", "조치사항": ACTIONS[action],
+        "조치사항 상세": action_detail or "", "접수자": receiver or "", "접수일": received or "", "완료일": completed or "",
+        "설치주체": info.get("install_owner") or "", "조치자": worker or "",
     }
 
 
+def _write_sheet(ws, rows: list[dict]) -> None:
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    ws.append(COLUMNS)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1D5EA8")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for r in rows:
+        ws.append([r.get(c, "") for c in COLUMNS])
+    for cell in ws["Q"][1:]:  # 출입문: 엑셀이 "2-1"을 날짜로 바꾸지 않게 텍스트 칸으로
+        cell.number_format = "@"
+    ws.freeze_panes = "A2"
+    widths = {"역": 10, "승강장 선로": 12, "장애부위②(소분류)": 16, "장애내용①": 16, "장애내용②(상세)": 24, "고장원인": 24,
+              "조치사항 상세": 24}
+    from openpyxl.utils import get_column_letter
+
+    for i, c in enumerate(COLUMNS, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = widths.get(c, 9)
+
+
+def _add_lists(wb, ws, n_rows: int) -> None:
+    """드롭다운: 장애인지·장애부위①②·조치사항·장애형태. 목록은 셋째 시트 '목록'(보이는 시트)에 둔다 —
+    소분류 이름에 쉼표가 있어 칸 안에 목록을 바로 적을 수 없다."""
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    lists = {"장애인지": list(REASONS.values()), "장애부위①(대분류)": GROUPS, "장애부위②(소분류)": [p["name"] for p in PART_TYPES],
+             "조치사항": list(ACTIONS.values()), "장애형태": sorted(set(FAULT_TYPE.values()))}
+    ls = wb.create_sheet("목록")
+    last = max(n_rows + 1, 2000)
+    for j, (col, values) in enumerate(lists.items(), start=1):
+        letter = get_column_letter(j)
+        ls.cell(1, j, col)
+        for i, v in enumerate(values, start=2):
+            ls.cell(i, j, v)
+        dv = DataValidation(type="list", formula1=f"=목록!${letter}$2:${letter}${len(values) + 1}", allow_blank=True)
+        dv.error, dv.showErrorMessage = "목록에서 고르세요", False  # 막지는 않는다(업로드가 검사한다)
+        target = get_column_letter(COLUMNS.index(col) + 1)
+        dv.add(f"{target}2:{target}{last}")
+        ws.add_data_validation(dv)
+
+
 def rows_to_excel_bytes(rows: list[dict]) -> bytes:
-    """더미데이터 생성·내려받기가 쓴다. rows는 COLUMNS와 같은 키를 가진 dict의 리스트
-    (예전 키 "교체일"도 "작업일"로 받고, 없는 칸은 비운다)."""
-    rows = [{("작업일" if k == OLD_DATE_COLUMN else k): v for k, v in row.items()} for row in rows]
-    df = pd.DataFrame(rows, columns=COLUMNS).fillna("")
+    """기록 줄(record_row 결과)을 양식 칸 순서의 엑셀로. 첫 시트 이름은 양식과 같은 "고장현황 전체"."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = SHEET_NAME
+    _write_sheet(ws, rows)
+    _add_lists(wb, ws, len(rows))
     buf = BytesIO()
-    df.to_excel(buf, index=False)
+    wb.save(buf)
     return buf.getvalue()
 
 
 def template_bytes(examples: list[dict]) -> bytes:
-    """업로드 양식: 첫 시트 "기록"은 열 이름만 두고, 예시는 둘째 시트 "작성 예시"에 둔다 — 예시 행을
-    안 지우고 올려도 가짜 기록이 들어가지 않게(업로드는 첫 시트만 읽는다)."""
+    """업로드 양식: 첫 시트 "고장현황 전체"는 머리글만, 둘째 시트 "작성 예시"에 예시. 업로드는 "고장현황 전체"만 읽어서
+    예시를 안 지워도 가짜 기록이 들어가지 않는다. 현장이 이미 쓰는 코레일 양식 파일을 그대로 올려도 된다."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = SHEET_NAME
+    _write_sheet(ws, [])
+    _write_sheet(wb.create_sheet("작성 예시"), examples)
+    _add_lists(wb, ws, 0)
     buf = BytesIO()
-    with pd.ExcelWriter(buf) as w:
-        pd.DataFrame(columns=COLUMNS).to_excel(w, sheet_name="기록", index=False)
-        pd.DataFrame(examples, columns=COLUMNS).fillna("").to_excel(w, sheet_name="작성 예시", index=False)
+    wb.save(buf)
     return buf.getvalue()

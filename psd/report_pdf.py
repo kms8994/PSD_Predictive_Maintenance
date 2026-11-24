@@ -28,7 +28,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import HRFlowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from psd.catalog import PART_TYPES, SIDES
+from psd.catalog import ACTIONS, PART_TYPES, REASONS, SIDES
 from psd.report_common import WINDOWS, DoorPos, doors_text, left_text, order_counts, work_groups
 from psd.status import UnitStatus
 
@@ -41,8 +41,8 @@ HEAD_BG = colors.HexColor("#f2f4f6")
 BORDER = colors.HexColor("#bfc6ce")
 FILL = {"빨강": colors.HexColor("#fbd9d6"), "확인_필요": colors.HexColor("#e3e6ea"), "노랑": colors.HexColor("#fdeec4")}
 STATE = {"빨강": ("교체 임박", RED), "확인_필요": ("확인 필요", GRAY), "노랑": ("주의", AMBER), "초록": ("안전", BLUE)}
-REASON = {"fail": "고장", "prev": "예방 정비", "with": "함께 정비", "check": "점검(이상 없음)"}
-ACTION = {"full": "전체 교체", "partial": "일부 교체", "overhaul": "전체 수리", "repair": "일부 수리", "none": ""}
+REASON = REASONS  # 장애인지(사후조치/사전조치)
+ACTION = ACTIONS  # 조치사항
 NAME = {p["code"]: p["name"] for p in PART_TYPES}
 DOOR_CODES = [p["code"] for p in PART_TYPES if p["unit"] == "door"]
 STATION_CODES = [p["code"] for p in PART_TYPES if p["unit"] == "station"]
@@ -52,7 +52,7 @@ CONTENT_W = A4[0] - 28 * mm
 @dataclass(frozen=True)
 class DoorInfo:
     id: int
-    side: str  # "U" | "D"
+    side: str  # 선로 코드(catalog.SIDES)
     car: int
     position: int
     label: str
@@ -178,7 +178,7 @@ def build_station_pdf(
     title = [P("동해선 승강장안전문(PSD) 정비", ps(8.5, bold, BLUE)),
              P(f"{escape(station_name)}역 PSD 부품 교체 현황 보고서", ps(17, bold, lead=23)),
              P(f"기준일 {today:%Y. %m. %d.} · 동해선 {station_id}번째 역 · PSD 사용개시 {psd_install_date:%Y. %m. %d.}<br/>"
-               f"안전문 {n_doors}개(방향별 {n_doors // 2}개) · 종합제어반 1식 · 관리 부품 {len(statuses):,}개", small)]
+               f"안전문 {n_doors}개(선로 {len({d.side for d in doors})}개) · 역 단위 장치 {len(STATION_CODES)}종 · 관리 부품 {len(statuses):,}개", small)]
     head = Table([[title, sign]], colWidths=[CONTENT_W - 66 * mm, 66 * mm])
     head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (0, 0), 0), ("RIGHTPADDING", (1, 0), (1, 0), 0)]))
     story += [HRFlowable(width="100%", thickness=3, color=BLUE, spaceAfter=3 * mm), head, Spacer(1, 3 * mm)]
@@ -228,6 +228,8 @@ def build_station_pdf(
     for code, n in oc.items():
         vals = [n["6m"], n["1y"], n["6m"] + n["1y"], n["2y"], n["check"], fails.get(code, 0)]
         tot = [a + b for a, b in zip(tot, vals)]
+        if not any(vals):
+            continue  # 소분류가 많아(v3) 셀 것이 없는 줄은 뺀다 — 합계에는 0이라 그대로
         rows.append([NAME[code], *[v or "-" for v in vals]])
     rows.append(["합계", *tot])
     w = (CONTENT_W - 38 * mm) / 6
@@ -254,7 +256,7 @@ def build_station_pdf(
     for note in [
         "※ 교체 예정일 = 마지막 교체일(기록이 없으면 PSD 사용개시일) + 이 역의 교체주기. 교체주기는 제조사 권장 10년을 이 역 날씨(기상청 AWS)와 고장 기록으로 보정했습니다.",
         "※ 상태 기준: 교체 임박 6개월 이하(지난 경우 포함), 확인 필요 = 교체 기록 없이 예정일이 지남(교체 여부부터 확인), 주의 1년 이하, 안전 그 외.",
-        "※ 자재 주문 수량은 예정 교체만 셉니다. 돌발 고장 대비 예비품은 '지난 1년 고장'을 참고하세요. 안전문 수(역당 32개)와 PSD 사용개시일은 확인 전 임시값입니다.",
+        "※ 자재 주문 수량은 예정 교체만 셉니다. 돌발 고장 대비 예비품은 '지난 1년 고장'을 참고하세요. 안전문 수(선로당 16개)와 PSD 사용개시일은 확인 전 임시값입니다.",
     ]:
         story.append(P(note, ps(7.6, color=MUTED)))
 
@@ -266,6 +268,8 @@ def build_station_pdf(
             by_door.setdefault(u.door_id, {})[u.part_type_code] = u
     for side, side_label in SIDES.items():
         side_doors = sorted((d for d in doors if d.side == side), key=lambda d: (d.car, d.position))
+        if not side_doors:
+            continue  # 이 역에 없는 선로(부본선)
         rows = [["문"] + [NAME[c] for c in DOOR_CODES]]
         extra = [("FONTNAME", (0, 1), (0, -1), bold), ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#f7f8fa")),
                  ("TOPPADDING", (0, 0), (-1, -1), 1.3), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.3)]

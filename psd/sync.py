@@ -17,28 +17,36 @@ from datetime import date
 
 @dataclass(frozen=True)
 class RecordSig:
-    """기록 한 건을 비교하는 기준. 입력자는 넣지 않는다(같은 교체를 누가 적었는지만 다르면 같은 기록)."""
+    """기록 한 건을 비교하는 기준 — 양식 한 줄의 모든 칸(2026-11-24 v3). 엑셀이 원본이라 어느 칸을 고쳐도 DB가 따라 고쳐진다.
+    역 정보 칸(본부·업체 등)은 기록이 아니라 역에 저장하므로 넣지 않는다."""
 
     station_id: int
     door_id: int | None
     replaced_on: date
     reason: str
-    parts: tuple[str, ...]  # 정렬된 부품 코드
-    # 2026-11-16 정비기록 세부 항목. 기본값은 그 전 기록의 뜻(전체 교체, 세부 항목 없음)
+    parts: tuple[str, ...]  # 소분류 코드(v3는 한 개)
     action: str = "full"
-    sub_parts: tuple[str, ...] = ()  # 정렬된 세부 부품 코드(catalog.SUB_PARTS)
     symptom: str | None = None
-    cause: str | None = None
+    symptom_detail: str | None = None
+    cause_text: str | None = None
+    action_detail: str | None = None
+    track_raw: str | None = None
+    home: str | None = None
+    receiver: str | None = None
+    received: str | None = None
+    completed: str | None = None
+    worker: str | None = None  # 조치자(DB의 created_by)
 
     @property
-    def slot(self) -> tuple[int, int | None, date]:
-        return (self.station_id, self.door_id, self.replaced_on)
+    def slot(self) -> tuple:
+        """같은 기록을 고친 것인지 짝짓는 자리: 같은 역·문·날짜·소분류."""
+        return (self.station_id, self.door_id, self.replaced_on, self.parts)
 
 
 @dataclass
 class Diff:
     new: list[RecordSig] = field(default_factory=list)  # 엑셀에만 있음 → 넣는다
-    changed: list[tuple[int, RecordSig]] = field(default_factory=list)  # (DB 기록 id, 엑셀 값): 같은 역·문·날짜인데 사유·부품이 다름
+    changed: list[tuple[int, RecordSig]] = field(default_factory=list)  # (DB 기록 id, 엑셀 값): 같은 역·문·날짜·소분류인데 다른 칸이 다름
     missing: list[int] = field(default_factory=list)  # DB에만 있음(범위 안) → 고르면 지운다
     db_duplicates: list[int] = field(default_factory=list)  # DB에 같은 기록이 두 번 이상 → 하나만 남기고 지운다
     same: int = 0
@@ -48,7 +56,7 @@ class Diff:
 def diff_records(file_sigs: list[RecordSig], db_records: list[tuple[int, RecordSig]]) -> Diff:
     """엑셀 행(file_sigs)과 범위 안의 DB 기록((id, sig))을 비교한다.
 
-    같은 역·문·날짜에 "엑셀에만 있는 것"과 "DB에만 있는 것"이 함께 있으면 고친 것으로 보고 짝지어
+    같은 역·문·날짜·소분류에 "엑셀에만 있는 것"과 "DB에만 있는 것"이 함께 있으면 고친 것으로 보고 짝지어
     changed로 보낸다. 날짜를 고친 경우는 같은 기록인지 알 수 없어 new + missing으로 남는다.
     """
     d = Diff()

@@ -20,8 +20,9 @@ class Base(DeclarativeBase):
 
 
 def database_url() -> str:
-    user = os.environ["DB_USER"]
-    password = os.environ["DB_PASSWORD"]
+    # .env가 없어도 불러오기는 되게 한다(데스크탑에서 DB 없이 더미 생성·사전 학습만 할 때, 2026-11-24). 실제로 DB에 붙을 때 실패한다
+    user = os.environ.get("DB_USER", "psd_app")
+    password = os.environ.get("DB_PASSWORD", "")
     host = os.environ.get("DB_HOST", "localhost")
     port = os.environ.get("DB_PORT", "3306")
     name = os.environ.get("DB_NAME", "psd")

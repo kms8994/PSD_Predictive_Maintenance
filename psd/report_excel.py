@@ -150,17 +150,17 @@ def build_report_workbook(
 
     # ---------- 4. 전체 부품 ----------
     ws = wb.create_sheet("전체 부품")
-    cols = ["역", "방향", "문", "부품", "상태", "다음 교체일", "80% 범위 시작", "80% 범위 끝", "남은 일수", "남은 기간", "교체주기(년)", "마지막 교체일", "기준"]
+    cols = ["역", "선로", "문", "장애부위", "상태", "다음 교체일", "80% 범위 시작", "80% 범위 끝", "남은 일수", "남은 기간", "교체주기(년)", "마지막 교체일", "기준"]
     _header(ws, 1, cols)
 
     def sort_key(u: UnitStatus):
         d = doors.get(u.door_id) if u.door_id else None
-        return (u.station_id, d is None, d.side != "U" if d else 0, d.car if d else 0, d.position if d else 0, PART_ORDER.index(u.part_type_code))
+        return (u.station_id, d is None, list(SIDES).index(d.side) if d else 0, d.car if d else 0, d.position if d else 0, PART_ORDER.index(u.part_type_code))
 
     for i, u in enumerate(sorted(statuses, key=sort_key), start=2):
         d = doors.get(u.door_id) if u.door_id else None
         replaced = u.install_date != install_dates.get(u.station_id)
-        ws.append([station_names[u.station_id], SIDES[d.side] if d else "역 공통", d.no if d else "종합제어반", NAME[u.part_type_code], None,
+        ws.append([station_names[u.station_id], SIDES[d.side] if d else "역 공통", d.no if d else "-", NAME[u.part_type_code], None,
                    u.due, u.due_lo, u.due_hi, u.days_left, left_text(u.days_left), round(u.cycle_years, 1), u.install_date,
                    "마지막 교체일" if replaced else "PSD 사용개시일(교체 기록 없음)"])
         _status_cell(ws.cell(row=i, column=5), u.status)

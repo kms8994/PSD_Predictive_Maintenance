@@ -24,7 +24,7 @@ WINDOWS = [("6m", "6개월 안", 182), ("1y", "6개월~1년", 365), ("2y", "1~2�
 
 @dataclass(frozen=True)
 class DoorPos:
-    side: str  # "U" | "D"
+    side: str  # 선로 코드(catalog.SIDES)
     car: int
     position: int
 
@@ -79,14 +79,14 @@ def work_groups(statuses: list[UnitStatus], doors: dict[int, DoorPos], horizon_d
         if u.door_id is not None:
             g.doors.append(doors[u.door_id])
     for g in groups.values():
-        g.doors.sort(key=lambda d: (d.side != "U", d.car, d.position))
+        g.doors.sort(key=lambda d: (list(SIDES).index(d.side), d.car, d.position))
     return sorted(groups.values(), key=lambda g: (RANK[g.status], g.days_left, g.station_id, PART_ORDER.index(g.part_type_code)))
 
 
 def doors_text(g: WorkGroup, sep: str = " / ") -> str:
-    """대상 안전문: "부전 방면 1-4, 2-1 / 북울산 방면 1-1". 역 공통 부품은 "종합제어반"."""
+    """대상 안전문: "상선 1-4, 2-1 / 하선 1-1". 역 단위 소분류는 "역 공통"."""
     if not g.doors:
-        return "종합제어반(역 공통)"
+        return "역 공통"
     parts = []
     for side, label in SIDES.items():
         nos = [d.no for d in g.doors if d.side == side]

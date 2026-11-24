@@ -1,17 +1,17 @@
 """(선택) 더미 정비 기록을 DB에 넣는다 — 새 컴퓨터에서 지금 화면과 같은 상태를 만들 때.
 
-data/dummy/초기데이터_정비기록_<N>건.xlsx는 실제 고장 데이터가 없어 scripts/generate_dummy_records.py로 만든
-더미 기록이다(2026-11-16 v2 — 부품마다 일생을 따라가며 고장·수리·교체·점검을 만들고, 숨은 정답은
-data/dummy/정답_수명모수.json에 따로 둔다. 데이터셋_v2_설계.md). 개발 PC의 DB와 같다. 시연용 최근 두 달치는
-넣지 않고 정비기록_샘플_<N>건.xlsx로 남겨 "정비기록 시연" 탭에서 올려 본다.
+data/private/dummy/초기데이터_정비기록_<N>건.xlsx는 실제 고장 데이터가 없어 scripts/generate_dummy_records.py로 만든
+더미 기록이다(2026-11-24 v3 — 장애 이력 양식 모양, 소분류마다 일생을 따라가며 사건을 만들고, 숨은 정답은
+data/private/dummy/정답_수명모수.json에 따로 둔다. 데이터셋_v3_설계.md 7장). 분류표가 코레일 자료라 결과도 data/private/에 있다.
+시연용 최근 두 달치는 넣지 않고 정비기록_샘플_<N>건.xlsx로 남겨 "정비기록 시연" 탭에서 올려 본다.
 
-넣지 않으면 교체 기록이 0건이라 모든 부품이 "안전"으로 나온다(README "초기 데이터" 참고).
-교체 기록이 이미 있으면 겹치지 않게 아무것도 하지 않는다(--replace면 기록·업로드 이력을 모두 지우고 넣는다 —
-더미만 들어 있는 개발 DB에서만 쓴다). 화면에서 올린 것과 똑같이 업로드 이력이 1줄 남아서, 교체 기록 탭의
-업로드 이력에서 되돌릴 수도 있다. 실제 운영에서는 쓰지 않는다.
+넣지 않으면 기록이 0건이라 모든 부품이 "안전"으로 나온다.
+기록이 이미 있으면 겹치지 않게 아무것도 하지 않는다(--replace면 기록·업로드 이력을 모두 지우고 넣는다 —
+더미만 들어 있는 개발 DB에서만 쓴다). 화면에서 올린 것과 똑같이 업로드 이력이 1줄 남아서, 업로드 이력에서 되돌릴 수도 있다.
+실제 운영에서는 쓰지 않는다.
 
     python scripts/load_initial_records.py
-    python scripts/load_initial_records.py --replace   # 예전 더미(1,230건 등)를 지우고 새 더미로
+    python scripts/load_initial_records.py --replace   # 있는 더미를 지우고 새 더미로
 """
 import argparse
 import sys
@@ -29,9 +29,10 @@ from psd.models import Part, ReplacementPart, ReplacementRecord, UploadBatch  # 
 
 
 def initial_records_path() -> Path:
-    files = sorted((ROOT / "data" / "dummy").glob("초기데이터_정비기록_*건.xlsx"))
+    files = sorted((ROOT / "data" / "private" / "dummy").glob("초기데이터_정비기록_*건.xlsx"))
     if len(files) != 1:
-        raise SystemExit(f"data/dummy/초기데이터_정비기록_*건.xlsx가 하나여야 합니다: {[f.name for f in files]}")
+        raise SystemExit("data/private/dummy/초기데이터_정비기록_*건.xlsx가 하나여야 합니다 — "
+                         f"python scripts/generate_dummy_records.py --save 로 만드세요: {[f.name for f in files]}")
     return files[0]
 
 
@@ -44,7 +45,7 @@ def main() -> None:
     try:
         existing = session.scalar(select(func.count(ReplacementRecord.id)))
         if existing and not args.replace:
-            print(f"교체 기록이 이미 {existing}건 있어 넣지 않았습니다(겹침 방지). 바꾸려면 --replace")
+            print(f"기록이 이미 {existing}건 있어 넣지 않았습니다(겹침 방지). 바꾸려면 --replace")
             return
         if existing:
             session.execute(delete(ReplacementPart))
