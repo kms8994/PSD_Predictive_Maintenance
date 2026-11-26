@@ -1331,18 +1331,23 @@ details.more[open] > summary { margin-bottom: 10px; }
     const run = rt.running ? `<p class="small"><b>학습하는 중…</b> ${dotDate(String(rt.started_at).slice(0, 10))} 시작. 30초 안팎 걸립니다. 끝나면 이 화면을 다시 열어 보세요.</p>` : "";
     const err = rt.error ? `<p class="err">지난 학습이 실패했습니다: ${esc(rt.error)} — 지금 모델을 그대로 씁니다.</p>` : "";
     const sc = (x, k) => x ? (k === "auc" ? x.auc.toFixed(3) : pct(x.top_k_precision)) : "-";
+    // 데스크탑 사전 학습 모델은 앱 기록을 안 봐서 data_end에 2000-01-01을 넣어 둔다 — 날짜 대신 그 뜻을 보인다.
+    // 또 가져올 때는 그때 쓰던 모델과 겨루지 않는다(그 모델은 검증 기간을 학습에 썼을 수 있어 점수가 부풀려진다).
+    const isPre = m => m.trigger === "pretrained";
+    const seen = m => isPre(m) ? `앱 기록 안 봄(가상 노선${m.metrics.pretrained ? " " + m.metrics.pretrained.lines + "벌" : ""}로 학습)` : `기록 ~${dotDate(m.data_end)}`;
     const head = a ? `<div class="panel">
         <div class="headrow"><h2>지금 쓰는 모델 v${a.version}</h2><span class="pill s-green">사용 중</span></div>
-        <p class="small muted">${dotDate(String(a.trained_at).slice(0, 10))} 학습 · ${TRIGGER[a.trigger] || esc(a.trigger)} · 기록 ~${dotDate(a.data_end)} · 학습 ${a.train_rows.toLocaleString()}행(부품 x 월)</p>
+        <p class="small muted">${dotDate(String(a.trained_at).slice(0, 10))} 학습 · ${TRIGGER[a.trigger] || esc(a.trigger)} · ${seen(a)} · 학습 ${a.train_rows.toLocaleString()}행(부품 x 월)</p>
         <p class="small">${esc(a.reason)}</p>
         <div class="scroll"><table><tr><th>검증 기간 ${dotDate(a.metrics.holdout[0])} ~ ${dotDate(a.metrics.holdout[1])}</th><th>AUC</th><th>위험도 상위 100개 중 실제 6개월 안 고장</th></tr>
           <tr><td><b>이 모델</b></td><td class="num">${sc(a.metrics.challenger, "auc")}</td><td class="num">${sc(a.metrics.challenger)} (평균 ${pct(a.metrics.challenger.base_rate)}의 ${a.metrics.challenger.lift.toFixed(1)}배)</td></tr>
-          ${a.metrics.champion ? `<tr><td>그때 쓰던 모델</td><td class="num">${sc(a.metrics.champion, "auc")}</td><td class="num">${sc(a.metrics.champion)}</td></tr>` : ""}
+          ${a.metrics.champion ? `<tr${isPre(a) ? ' class="muted"' : ""}><td>그때 쓰던 모델${isPre(a) ? " *" : ""}</td><td class="num">${sc(a.metrics.champion, "auc")}</td><td class="num">${sc(a.metrics.champion)}</td></tr>` : ""}
           <tr><td>기준: 수명을 많이 쓴 순</td><td class="num">${sc(a.metrics.baseline, "auc")}</td><td class="num">${sc(a.metrics.baseline)}</td></tr></table></div>
+        ${isPre(a) && a.metrics.champion ? `<p class="small muted">* 그때 쓰던 모델은 이 검증 기간을 학습에 써서 점수가 높게 나옵니다(참고용). 이 모델은 앱 기록을 한 번도 안 본 채로 맞힌 점수라, 처음 보는 현장에서의 성능에 더 가깝습니다.</p>` : ""}
         <details class="more"><summary>모델이 많이 보는 것</summary><ul class="small" style="margin:0;padding-left:20px">${a.importance.map(([n, v]) => `<li>${esc(n)} <span class="muted">(빼면 AUC ${v.toFixed(3)} 떨어짐)</span></li>`).join("")}</ul></details>
       </div>` : `<div class="panel"><h2>AI 모델 없음</h2><p class="small muted">아직 학습한 모델이 없습니다. 아래 "지금 다시 학습"을 누르거나 <code>python scripts/train_risk_model.py</code>를 실행하세요.</p></div>`;
-    const rows = d.models.map(m => `<tr${m.status === "active" ? "" : ' class="muted"'}><td class="num">v${m.version}</td><td class="num small">${String(m.trained_at).replace("T", " ").slice(0, 16)}</td><td class="small">${TRIGGER[m.trigger] || esc(m.trigger)}</td><td class="num small">~${dotDate(m.data_end)}</td>
-        <td class="num">${sc(m.metrics.challenger, "auc")}</td><td class="num">${sc(m.metrics.champion, "auc")}</td><td><span class="pill ${MODEL_STATUS[m.status][1]}">${MODEL_STATUS[m.status][0]}</span></td><td class="small">${esc(m.reason)}</td></tr>`).join("");
+    const rows = d.models.map(m => `<tr${m.status === "active" ? "" : ' class="muted"'}><td class="num">v${m.version}</td><td class="num small">${String(m.trained_at).replace("T", " ").slice(0, 16)}</td><td class="small">${TRIGGER[m.trigger] || esc(m.trigger)}</td><td class="num small">${isPre(m) ? "앱 기록 안 봄" : "~" + dotDate(m.data_end)}</td>
+        <td class="num">${sc(m.metrics.challenger, "auc")}</td><td class="num">${sc(m.metrics.champion, "auc")}${isPre(m) && m.metrics.champion ? ' <span class="muted" title="그때 모델은 검증 기간을 학습에 써서 점수가 높게 나옴">(참고)</span>' : ""}</td><td><span class="pill ${MODEL_STATUS[m.status][1]}">${MODEL_STATUS[m.status][0]}</span></td><td class="small">${esc(m.reason)}</td></tr>`).join("");
     return `<section class="view">
       <div><h2 style="margin:0">AI 관리</h2><p class="small muted" style="margin:4px 0 0">정비기록으로 학습한 모델이 문·부품마다 앞으로 6개월 안에 고장 날 확률을 냅니다. 지금은 <b>더미 데이터</b>로 학습해, 점수는 "시뮬레이터 가정이 맞다면"의 성능입니다.</p></div>
       ${run}${err}
