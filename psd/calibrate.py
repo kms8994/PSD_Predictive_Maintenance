@@ -27,7 +27,7 @@ v2(2026-11-16, 데이터셋_v2_설계.md 4장)에서 바꾼 것 — 숨은 정�
     주기(평균 수명) = exp(사후분포로 평균한 log[Γ(1+1/β) × ((b0+S)/(a0+n))^(1/β)])   (기록이 없으면 정확히 공식 값)
 
 - 아직 고장 안 난 부품도 데이터다(중도절단): "4년째 멀쩡함 = 최소 4년은 버팀"으로 넣는다.
-- 예방·함께 정비는 그때까지 고장 안 났다는 중도절단이고, 조치만큼 나이가 줄어든다.
+- 사전조치(예방)는 그때까지 고장 안 났다는 중도절단이고, 조치만큼 나이가 줄어든다.
 - 기록은 달력 시간으로 센다(날씨로 빨라지는 계절 차이는 1년 평균으로 보면 공식 주기에 이미 들어 있다).
 - 데이터가 적어 일반 ML을 역 x 부품마다 따로 학습하는 건 맞지 않는다 — 공식 값에서 출발해 기록이 쌓일수록 옮겨 간다.
 """
@@ -189,13 +189,12 @@ def part_intervals(start: date, records: list[tuple], today: date, age_factor: d
 
     - 사후조치(고장) → 그 구간은 고장으로 끝남. 사전조치(예방) → 그때까지 멀쩡했음(중도절단).
     - 조치 뒤 다음 구간은 가상 나이 = (그때 나이) × age_factor[조치]에서 시작한다. 조치가 없는 기록은 교체로 본다.
-    - v2의 점검(이상 없음, 조치 "none")은 v3 양식에 없다. 들어오면 구간을 끊지 않고 건너뛴다.
     """
     out: list[Interval] = []
     age = 0.0
     for replaced_on, reason, *rest in sorted(records):
-        action = rest[0] if rest else ("none" if reason == "check" else "full")
-        if reason == "check" or action == "none" or replaced_on <= start:
+        action = rest[0] if rest else "full"
+        if replaced_on <= start:
             continue  # 사용개시 전 날짜나 같은 날 두 번 넣은 기록은 뺀다
         x = (replaced_on - start).days / 365.25
         out.append((age, x, reason == "fail"))

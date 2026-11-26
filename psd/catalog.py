@@ -16,7 +16,6 @@ PART_TYPES = [
     for u in TAXONOMY.units
 ]
 GROUPS = list(TAXONOMY.groups)
-NAME_TO_CODE = {p["name"]: p["code"] for p in PART_TYPES}
 CODE_TO_NAME = {p["code"]: p["name"] for p in PART_TYPES}
 DOOR_PART_CODES = [p["code"] for p in PART_TYPES if p["unit"] == "door"]
 STATION_PART_CODES = [p["code"] for p in PART_TYPES if p["unit"] == "station"]

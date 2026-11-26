@@ -1453,7 +1453,8 @@ def _recent_failures(db: Session, today: date, station_id: int | None = None) ->
     return {(sid, code): n for sid, code, n in db.execute(q)}
 
 
-def _door_positions(db: Session, station_id: int | None = None) -> dict[int, "DoorPos"]:
+def _door_positions(db: Session, station_id: int | None = None) -> dict:
+    """문 id → 보고서용 위치(psd/report_common.DoorPos)."""
     from psd.report_common import DoorPos
 
     q = select(Door) if station_id is None else select(Door).where(Door.station_id == station_id)

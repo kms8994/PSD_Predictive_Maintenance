@@ -24,7 +24,6 @@ from __future__ import annotations
 import itertools
 import math
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -45,7 +44,7 @@ def kelvin(celsius: float) -> float:
 # 옮겼다(psd/stations.py). 값의 근거(미팅 답변 Q3 "22·23년 사용개시" → 2022-01-01 통일, Q5 바다 인접 추정, AWS 지점 매핑)는
 # 그 파일의 '변경 이력' 시트에 있다. near_water는 표시용이고 계산엔 안 쓴다 — AWS 실측 습도가 지점별로 이미 들어가
 # 같은 "해안 = 습함" 효과를 두 번 넣지 않으려고(2026-10-25).
-from psd.stations import AWS_STATION_NAMES, STATIONS, Station  # noqa: E402,F401
+from psd.stations import AWS_STATION_NAMES, STATIONS  # noqa: E402
 
 # 2026-11-24 v3: 예측 단위는 장애부위 소분류(psd/catalog.py PART_TYPES)다. 소분류마다 분류표에 적은 공식(formula)으로 계산한다:
 # "motor"(모터&엔코더 ← v2 모터·풀리), "dcm"(DCU ← v2 DCM), "fixed"(날씨 무관 10년), 없음(공식 없음 — 기준 10년을 넓은

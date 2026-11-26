@@ -86,13 +86,6 @@ def test_intervals_ignore_records_before_install():
     assert part_intervals(START, [(date(2021, 6, 1), "fail")], TODAY) == [(0.0, (TODAY - START).days / 365.25, False)]
 
 
-def test_intervals_inspection_does_not_split():
-    """점검(이상 없음)은 부품을 바꾼 게 아니라 구간을 끊지 않는다."""
-    with_check = part_intervals(START, [(date(2024, 1, 1), "fail"), (date(2025, 6, 1), "check", "none")], TODAY)
-    without = part_intervals(START, [(date(2024, 1, 1), "fail")], TODAY)
-    assert with_check == without
-
-
 def test_repair_keeps_age_and_partial_halves_it():
     """일부 수리 = 고장 직전과 같음(나이 그대로), 일부 교체 = 나이 절반(가정), 전체 교체 = 새것."""
     ints = part_intervals(START, [(date(2023, 1, 1), "fail", "repair"), (date(2024, 1, 1), "fail", "partial"),

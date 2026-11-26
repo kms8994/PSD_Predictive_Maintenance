@@ -541,18 +541,16 @@ details.more[open] > summary { margin-bottom: 10px; }
 
   // 예측 단위(장애부위 소분류, 2026-11-24 v3): 화면 표시용 고정 목록(이름·대분류·단위). 값은 아니라 한 번만 받아 둔다.
   // 조치·장애인지·선로 이름도 서버(psd/catalog.py)에서 받는다
-  let PART_TYPES = [], PART = {}, DOOR_PART_CODES = [], STATION_PART_CODES = [], TAXONOMY = "";
-  let REASONS = {}, ACTIONS = {}, FAULT_TYPE = {}, SIDE_LABEL = {};
+  let PART_TYPES = [], PART = {}, TAXONOMY = "";
+  let REASONS = {}, ACTIONS = {}, SIDE_LABEL = {};
   async function loadPartTypes() {
     if (PART_TYPES.length) return;
     const [pt, { today }] = await Promise.all([api("/api/part-types"), api("/api/today")]);
     const { part_types } = pt;
-    REASONS = pt.reasons; ACTIONS = pt.actions; FAULT_TYPE = pt.fault_type; SIDE_LABEL = pt.sides; TAXONOMY = pt.taxonomy;
+    REASONS = pt.reasons; ACTIONS = pt.actions; SIDE_LABEL = pt.sides; TAXONOMY = pt.taxonomy;
     document.getElementById("asof").textContent = dotDate(today) + " 기준" + (TAXONOMY === "sample" ? " · 예시 분류표" : "");
     PART_TYPES = part_types;
     PART = Object.fromEntries(PART_TYPES.map(p => [p.code, p]));
-    DOOR_PART_CODES = PART_TYPES.filter(p => p.unit === "door").map(p => p.code);
-    STATION_PART_CODES = PART_TYPES.filter(p => p.unit === "station").map(p => p.code);
   }
 
   // 조치사항(양식) + 장애내용·고장원인·조치 상세 한 줄. 설치일·주기 보정은 "교체"만 새 수명 시작으로 본다
@@ -1274,7 +1272,7 @@ details.more[open] > summary { margin-bottom: 10px; }
     return `<div class="lc">${key}<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(aria)}">${grid}${years}${lines}${labels}${hits}</svg></div>`;
   }
   function vfPanel(vf, sc) {
-    if (!vf.rows.length) return `<div class="panel"><h3>가상 현장</h3><p class="small muted">결과가 없습니다. <code>python scripts/virtual_field.py</code>로 만듭니다.</p></div>`;
+    if (!vf.rows.length) return `<div class="panel"><h3>가상 현장</h3><p class="small muted">결과가 없습니다. 데스크탑에서 <code>python scripts/virtual_field.py</code>로 만들어 <code>data/processed/virtual_field.csv</code>를 옮겨 오면 여기에 그래프가 나옵니다(데스크탑_작업_안내.md 3장).</p></div>`;
     const names = [...new Set(vf.rows.map(r => r.scenario))];
     const xs = [...new Set(vf.rows.map(r => r.cutoff))].sort();
     const at = (n, c, k) => { const r = vf.rows.find(r => r.scenario === n && r.cutoff === c); return r ? r[k] : null; };
@@ -1798,7 +1796,7 @@ details.more[open] > summary { margin-bottom: 10px; }
 
   function partPanel(p) {
     const { part, cycle, due, days_left, status, weather_basis, history, calibration: cal } = p;
-    // 코드 리뷰로 찾은 버그: 축이 7~13년으로 고정돼 있어서, 24개 역 거의 전부인 IFM·DCM
+    // 코드 리뷰로 찾은 버그: 축이 7~13년으로 고정돼 있어서, 24개 역 거의 전부인 v2 IFM·DCM
     // 부품(실제 범위가 7년 미만)이 왼쪽 끝에 뭉개져 보였다. 이 부품의 실제 값(+10년 기준선)이
     // 항상 안에 들어오도록 축을 매번 계산한다 — "날씨 영향" 탭의 cyLo/cyHi와 같은 방식.
     const rvals = [cycle.lo_years, cycle.hi_years, cycle.base_years, 10];

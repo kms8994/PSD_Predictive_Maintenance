@@ -1,7 +1,7 @@
 """문·부품마다 "앞으로 6개월 안에 고장 날 확률"을 내는 머신러닝 모델 (2026-11-16, 파이프라인 9단계).
 
-psd/calibrate.py(베이지안 와이블)는 역 x 부품 종류마다 교체 **주기** 하나를 낸다 — "센텀역 DCM은 약 4년".
-이 모델은 부품 **하나하나**의 위험도를 낸다 — "센텀 2-1 DCM은 수리를 세 번 했고 문 전체가 고장이 잦아 위험".
+psd/calibrate.py(베이지안 와이블)는 역 x 장애부위(소분류)마다 교체 **주기** 하나를 낸다 — "센텀역 DCU는 약 4년".
+이 모델은 부품 **하나하나**의 위험도를 낸다 — "센텀 2-1 DCU는 수리를 세 번 했고 문 전체가 고장이 잦아 위험".
 둘은 서로 대신하지 않는다: 주기는 데이터가 적어도 공식에 기대 버티고, 이 모델은 기록이 쌓일수록 크게 좋아진다.
 
 학습 데이터 (부품 x 월 스냅샷):
@@ -111,8 +111,7 @@ class FeatureBuilder:
         for sid, door, code, day, reason, action in session.execute(
                 select(ReplacementRecord.station_id, ReplacementRecord.door_id, ReplacementPart.part_type_code,
                        ReplacementRecord.replaced_on, ReplacementRecord.reason, ReplacementRecord.action)
-                .join(ReplacementPart, ReplacementPart.record_id == ReplacementRecord.id)
-                .where(ReplacementRecord.reason != "check")):
+                .join(ReplacementPart, ReplacementPart.record_id == ReplacementRecord.id)):
             ev.setdefault((sid, door, code), []).append((day, reason, action))
         parts = [PartHistory(pid, sid, door, code, sorted(ev.get((sid, door, code), [])), PSD_START[sid])
                  for pid, sid, door, code in session.execute(select(Part.id, Part.station_id, Part.door_id, Part.part_type_code).order_by(Part.id))]
