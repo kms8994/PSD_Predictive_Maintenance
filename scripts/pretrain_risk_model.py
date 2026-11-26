@@ -1,8 +1,13 @@
 """가상 노선 여러 벌로 AI 위험도 모델을 미리 학습한다 — **데스크탑에서 돌리는 작업** (2026-11-24, 데이터셋_v3_설계.md 7장).
 
-앱 DB에는 동해선 한 벌 분량의 기록만 있어 모델이 배울 고장이 적다. 그래서 더미 생성기로 같은 동해선을 여러 번 겪게 하고
-(숨은 정답은 같고 사건만 다름) 그 전부로 학습한다. 결과 파일을 노트북으로 가져가 scripts/import_risk_model.py로 넣으면
+앱 DB에는 동해선 한 벌 분량의 기록만 있어 모델이 배울 고장이 적다. 그래서 더미 생성기로 동해선을 여러 번 겪게 하고
+그 전부로 학습한다. 결과 파일을 노트북으로 가져가 scripts/import_risk_model.py로 넣으면
 앱이 그 모델을 "지금 모델"로 쓰고, 실제 기록이 올라오면 그 기록으로 학습한 새 모델이 이걸 이길 때만 바꾼다.
+
+**벌마다 숨은 정답(소분류별 진짜 수명·형상)을 다르게 둔다**(2026-11-26, 기본 --truth-mode mix). 정답이 모두 같으면 모델이
+"이 가상 세계의 소분류별 고장률"을 외워 같은 정답 벌에선 AUC 0.763이 나오지만, 정답이 다른 세계에선 0.609(기준 방법 0.596)로
+떨어졌다. 정답을 섞어 학습하면 본 적 없는 정답에서 0.695다(scripts/check_truth_transfer.py). 실제 현장은 "다른 정답"이므로
+채점 벌도 학습에 없던 정답으로 둔다. 예전 방식은 --truth-mode fixed.
 
 DB가 필요 없다(.env 없이 돈다). 필요한 것: 이 저장소, requirements.txt, 분류표 data/private/장애분류.json, 날씨 CSV(저장소에 있음).
 더미로 잰 점수는 "시뮬레이터 가정이 맞다면"의 성능이다 — 실제 성능처럼 말하지 않는다.
@@ -73,7 +78,11 @@ def main() -> None:
     ap.add_argument("--lines", type=int, default=20, help="가상 노선 벌 수")
     ap.add_argument("--val-lines", type=int, default=2, help="채점용으로 학습에서 뺄 벌 수")
     ap.add_argument("--seed", type=int, default=100, help="첫 벌의 사건 씨앗(벌마다 +1)")
-    ap.add_argument("--truth-seed", type=int, default=2026, help="숨은 정답 씨앗 — 앱 더미와 같게 둔다")
+    ap.add_argument("--truth-mode", choices=["mix", "fixed"], default="mix",
+                    help="mix: 벌마다 숨은 정답이 다름(기본, 채점 벌은 학습에 없던 정답) / fixed: 모든 벌이 --truth-seed 하나")
+    ap.add_argument("--truth-seed", type=int, default=2026, help="fixed일 때의 숨은 정답 씨앗(앱 더미와 같음)")
+    ap.add_argument("--truth-start", type=int, default=3000,
+                    help="mix일 때 첫 벌의 정답 씨앗(벌마다 +1). 앱 더미 정답(2026)과 겹치지 않게 둔다")
     ap.add_argument("--today", default=date.today().isoformat(), help="가상 기록의 마지막 날")
     ap.add_argument("--step", type=int, default=1, help="스냅샷 간격(개월). 2면 행이 반으로")
     ap.add_argument("--jobs", type=int, default=1, help="동시에 만들 벌 수(CPU 코어 수 이하)")
@@ -88,18 +97,23 @@ def main() -> None:
         print(f"주의: 실제 분류표가 아니라 {TAXONOMY.source} 분류표로 학습합니다 — 노트북 앱과 분류표가 같아야 가져올 수 있습니다")
     today = date.fromisoformat(a.today)
     t0 = time.time()
-    jobs = [(r, a.seed + r, a.truth_seed, today, a.step) for r in range(a.lines)]
+    truths = [a.truth_start + r if a.truth_mode == "mix" else a.truth_seed for r in range(a.lines)]
+    if a.truth_mode == "mix" and a.truth_start <= 2026 < a.truth_start + a.lines:
+        sys.exit("--truth-start 범위가 앱 더미 정답(2026)을 포함합니다 — 노트북 채점이 부풀려집니다. 다른 값을 주세요")
+    jobs = [(r, a.seed + r, truths[r], today, a.step) for r in range(a.lines)]
     results = []
     with ProcessPoolExecutor(max_workers=max(1, a.jobs)) as ex:
         for r, res in zip(range(a.lines), ex.map(line_dataset, jobs)):
             results.append(res)
-            print(f"  {r + 1}/{a.lines}벌: 행 {len(res[1]):,}, 부품 {res[3]:,}, 사후조치 {res[4]:,} ({time.time() - t0:.0f}초)", flush=True)
+            print(f"  {r + 1}/{a.lines}벌(정답 {truths[r]}): 행 {len(res[1]):,}, 부품 {res[3]:,}, 사후조치 {res[4]:,} "
+                  f"({time.time() - t0:.0f}초)", flush=True)
 
     tr, va = results[: a.lines - a.val_lines], results[a.lines - a.val_lines:]
     stack = lambda rs, i: np.concatenate([x[i] for x in rs])  # noqa: E731
     Xtr, ytr = stack(tr, 0), stack(tr, 1)
     Xva, yva, tva = stack(va, 0), stack(va, 1), stack(va, 2)
-    print(f"학습 {len(ytr):,}행 / 채점 {len(yva):,}행(학습에 안 쓴 {a.val_lines}벌) — 특징 만들기 {time.time() - t0:.0f}초", flush=True)
+    unseen = "학습에 없던 정답" if a.truth_mode == "mix" else "같은 정답 — 점수가 부풀려질 수 있음"
+    print(f"학습 {len(ytr):,}행 / 채점 {len(yva):,}행(학습에 안 쓴 {a.val_lines}벌, {unseen}) — 특징 만들기 {time.time() - t0:.0f}초", flush=True)
 
     t1 = time.time()
     val_model = new_model().fit(Xtr, ytr)
@@ -121,10 +135,11 @@ def main() -> None:
     import sklearn
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    name = f"risk_pretrained_{today:%Y%m%d}_{a.lines}벌"
+    name = f"risk_pretrained_{today:%Y%m%d}_{a.lines}벌" + ("" if a.truth_mode == "mix" else "_고정정답")
     meta = {
         "kind": "psd-risk-pretrained", "created_at": datetime.now().isoformat(timespec="seconds"), "lines": a.lines,
-        "val_lines": a.val_lines, "seed": a.seed, "truth_seed": a.truth_seed, "data_end": today.isoformat(), "step": a.step,
+        "val_lines": a.val_lines, "seed": a.seed, "truth_mode": a.truth_mode, "truth_seeds": truths,
+        "data_end": today.isoformat(), "step": a.step,
         "train_rows": int(len(ytr) + len(yva)), "unit_codes": PART_CODES, "features": FEATURE_NAMES, "horizon_days": HORIZON_DAYS,
         "taxonomy": TAXONOMY.source, "taxonomy_key": taxonomy_key(), "units": len(PART_TYPES),
         "sklearn": sklearn.__version__, "python": sys.version.split()[0],
