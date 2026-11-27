@@ -32,7 +32,8 @@ from psd.models import CycleResult, Door, Part, PartType, ReplacementPart, Repla
 from psd.stations import STATION_FILE, STATIONS  # noqa: E402
 
 _DROP_TABLES = ["daily_weather", "observatories"]  # 2026-11-23 정리한 예전 표
-_NEW_COLUMNS = [("stations", "seq", "INT NOT NULL DEFAULT 0")]  # 2026-11-24 역 목록 파일(노선 순서)
+_NEW_COLUMNS = [("stations", "seq", "INT NOT NULL DEFAULT 0"),  # 2026-11-24 역 목록 파일(노선 순서)
+                ("upload_batches", "source", "VARCHAR(20) NULL")]  # 2026-11-27 연동 파일 감지로 반영한 업로드(psd/link.py)
 _DROP_COLUMNS = [("stations", "coast_km"), ("stations", "daily_riders"), ("stations", "env_note")]  # 역 환경 파일로 옮김
 
 

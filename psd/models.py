@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, String, func
+from sqlalchemy import JSON, BigInteger, Date, DateTime, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from psd.db import Base
@@ -115,6 +115,9 @@ class UploadBatch(Base):
     removed: Mapped[list] = mapped_column(JSON)  # 지우거나 고치기 전 기록들(되돌리기용)
     undone_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
     uploaded_by: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 올린 사람(화면에서 적는 이름, 로그인 전이라 확인은 안 함)
+    # 어디서 왔는지: None = 화면에서 파일을 골라 올림, "link" = 연동 파일 감지(psd/link.py, 2026-11-27).
+    # 예전 DB엔 이 칸이 없다 — 서버가 켜질 때·scripts/init_db.py가 더한다(psd/link.py ensure_schema)
+    source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
 
 class ReplacementRecord(Base):
@@ -199,3 +202,49 @@ class RiskModel(Base):
     metrics: Mapped[dict] = mapped_column(JSON)  # {"holdout": [from, to], "challenger", "champion", "baseline", ...}
     importance: Mapped[list] = mapped_column(JSON)
     file_name: Mapped[str] = mapped_column(String(100))
+
+
+class LinkedFile(Base):
+    """연동 파일 설정과 지금 상태(psd/link.py, 2026-11-27). 한 줄(id=1)만 쓴다.
+
+    서버를 다시 켜도 이어지게 모든 상태를 여기 둔다: 무슨 파일을 보는지, 마지막으로 본 내용(해시)과
+    그 비교 결과, 사람이 반영했는지. 반영은 사람이 화면에서 누를 때만 한다(자동 반영 없음, 2026-11-27 사용자 결정).
+    """
+
+    __tablename__ = "linked_files"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 서버 PC에서 보이는 전체 경로. None = 연동 안 함
+    set_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    set_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # 내용 상태(마지막으로 본 내용 seen_hash 기준): "waiting" 아직 안 봄 | "same" DB와 같음 | "pending" 바뀜·반영 기다림
+    # | "error" 틀린 줄이 있어 반영 못 함 | "applied" 반영함 | "dismissed" 이번 내용은 반영 안 하기로 함 | "undone" 반영을 되돌림
+    state: Mapped[str] = mapped_column(String(12), default="waiting")
+    summary: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # 마지막 비교 요약(건수·범위) 또는 오류 목록
+    seen_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 마지막으로 비교한 내용의 SHA-256
+    seen_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)  # 그 내용을 처음 본(감지한) 때
+    compared_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)  # 마지막으로 비교한 때
+    checked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)  # 마지막으로 파일을 들여다본 때
+    file_mtime_ns: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # 그때 파일 수정 시각(나노초) — 크기와 함께 같으면 다시 읽지 않는다
+    file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # 잠깐의 문제(내용 상태와 따로): None | "saving" 저장 중 | "locked" 잠김 | "missing" 파일 없음 | "failed" 비교 중 예상 못 한 오류
+    issue: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    issue_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    issue_since: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    excel_open: Mapped[bool] = mapped_column(default=False)  # 마지막으로 볼 때 Excel에서 열려 있었는지(~$ 파일)
+    applied_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    applied_at: Mapped[dt.datetime | None] = mapped_column(DateTime, nullable=True)
+    applied_batch_id: Mapped[int | None] = mapped_column(nullable=True)  # 그때 생긴 업로드 이력(바뀐 게 없었으면 None)
+
+
+class LinkEvent(Base):
+    """연동 감지 기록(로그): 연동 설정·바꾸기·감지·오류·반영·되돌림. 상태가 바뀔 때만 1줄(10초마다 쌓이지 않게)."""
+
+    __tablename__ = "link_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    at: Mapped[dt.datetime] = mapped_column(DateTime)
+    kind: Mapped[str] = mapped_column(String(12))  # psd/link.py EVENT_LABEL의 열쇠
+    path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    message: Mapped[str] = mapped_column(String(500))

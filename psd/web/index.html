@@ -498,6 +498,13 @@ details.more[open] > summary { margin-bottom: 10px; }
   .st { padding-left: 48px; }
   .cycle .big { font-size: 1.6rem; }
 }
+/* 연동 파일 알림(머리 영역, 2026-11-27): 어느 탭에서나 보인다 */
+.linkbar { background: var(--amber-soft); color: var(--ink); border-bottom: 1px solid var(--line); }
+.linkbar.bad { background: var(--red-soft); }
+.linkbar-inner { max-width: 1200px; margin: 0 auto; padding: 8px 40px; display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; font-size: 0.92rem; }
+.linkbar .lb-btn { appearance: none; border: 1px solid currentColor; background: var(--surface); color: var(--ink); font: inherit; font-weight: 700; padding: 4px 12px; border-radius: 3px; cursor: pointer; }
+@media (max-width: 640px) { .linkbar-inner { padding: 8px 16px; } }
+#lkbox, #lkcmp, #cmp { scroll-margin-top: 130px; } /* 붙박이 머리 영역(+알림) 밑으로 숨지 않게 */
 </style>
 
 <header class="top">
@@ -514,6 +521,7 @@ details.more[open] > summary { margin-bottom: 10px; }
     </nav>
     <button class="themebtn" id="theme-btn" type="button" role="switch" aria-checked="false"><span class="theme-label">WHITE MODE</span><span class="sw" aria-hidden="true"><span class="knob"></span></span></button>
   </div>
+  <div class="linkbar" id="linkbar" role="status" aria-live="polite" hidden></div>
 </header>
 <main class="wrap" id="app"></main>
 <div class="toast" id="toast" hidden></div>
@@ -910,6 +918,8 @@ details.more[open] > summary { margin-bottom: 10px; }
     if (ps) setupPartSummary(ps);
     const xf = app.querySelector("#xlsxform");
     if (xf) setupUploadForm(xf);
+    const lkb = app.querySelector("#lkbox");
+    if (lkb) setupLink(lkb);
     app.querySelectorAll("[data-undo]").forEach(b => b.addEventListener("click", () => undoBatch(Number(b.dataset.undo), b)));
     const rfSt = app.querySelector("#rf-st"), rfPart = app.querySelector("#rf-part");
     if (rfSt) rfSt.addEventListener("change", () => go({ ...view, rst: Number(rfSt.value) || undefined, rpage: 1, keep: true }));
@@ -1399,12 +1409,14 @@ details.more[open] > summary { margin-bottom: 10px; }
     if (view.rto) qs.set("date_to", view.rto);
     if (view.rreason) qs.set("reason", view.rreason);
     if (view.raction) qs.set("action", view.raction);
-    const [data, rec, hist] = await Promise.all([api("/api/stations"), api("/api/replacement-records?" + qs), api("/api/upload-batches?limit=10")]);
+    const [data, rec, hist, lk] = await Promise.all([api("/api/stations"), api("/api/replacement-records?" + qs), api("/api/upload-batches?limit=10"),
+      api("/api/link").catch(() => null)]);
+    if (lk) { LINK = lk; showLinkBar(lk); }
     const opened = data.stations.filter(s => s.in_service);
     const filtered = !!(view.rst || view.rpart || view.rfrom || view.rto || view.rreason || view.raction);
     const pages = Math.max(1, Math.ceil(rec.total / REC_PER_PAGE));
     const histRows = hist.batches.map(b => `<tr${b.undone_at ? ` class="muted"` : ""}>
-        <td class="num">${fmtTime(b.uploaded_at)}</td><td>${esc(b.uploaded_by || "-")}</td><td>${esc(b.file_name)}</td>
+        <td class="num">${fmtTime(b.uploaded_at)}</td><td>${esc(b.uploaded_by || "-")}</td><td>${esc(b.file_name)}${b.source === "link" ? ` <span class="pill s-info">연동 파일 감지</span>` : ""}</td>
         <td class="num small">${b.station_count}개 역 · ${dotDate(b.scope_from)}~${dotDate(b.scope_to)}</td>
         <td class="num">${n0(b.inserted)}</td><td class="num">${n0(b.updated)}</td><td class="num">${n0(b.deleted)}</td>
         <td>${b.undone_at ? `<span class="pill s-check">되돌림</span>` : b.can_undo ? `<button class="btn ghost" data-undo="${b.id}" type="button" style="padding:4px 10px">되돌리기</button>` : ""}</td></tr>`).join("");
@@ -1414,9 +1426,10 @@ details.more[open] > summary { margin-bottom: 10px; }
         <button class="btn ghost" ${page < pages ? goAttr({ ...view, rpage: page + 1, keep: true }) : "disabled"}>다음 ›</button></div>` : "";
     return `<section class="view">
       ${lastResult ? resultPanel(lastResult) : ""}
+      ${lk ? `<div id="lkbox">${linkPanel(lk)}</div><div id="lkcmp"></div>` : ""}
       <form class="panel form" id="xlsxform" novalidate>
         <div class="headrow"><h2>정비기록 엑셀 올리기</h2><a class="linkbtn" href="/api/replacement-records/template" download>빈 양식 내려받기 ›</a></div>
-        <p class="small muted">현장 엑셀에 계속 적고, 한 달에 한 번 누적 파일을 통째로 올리세요. 먼저 비교해 보여 주고 "반영하기"를 눌러야 저장합니다.</p>
+        <p class="small muted">현장 엑셀에 계속 적고, 한 달에 한 번 누적 파일을 통째로 올리세요. 먼저 비교해 보여 주고 "반영하기"를 눌러야 저장합니다. 위의 "연동 파일"을 정해 두면 올리지 않아도 파일이 바뀔 때마다 알려 줍니다.</p>
         <label class="drop" id="xf-drop"><input type="file" id="xf-file" accept=".xlsx" class="vh"><b id="xf-name">엑셀 파일을 여기에 끌어다 놓거나, 눌러서 고르세요</b><span class="small muted">.xlsx · 코레일 장애 이력 양식 그대로</span></label>
         <details class="more"><summary>작성 규칙</summary><ul class="small muted" style="margin:0;padding-left:20px">
           <li><b>현장에서 쓰는 코레일 "장애 이력 관리 현황" 양식 파일을 그대로 올리면 됩니다.</b> "고장현황 전체" 시트에서 머리글 줄(양식은 12행)을 찾아 그 아래를 읽고, 수식만 깔린 빈 줄과 동해선이 아닌 줄은 건너뜁니다.</li>
@@ -1461,7 +1474,8 @@ details.more[open] > summary { margin-bottom: 10px; }
     return list.map(({ before: b, after: a }) => `<tr><td class="num">${dotDate(a.replaced_on)}</td><td>${esc(a.station_name)}</td><td>${esc(a.location)}</td><td class="muted">${what(b)}</td><td><b>${what(a)}</b></td></tr>`).join("");
   }
   function moreNote(shown, total) { return total > shown ? `<p class="small muted">처음 ${n0(shown)}건만 보여 줍니다(전체 ${n0(total)}건).</p>` : ""; }
-  function comparePanel(r) {
+  // o: title·head(위에 덧붙일 줄)·applyLabel·alwaysApply(바뀐 게 없어도 버튼)·noDelete(지우기 체크 숨김)·dismiss(반영 안 함 버튼)
+  function comparePanel(r, o = {}) {
     const c = r.counts;
     const nothing = !c.new && !c.changed && !c.db_duplicates && !(c.missing && r.delete_missing);
     const notes = [
@@ -1475,12 +1489,13 @@ details.more[open] > summary { margin-bottom: 10px; }
         <b>엑셀에 없는 기록 ${n0(c.missing)}건</b>
         <p class="small ${r.missing_warn ? "err" : "muted"}" style="margin:0">${r.missing_warn ? `꽤 많습니다. 다른 역·기간의 파일을 고른 건 아닌지, 엑셀 ${r.scope.from_row}행(${dotDate(r.scope.from)})처럼 동떨어진 날짜 한 줄 때문에 범위가 넓어진 건 아닌지 확인하세요. ` : ""}비교 범위 안에 있는데 이 엑셀에는 없는 기록입니다. 엑셀에서 지운 기록이 맞을 때만 지우세요.</p>
         <details class="more"><summary>${n0(c.missing)}건 보기</summary><div class="scroll"><table>${recHead}${recRows(r.missing)}</table></div>${moreNote(r.missing.length, c.missing)}</details>
-        <label class="small"><input type="checkbox" id="cmp-del" ${r.delete_missing ? "checked" : ""}> 이 ${n0(c.missing)}건을 지웁니다</label>
+        ${o.noDelete ? "" : `<label class="small"><input type="checkbox" id="cmp-del" ${r.delete_missing ? "checked" : ""}> 이 ${n0(c.missing)}건을 지웁니다</label>`}
       </div>` : "";
     return `<div class="panel result" id="cmp-panel">
-        <div class="resulthead"><div><h2>비교 결과: ${nothing ? "바뀌는 기록이 없습니다" : "아직 저장하지 않았습니다"}</h2>
+        <div class="resulthead"><div><h2>${o.title || "비교 결과"}: ${nothing ? "바뀌는 기록이 없습니다" : "아직 저장하지 않았습니다"}</h2>
           <p class="small muted">${esc(r.file)} · 비교 범위 ${r.scope.stations}개 역, ${dotDate(r.scope.from)}(엑셀 ${r.scope.from_row}행) ~ ${dotDate(r.scope.to)}(엑셀 ${r.scope.to_row}행) · 이 범위 밖의 기록은 건드리지 않습니다</p></div>
-          <div class="filters">${nothing ? "" : `<button class="btn" id="cmp-apply" type="button">반영하기</button>`}<button class="linkbtn" id="cmp-cancel" type="button">${nothing ? "닫기" : "취소"}</button></div></div>
+          <div class="filters">${nothing && !o.alwaysApply ? "" : `<button class="btn" id="cmp-apply" type="button">${o.applyLabel || "반영하기"}</button>`}${o.dismiss ? `<button class="btn ghost" id="cmp-dismiss" type="button">이번 변경은 반영 안 함</button>` : ""}<button class="linkbtn" id="cmp-cancel" type="button">${nothing && !o.alwaysApply ? "닫기" : "취소"}</button></div></div>
+        ${o.head || ""}
         <div class="stchg"><span>새 기록 <b>${n0(c.new)}</b>건</span><span>고친 기록 <b>${n0(c.changed)}</b>건</span><span>엑셀에 없는 기록 <b>${n0(c.missing)}</b>건</span><span class="muted">그대로 ${n0(c.same)}건</span></div>
         ${nothing && !c.missing ? `<p class="small muted">이미 반영된 파일입니다.</p>` : ""}
         ${notes}
@@ -1489,6 +1504,29 @@ details.more[open] > summary { margin-bottom: 10px; }
         ${missing}
       </div>
       ${r.changes.length ? resultPanel({ kind: "compare", ...r }) : ""}`;
+  }
+
+  // 비교 결과를 box에 그리고 버튼을 잇는다. o.recompare(지우기 체크를 바꿈)·o.apply(반영)·o.dismiss·o.onClose
+  function showCompare(box, r, o) {
+    box.innerHTML = comparePanel(r, o);
+    box.querySelectorAll("[data-go]").forEach(el => el.addEventListener("click", () => go(JSON.parse(el.dataset.go))));
+    box.querySelector("#cmp-cancel").addEventListener("click", () => { box.innerHTML = ""; if (o.onClose) o.onClose(); });
+    const delBox = box.querySelector("#cmp-del");
+    if (delBox) delBox.addEventListener("change", async () => {  // 지우기를 켜고 끄면 교체주기 영향도 달라져 다시 비교한다
+      delBox.disabled = true;
+      try { await o.recompare(delBox.checked); } catch (ex) { toast(ex.message); delBox.disabled = false; }
+    });
+    const apply = box.querySelector("#cmp-apply");
+    if (apply) apply.addEventListener("click", async () => {
+      const label = apply.textContent;
+      apply.disabled = true; apply.textContent = o.busyLabel || "반영하는 중...";
+      try { await o.apply(r.delete_missing); } catch (ex) { toast(ex.message); apply.disabled = false; apply.textContent = label; }
+    });
+    const dis = box.querySelector("#cmp-dismiss");
+    if (dis) dis.addEventListener("click", async () => {
+      dis.disabled = true;
+      try { await o.dismiss(); } catch (ex) { toast(ex.message); dis.disabled = false; }
+    });
   }
 
   async function undoBatch(id, btn) {
@@ -1515,25 +1553,18 @@ details.more[open] > summary { margin-bottom: 10px; }
 
     const compare = async del => {
       const r = await apiUpload("/api/replacement-records/compare", picked, { delete_missing: del });
-      box.innerHTML = comparePanel(r);
-      box.querySelectorAll("[data-go]").forEach(el => el.addEventListener("click", () => go(JSON.parse(el.dataset.go))));
-      box.querySelector("#cmp-cancel").addEventListener("click", () => { box.innerHTML = ""; });
-      const delBox = box.querySelector("#cmp-del");
-      if (delBox) delBox.addEventListener("change", async () => {  // 지우기를 켜고 끄면 교체주기 영향도 달라져 다시 비교한다
-        delBox.disabled = true;
-        try { await compare(delBox.checked); } catch (ex) { toast(ex.message); delBox.disabled = false; }
-      });
-      const apply = box.querySelector("#cmp-apply");
-      if (apply) apply.addEventListener("click", async () => {
-        apply.disabled = true; apply.textContent = "반영하는 중...";
-        try {
+      const lkc = app.querySelector("#lkcmp");
+      if (lkc) { lkc.innerHTML = ""; linkShown = null; }  // 비교 결과는 한 번에 하나만
+      showCompare(box, r, {
+        recompare: compare,
+        apply: async d => {
           const who = f.querySelector("#xf-who").value.trim();
           try { localStorage.setItem("psd-uploader", who); } catch (e) {}  // 다음에 또 적지 않게 이 브라우저에 기억
-          const res = await apiUpload("/api/replacement-records/sync", picked, { delete_missing: del, ...(who ? { uploaded_by: who } : {}) });
+          const res = await apiUpload("/api/replacement-records/sync", picked, { delete_missing: d, ...(who ? { uploaded_by: who } : {}) });
           if (!res.batch_id) { toast("바뀐 기록이 없습니다."); box.innerHTML = ""; return; }
           lastResult = { kind: "upload", ...res };
           go({ name: "records" });
-        } catch (ex) { toast(ex.message); apply.disabled = false; apply.textContent = "반영하기"; }
+        },
       });
     };
     f.addEventListener("submit", async e => {
@@ -1549,6 +1580,254 @@ details.more[open] > summary { margin-bottom: 10px; }
       }
       btn.disabled = false; btn.textContent = "비교하기";
     });
+  }
+
+  // ---------- 연동 파일(psd/link.py, 2026-11-27): 서버가 파일을 지켜보다 바뀌면 비교만 해 두고, 사람이 보고 반영한다 ----------
+  // 화면 위(머리 영역) 알림은 어느 탭에서나 10초마다 /api/link를 보고 띄운다. 교체 기록 탭의 "연동 파일" 칸도 같이 새로 고친다
+  async function apiJson(path, method, body) {
+    const r = await fetch(path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const d = data.detail;
+      const e = new Error(typeof d === "string" ? d : Array.isArray(d) ? d.map(x => x.msg).join(", ") : (r.status >= 500 ? "서버 오류가 났습니다. 잠시 뒤 다시 시도하세요." : path + " 실패"));
+      e.status = r.status;
+      throw e;
+    }
+    return data;
+  }
+  const LINK_PILL = { pending: "s-amber", error: "s-red", same: "s-green", applied: "s-green", waiting: "s-check", dismissed: "s-check", undone: "s-check" };
+  // 반영·연동한 사람: 업로드 칸의 "올리는 사람"과 같이 쓴다(이 브라우저에 기억)
+  function whoName() {
+    const el = app.querySelector("#xf-who");
+    let v = el ? el.value.trim() : "";
+    try { if (v) localStorage.setItem("psd-uploader", v); else v = localStorage.getItem("psd-uploader") || ""; } catch (e) {}
+    return v || null;
+  }
+  let LINK = null, linkShown = null, linkShownDel = false, openLinkOnRender = false;
+  function linkCounts(c) { return `새 ${n0(c.new)} · 고친 ${n0(c.changed)} · 엑셀에 없는 ${n0(c.missing)}`; }
+
+  function linkStatusHtml(st) {
+    const s = st.summary, c = s && s.counts;
+    const pre = { applied: "반영한 변경: ", dismissed: "반영 안 한 변경: ", undone: "되돌린 변경: " }[st.state] || "";
+    const what = st.state === "error" && s ? esc(s.message)
+      : c ? (st.state === "same" ? `그대로 ${n0(c.same)}건` : `${pre}${linkCounts(c)}`) : "";
+    const times = [
+      st.checked_at && `마지막 확인 ${fmtTime(st.checked_at)}`,
+      st.modified && `파일 수정 ${fmtTime(st.modified)}`,
+      st.seen_at && `바뀐 걸 본 때 ${fmtTime(st.seen_at)}`,
+      st.applied_at && `마지막 반영 ${fmtTime(st.applied_at)}${st.applied_batch_id ? ` (업로드 이력 ${st.applied_batch_id}번)` : ""}`,
+    ].filter(Boolean).join(" · ");
+    const issueBad = st.issue && st.issue !== "saving" && (st.issue !== "locked" || st.alert === "locked");
+    return `<p style="margin:0;word-break:break-all"><b>${esc(st.path)}</b></p>
+      <div class="filters"><span class="pill ${LINK_PILL[st.state] || "s-check"}">${esc(st.state_label || st.state)}</span><span class="small">${what}</span></div>
+      <p class="small muted" style="margin:0">${times || "아직 확인하지 않았습니다"}${st.set_at ? ` · 연동 지정 ${fmtTime(st.set_at)}${st.set_by ? ` (${esc(st.set_by)})` : ""}` : ""}</p>
+      ${st.issue ? `<p class="small ${issueBad ? "err" : "muted"}" style="margin:0">${esc(st.issue_label)}: ${esc(st.issue_message || "")}${st.issue_since ? ` (${fmtTime(st.issue_since)}부터)` : ""}</p>` : ""}
+      ${st.excel_open ? `<p class="small muted" style="margin:0">Excel에서 열려 있습니다 — 닫지 않아도 저장할 때마다 확인합니다.</p>` : ""}
+      ${!st.watch.running ? `<p class="small err" style="margin:0">서버의 파일 감시가 꺼져 있습니다${st.watch.error ? `(${esc(st.watch.error)})` : ""} — "지금 확인"을 눌러야 봅니다.</p>` : st.watch.error ? `<p class="small err" style="margin:0">감시 오류: ${esc(st.watch.error)}</p>` : ""}
+      <div class="filters">
+        <button class="btn" type="button" id="lk-open">${st.state === "error" ? "틀린 줄 보기" : "비교 결과 보기"}</button>
+        <button class="btn ghost" type="button" id="lk-check">지금 확인</button>
+        <button class="btn ghost" type="button" id="lk-change">다른 파일로 바꾸기</button>
+        <button class="linkbtn" type="button" id="lk-unset">연동 끊기</button></div>`;
+  }
+  function linkEventsHtml(st) {
+    return st.events.length ? `<details class="more"><summary class="small">감지 기록 (최근 ${st.events.length}건)</summary><div class="scroll"><table><tr><th>때</th><th>무엇</th><th>내용</th></tr>${st.events.map(e => `<tr><td class="num">${fmtTime(e.at)}</td><td>${esc(e.label)}</td><td class="small" style="word-break:break-all">${esc(e.message)}</td></tr>`).join("")}</table></div></details>` : "";
+  }
+  function linkPanel(st) {
+    return `<div class="panel form" id="lkpanel" data-on="${st.path ? 1 : 0}">
+      <div class="headrow"><h2>연동 파일</h2><span class="small muted">서버가 ${Math.round(st.watch.interval)}초마다 파일을 봅니다 · 반영은 사람이 확인한 뒤에만</span></div>
+      ${st.path ? `<div id="lkstat">${linkStatusHtml(st)}</div>` : `<p class="small muted">현장에서 쓰는 장애 이력 엑셀 파일 하나를 정해 두면, 파일이 바뀔 때마다 서버가 비교해서 화면 위에 알립니다. 비교 결과를 보고 "반영하기"를 눌러야 저장됩니다. 서버 PC에서 보이는 전체 경로(공유 폴더 가능)를 적으세요.</p>`}
+      <form class="filters" id="lk-form" ${st.path ? "hidden" : ""} novalidate>
+        <input type="text" id="lk-path" maxlength="400" placeholder="예: \\\\서버\\공유폴더\\장애이력.xlsx 또는 D:\\정비\\장애이력.xlsx" style="flex:1;min-width:260px" aria-label="연동할 엑셀 파일 경로" autocomplete="off">
+        <button class="btn" type="submit">비교해 보기</button>${st.path ? `<button class="linkbtn" type="button" id="lk-form-cancel">취소</button>` : ""}</form>
+      <p class="err" id="lk-err" hidden></p>
+      ${st.roots.length ? `<p class="small muted" style="margin:0">연동할 수 있는 폴더: ${st.roots.map(esc).join(", ")}</p>` : ""}
+      <div id="lkev">${linkEventsHtml(st)}</div>
+    </div>`;
+  }
+  function linkErrorPanel(r, head, extra) {
+    const e = r.error;
+    return `<div class="panel result" style="border-color:var(--red)">
+      <div class="resulthead"><div><h2>틀린 줄이 있어 반영할 수 없습니다</h2>
+        <p class="small muted" style="margin:0">한 줄이라도 틀리면 아무것도 저장하지 않습니다. 엑셀에서 고쳐 저장하면 서버가 다시 비교합니다.</p></div>
+        <div class="filters">${extra || ""}<button class="linkbtn" id="lke-close" type="button">닫기</button></div></div>
+      ${head || ""}
+      <p class="err" style="margin:0">${esc(e.message)}</p>
+      ${e.errors.length ? `<ul class="small" style="margin:0;padding-left:20px">${e.errors.map(x => `<li>${esc(x)}</li>`).join("")}</ul>${moreNote(e.errors.length, e.error_count)}` : ""}
+    </div>`;
+  }
+
+  function setupLink(box) {
+    const form = box.querySelector("#lk-form"), err = box.querySelector("#lk-err");
+    form.addEventListener("submit", async e => {
+      e.preventDefault();
+      const path = box.querySelector("#lk-path").value.trim();
+      if (!path) { err.textContent = "엑셀 파일 경로를 적으세요."; err.hidden = false; return; }
+      err.hidden = true;
+      const btn = form.querySelector("button[type=submit]");
+      btn.disabled = true; btn.textContent = "비교하는 중...";
+      try { await previewLink(path); } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+      btn.disabled = false; btn.textContent = "비교해 보기";
+    });
+    const cancel = box.querySelector("#lk-form-cancel");
+    if (cancel) cancel.addEventListener("click", () => {
+      form.hidden = true; err.hidden = true;
+      box.querySelector("#lkstat").hidden = false;
+      app.querySelector("#lkcmp").innerHTML = "";
+    });
+    bindLinkStatus(box);
+    if (openLinkOnRender) { openLinkOnRender = false; openLinkCompare(false); }
+  }
+  function bindLinkStatus(box) {
+    const q = s => box.querySelector(s);
+    if (!q("#lk-open")) return;
+    q("#lk-open").addEventListener("click", () => openLinkCompare(false));
+    q("#lk-check").addEventListener("click", async ev => {
+      const b = ev.currentTarget;
+      b.disabled = true; b.textContent = "확인하는 중...";
+      try {
+        const st = await apiJson("/api/link/check", "POST");
+        b.disabled = false;
+        updateLink(st);
+        toast(st.issue ? `${st.issue_label}: ${st.issue_message}` : `확인했습니다 — ${st.state_label}`);
+      } catch (ex) { toast(ex.message); b.disabled = false; b.textContent = "지금 확인"; }
+    });
+    q("#lk-change").addEventListener("click", () => { q("#lk-form").hidden = false; q("#lkstat").hidden = true; q("#lk-path").focus(); });
+    q("#lk-unset").addEventListener("click", async () => {
+      if (!confirm("연동을 끊을까요?\n파일 감시를 멈춥니다. 이미 반영한 기록과 업로드 이력은 그대로입니다.")) return;
+      try {
+        const st = await apiJson("/api/link", "DELETE");
+        app.querySelector("#lkcmp").innerHTML = ""; linkShown = null;
+        updateLink(st, true);
+        toast("연동을 끊었습니다");
+      } catch (ex) { toast(ex.message); }
+    });
+  }
+
+  // 머리 영역 알림 + 교체 기록 탭의 연동 칸을 새 상태로
+  const linkBar = document.getElementById("linkbar");
+  function linkBarParts(st) {
+    const s = st.summary || {}, c = s.counts;
+    const btn = label => `<button class="lb-btn" type="button" data-lb>${label}</button>`;
+    switch (st.alert) {
+      case "pending": return [`<b>연동 파일이 바뀌었습니다</b> — ${c ? linkCounts(c) : ""}`, btn("확인하고 반영")];
+      case "error": return [`<b>연동 파일에 틀린 줄이 있어 반영할 수 없습니다</b>${s.error_count ? ` — ${n0(s.error_count)}건` : ""}`, btn("틀린 줄 보기")];
+      case "missing": return [`<b>연동 파일을 찾을 수 없습니다</b> — ${esc(st.file_name)}`, btn("연동 상태 보기")];
+      case "failed": return [`<b>연동 파일을 확인하지 못했습니다</b> — ${esc(st.issue_message || "")}`, btn("연동 상태 보기")];
+      case "locked": return [`<b>연동 파일이 잠겨 읽지 못하고 있습니다</b> — ${esc(st.file_name)}`, btn("연동 상태 보기")];
+    }
+    return null;
+  }
+  function showLinkBar(st) {
+    const parts = st && linkBarParts(st);
+    linkBar.hidden = !parts;
+    if (!parts) { linkBar.dataset.html = ""; return; }
+    const html = `<div class="linkbar-inner"><span>${parts[0]}</span>${parts[1]}</div>`;
+    linkBar.classList.toggle("bad", st.alert !== "pending");
+    if (linkBar.dataset.html === html) return;
+    linkBar.innerHTML = html; linkBar.dataset.html = html;
+    const wantsCompare = st.alert === "pending" || st.alert === "error";
+    linkBar.querySelector("[data-lb]").addEventListener("click", () => {
+      const box = app.querySelector("#lkbox");
+      if (view.name === "records" && box) { if (wantsCompare) openLinkCompare(false); else box.scrollIntoView({ behavior: "smooth", block: "start" }); }
+      else { openLinkOnRender = wantsCompare; go({ name: "records" }); }
+    });
+  }
+  function updateLink(st, full) {
+    LINK = st;
+    showLinkBar(st);
+    const box = app.querySelector("#lkbox");
+    if (!box) return;
+    const panel = box.querySelector("#lkpanel");
+    if (full || !panel || panel.dataset.on !== (st.path ? "1" : "0")) { box.innerHTML = linkPanel(st); setupLink(box); return; }
+    const stat = box.querySelector("#lkstat");
+    if (stat && !stat.querySelector("button:disabled")) { stat.innerHTML = linkStatusHtml(st); bindLinkStatus(box); }
+    const ev = box.querySelector("#lkev"), opened = !!ev.querySelector("details[open]");
+    ev.innerHTML = linkEventsHtml(st);
+    if (opened && ev.querySelector("details")) ev.querySelector("details").open = true;
+    // 비교 결과를 보는 사이 파일이 또 바뀌었으면 최신 내용으로 다시 비교한다(반영은 본 내용만 된다 — 서버도 hash로 막는다)
+    const cmp = app.querySelector("#lkcmp");
+    if (linkShown && st.seen_hash && st.seen_hash !== linkShown && cmp && cmp.firstElementChild) openLinkCompare(linkShownDel, "연동 파일이 또 바뀌어 최신 내용으로 다시 비교했습니다.");
+  }
+  async function pollLink() {
+    if (pollLink.busy) return;
+    pollLink.busy = true;
+    try { updateLink(await api("/api/link")); } catch (e) { /* 서버가 잠깐 안 되면 다음에 다시 */ }
+    pollLink.busy = false;
+  }
+
+  // 연동 파일의 지금 내용을 비교해 보여 주고, 사람이 "반영하기"를 누르면 그 내용(hash)만 넣는다
+  async function openLinkCompare(del = false, note = "") {
+    const box = app.querySelector("#lkcmp");
+    if (!box) return;
+    const other = app.querySelector("#cmp");
+    if (other) other.innerHTML = "";
+    const seq = openLinkCompare.seq = (openLinkCompare.seq || 0) + 1;
+    linkShown = null;
+    box.innerHTML = `<div class="panel"><p class="muted" style="margin:0">연동 파일을 비교하는 중… 교체주기가 어떻게 바뀌는지까지 계산해 30초쯤 걸릴 수 있습니다.</p></div>`;
+    box.scrollIntoView({ behavior: "smooth", block: "start" });
+    let r;
+    try { r = await apiJson("/api/link/compare", "POST", { delete_missing: del }); }
+    catch (ex) { if (seq === openLinkCompare.seq) box.innerHTML = `<div class="panel"><p class="err" style="margin:0">${esc(ex.message)}</p></div>`; return; }
+    if (seq !== openLinkCompare.seq) return;
+    linkShown = r.hash; linkShownDel = del;
+    const head = `<p class="small" style="margin:0;word-break:break-all"><span class="pill s-info">연동 파일</span> ${esc(r.path)} · 파일 수정 ${fmtTime(r.modified)}</p>${note ? `<p class="small err" style="margin:0">${esc(note)}</p>` : ""}`;
+    pollLink();
+    if (r.error) {
+      box.innerHTML = linkErrorPanel(r, head);
+      box.querySelector("#lke-close").addEventListener("click", () => { box.innerHTML = ""; linkShown = null; });
+      return;
+    }
+    showCompare(box, r.result, {
+      head,
+      onClose: () => { linkShown = null; },
+      recompare: d => openLinkCompare(d),
+      dismiss: r.state === "pending" ? async () => {
+        await apiJson("/api/link/dismiss", "POST", { hash: r.hash });
+        box.innerHTML = ""; linkShown = null;
+        toast("이번 변경은 반영하지 않습니다. 파일이 또 바뀌면 다시 알립니다.");
+        pollLink();
+      } : null,
+      apply: async d => {
+        let res;
+        try { res = await apiJson("/api/link/apply", "POST", { hash: r.hash, delete_missing: d, uploaded_by: whoName() }); }
+        catch (ex) { if (ex.status === 409) { openLinkCompare(d, ex.message); return; } throw ex; }
+        linkShown = null;
+        if (!res.batch_id) { toast("바뀐 기록이 없습니다."); box.innerHTML = ""; pollLink(); return; }
+        lastResult = { kind: "upload", ...res };
+        go({ name: "records" });
+        pollLink();
+      },
+    });
+  }
+
+  // 연동할(바꿀) 파일을 먼저 비교해 보여 주고, 확인하면 연동 파일로 정한다(기록은 아직 안 넣음)
+  async function previewLink(path) {
+    const box = app.querySelector("#lkcmp"), other = app.querySelector("#cmp");
+    if (other) other.innerHTML = "";
+    linkShown = null;
+    const r = await apiJson("/api/link/preview", "POST", { path });
+    const cur = LINK && LINK.path;
+    const label = cur ? "이 파일로 바꾸기" : "이 파일로 연동하기";
+    const head = `<p class="small" style="margin:0;word-break:break-all"><b>${esc(r.path)}</b> · 파일 수정 ${fmtTime(r.modified)}${r.excel_open ? " · Excel에서 열려 있음" : ""}</p>
+      ${cur && cur !== r.path ? `<p class="small" style="margin:0;word-break:break-all">지금 연동 파일 <span class="muted">${esc(cur)}</span> 대신 이 파일을 봅니다.</p>` : ""}
+      <p class="small muted" style="margin:0">${cur ? "바꿔도" : "연동해도"} 기록은 아직 들어가지 않습니다. 그 뒤 "비교 결과 보기"에서 확인하고 "반영하기"를 눌러야 들어갑니다.</p>`;
+    const doSet = async () => {
+      await apiJson("/api/link", "POST", { path: r.path, hash: r.hash, set_by: whoName() });
+      box.innerHTML = "";
+      toast(cur ? "연동 파일을 바꿨습니다" : "연동 파일을 정했습니다");
+      updateLink(await api("/api/link"), true);
+    };
+    if (r.error) {
+      box.innerHTML = linkErrorPanel(r, head, `<button class="btn ghost" id="lke-set" type="button">그래도 ${label}</button>`);
+      box.querySelector("#lke-close").addEventListener("click", () => { box.innerHTML = ""; });
+      const b = box.querySelector("#lke-set");
+      b.addEventListener("click", async () => { b.disabled = true; try { await doSet(); } catch (ex) { toast(ex.message); b.disabled = false; } });
+    } else {
+      showCompare(box, r.result, { title: cur ? "바꿀 파일 비교 결과" : "연동할 파일 비교 결과", head, applyLabel: label, busyLabel: "정하는 중...",
+        alwaysApply: true, noDelete: true, apply: doSet });
+    }
+    box.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   // ---------- 역 ----------
@@ -2133,5 +2412,8 @@ details.more[open] > summary { margin-bottom: 10px; }
   view = decodeHash();
   if (!location.hash) { suppressHash = true; location.hash = encodeView(view); }
   render();
+  pollLink();  // 연동 파일 알림: 10초마다, 탭으로 돌아올 때도
+  setInterval(() => { if (!document.hidden) pollLink(); }, 10000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollLink(); });
 })();
 </script>
