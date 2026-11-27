@@ -81,3 +81,25 @@ def test_challenger_replaces_champion_only_if_not_worse_on_new_period():
 def test_no_new_period_keeps_champion():
     ok, why = decide(S(0.70), S(0.57), None, has_champion=True)
     assert not ok and "새 기간" in why
+
+
+def test_weather_features_follow_station_and_respect_manual_off():
+    """날씨 칸(2026-11-27): 역마다 그 AWS 지점의 평소 묶음 점수, 담당자가 끈 (소분류, 묶음)은 평소 값(1, 0)."""
+    from datetime import date
+
+    from psd.risk import FEATURE_NAMES, FeatureBuilder, PartHistory, compatible
+
+    parts = [PartHistory(1, 1, 10, "MOTOR", [], date(2022, 1, 1)), PartHistory(2, 1, 11, "DCU", [], date(2022, 1, 1))]
+    fb = FeatureBuilder(parts, {}, aws_of={1: "937"}, weather_off={("DCU", "humid")})
+    t = date(2024, 9, 1)
+    a = dict(zip(FEATURE_NAMES, fb.part_row(parts[0], t)))
+    b = dict(zip(FEATURE_NAMES, fb.part_row(parts[1], t)))
+    assert len(fb.part_row(parts[0], t)) == len(FEATURE_NAMES)
+    assert a["stn_humid"] > 1.0  # 해운대는 습한 지점
+    assert b["stn_humid"] == 1.0 and b["humid_90d"] == 0.0  # 끈 칸은 평소 값
+    assert b["stn_heat"] == a["stn_heat"]  # 다른 묶음은 그대로
+
+    class Old:
+        n_features_in_ = 12
+
+    assert not compatible(Old())

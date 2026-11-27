@@ -51,8 +51,26 @@ FEATURES = [
     ("door_fail_36m", "같은 문 최근 3년 고장"),
     ("stn_rate_12m", "이 역 같은 부품 최근 1년 고장률"),
     ("month", "기준 달"),
+    # 2026-11-27 날씨 칸(날씨_역분석_엑셀연동_설계.md 3장): 그 역의 평소 날씨 묶음 점수와 지난 90일 평년 대비(psd/weather.py).
+    # 앞으로 6개월의 실제 날씨는 예측 때 모르므로 넣지 않는다(넣으면 점수가 부풀려진다). 담당자가 끈 (소분류, 묶음)은 평소 값으로 고정
+    ("stn_humid", "이 역 평소 습기"),
+    ("stn_heat", "이 역 평소 열"),
+    ("stn_cold", "이 역 평소 추위"),
+    ("stn_wind", "이 역 평소 바람"),
+    ("humid_90d", "지난 90일 습기(평년 대비)"),
+    ("heat_90d", "지난 90일 열(평년 대비)"),
+    ("cold_90d", "지난 90일 추위(평년 대비)"),
+    ("wind_90d", "지난 90일 바람(평년 대비)"),
 ]
 FEATURE_NAMES = [f for f, _ in FEATURES]
+WEATHER_BUNDLE_KEYS = ("humid", "heat", "cold", "wind")
+WEATHER_WINDOW = 90  # 지난 며칠의 평년 대비
+
+
+def compatible(model) -> bool:
+    """모델이 지금 특징 목록으로 학습됐는지(날씨 칸을 넣기 전 모델은 칸 수가 달라 예측에 못 쓴다)."""
+    n = getattr(model, "n_features_in_", None)
+    return n is None or n == len(FEATURE_NAMES)
 
 
 @dataclass
@@ -84,9 +102,13 @@ def months(start: date, end: date) -> list[date]:
 class FeatureBuilder:
     """기록에서 특징을 만든다. load()로 DB를 한 번 읽고, rows(t)로 t 시점 특징을 낸다."""
 
-    def __init__(self, parts: list[PartHistory], formula: dict[tuple[int, str], float]):
+    def __init__(self, parts: list[PartHistory], formula: dict[tuple[int, str], float], aws_of: dict[int, str] | None = None,
+                 weather_off: set[tuple[str, str]] | None = None):
+        """aws_of: 역 번호 → AWS 지점(없으면 실제 역 목록, 가상 노선 번호는 1000으로 나눈 나머지 역). weather_off: 담당자가 끈 (소분류, 묶음)."""
         self.parts = parts
         self.formula = formula
+        self.weather_off = weather_off or set()
+        self._init_weather(aws_of)
         self.door_fails: dict[int, list[date]] = {}
         self.stn_fails: dict[tuple[int, str], list[date]] = {}
         self.stn_count: dict[tuple[int, str], int] = {}
@@ -99,6 +121,46 @@ class FeatureBuilder:
                     self.stn_fails.setdefault((p.station_id, p.code), []).append(d)
         for v in (*self.door_fails.values(), *self.stn_fails.values()):
             v.sort()
+
+    def _init_weather(self, aws_of: dict[int, str] | None) -> None:
+        """지점 × 날의 묶음 점수 평균(역 평소 날씨)과 평년 대비 누적합(지난 90일 평균을 빠르게)."""
+        from psd.cycle import STATIONS
+
+        by_id = {st.id: st.aws_stn for st in STATIONS}
+        aws_of = dict(aws_of or {})
+        for p in self.parts:
+            if p.station_id not in aws_of:
+                aws_of[p.station_id] = by_id.get(p.station_id, by_id.get(p.station_id % 1000, ""))
+        codes = sorted({a for a in aws_of.values() if a})
+        self.aws_idx = {sid: (codes.index(a) if a in codes else -1) for sid, a in aws_of.items()}
+        starts = [p.start for p in self.parts] or [date.today()]
+        self.w_day0 = min(starts) - timedelta(days=WEATHER_WINDOW + 30)
+        n = (max(date.today(), max(starts)) + timedelta(days=400) - self.w_day0).days
+        self.stn_mean, self.anom_cum = {}, {}
+        try:
+            from psd.weather import station_day_matrix
+
+            mat = station_day_matrix(codes, self.w_day0, n, [*WEATHER_BUNDLE_KEYS, *(b + "_anom" for b in WEATHER_BUNDLE_KEYS)]) if codes else {}
+        except Exception:  # 날씨 파일이 없으면 평소 값으로
+            mat = {}
+        for b in WEATHER_BUNDLE_KEYS:
+            if mat:
+                self.stn_mean[b] = mat[b].mean(axis=1)
+                self.anom_cum[b] = np.concatenate([np.zeros((len(codes), 1)), np.cumsum(mat[b + "_anom"], axis=1)], axis=1)
+
+    def weather_row(self, p: PartHistory, t: date) -> list[float]:
+        a = self.aws_idx.get(p.station_id, -1)
+        i = (t - self.w_day0).days
+        stn, recent = [], []
+        for b in WEATHER_BUNDLE_KEYS:
+            if a < 0 or b not in self.stn_mean or (p.code, b) in self.weather_off or not (WEATHER_WINDOW <= i < self.anom_cum[b].shape[1]):
+                stn.append(1.0)
+                recent.append(0.0)
+                continue
+            c = self.anom_cum[b][a]
+            stn.append(float(self.stn_mean[b][a]))
+            recent.append(float((c[i] - c[i - WEATHER_WINDOW]) / WEATHER_WINDOW))
+        return stn + recent
 
     @staticmethod
     def load(session) -> "FeatureBuilder":
@@ -115,7 +177,9 @@ class FeatureBuilder:
             ev.setdefault((sid, door, code), []).append((day, reason, action))
         parts = [PartHistory(pid, sid, door, code, sorted(ev.get((sid, door, code), [])), PSD_START[sid])
                  for pid, sid, door, code in session.execute(select(Part.id, Part.station_id, Part.door_id, Part.part_type_code).order_by(Part.id))]
-        return FeatureBuilder(parts, formula)
+        from psd.calibrate import weather_overrides
+
+        return FeatureBuilder(parts, formula, weather_off=weather_overrides(session))
 
     @staticmethod
     def _count(dates: list[date], lo: date, hi: date) -> int:
@@ -158,6 +222,7 @@ class FeatureBuilder:
             self._count(door, t - timedelta(days=3 * 365), t),
             self._count(stn, t - timedelta(days=365), t) / self.stn_count[(p.station_id, p.code)],
             t.month,
+            *self.weather_row(p, t),
         ]
 
     def label(self, p: PartHistory, t: date) -> int:
@@ -335,7 +400,10 @@ def retrain(session, trigger: str, force: bool = False) -> dict:
     champion, note = None, ""
     if champ_row is not None:
         m = load_model(champ_row.id)
-        if m is not None and champ_row.data_end <= fb.data_end():
+        if m is not None and not compatible(m):
+            # 특징이 바뀐 뒤(2026-11-27 날씨 칸 추가) 처음 학습 — 칸 수가 달라 지금 모델로 맞혀 볼 수 없다. 겨루지 않고 새로 세운다
+            note = f"v{champ_row.id}는 날씨 칸을 넣기 전 모델이라 겨루지 않고 새로 세움. "
+        elif m is not None and champ_row.data_end <= fb.data_end():
             champion = {"model": m, "last_train_snapshot": champ_row.last_train_snapshot}
         elif m is not None:
             # 업로드를 되돌려 지금 모델이 이제 없는 기록까지 보고 학습한 상태 — 겨룰 상대로 쓰지 않고 새로 세운다
@@ -373,7 +441,7 @@ def predict_all(session, today: date | None = None) -> dict[int, dict] | None:
 
     row = active_row(session)
     model = load_model(row.id) if row is not None else None
-    if model is None:
+    if model is None or not compatible(model):  # 날씨 칸을 넣기 전 모델이면 다시 학습할 때까지 위험도를 내지 않는다
         return None
     today = today or date.today()
     key = (data_version(session, today), row.id)

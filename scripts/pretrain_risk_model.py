@@ -67,7 +67,8 @@ def line_dataset(args: tuple) -> tuple[np.ndarray, np.ndarray, np.ndarray, int, 
             pid += 1
             parts.append(PartHistory(pid, sid, door, ps.code, ev, PSD_START[u.station.id]))
     formula = {(r * STATION_STRIDE + sid, code): v for (sid, code), v in inputs.base.items()}
-    fb = FeatureBuilder(parts, formula)
+    aws_of = {r * STATION_STRIDE + s.id: s.aws_stn for s in inputs.stations}  # 날씨 칸(2026-11-27): 벌마다 띄운 역 번호 → 실제 지점
+    fb = FeatureBuilder(parts, formula, aws_of=aws_of)
     snaps = label_complete_snapshots(today)[::step]
     X, y, t = fb.dataset(snaps)
     return X.astype(np.float32), y.astype(np.int8), t, len(parts), fails
