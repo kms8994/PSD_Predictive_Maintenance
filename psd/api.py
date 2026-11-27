@@ -484,6 +484,91 @@ def _repeat_dict(r: DoorRepeat) -> dict:
 REPEAT_RULE = {"window_years": REPEAT_WINDOW_YEARS, "min_failures": REPEAT_MIN_FAILURES, "p_max": REPEAT_P_MAX}
 
 
+# ---------- 역별·시기별 고장 분석 (psd/analysis.py, 날씨_역분석_엑셀연동_설계.md 1·2장, 2026-11-27) ----------
+
+
+def _analysis_args(panel, group, code, months, season, daytype, holiday):
+    from psd import analysis as A
+
+    ms = sorted({int(m) for m in (months or "").split(",") if m.strip().isdigit() and 1 <= int(m) <= 12}) or None
+    cm = A.code_mask(panel, group or None, code or None)
+    if not cm.any():
+        raise HTTPException(400, "고른 장애부위가 없습니다")
+    dm = A.day_mask(panel, ms, season or None, daytype or None, holiday or None)
+    if not dm.any():
+        raise HTTPException(400, "거른 조건에 맞는 날이 없습니다")
+    key = (group or "", code or "", tuple(ms or ()), season or "", daytype or "", holiday or "")
+    return cm, dm, key
+
+
+@app.get("/api/analysis/meta")
+def analysis_meta(db: Session = Depends(get_db)):
+    """분석 화면 고르기 목록: 대분류, 날씨 조건, 기간, 공휴일 파일, 날씨 자료로 채운 비율."""
+    from psd import analysis as A
+
+    panel = A.get_panel(db)
+    groups = []
+    for p in PART_TYPES:
+        g = A.group_of(p)
+        if g not in groups:
+            groups.append(g)
+    return A.clean({
+        "from": panel.days[0], "to": panel.days[-1], "groups": groups,
+        "codes": [{"code": p["code"], "name": p["name"], "group": A.group_of(p)} for p in PART_TYPES],
+        "seasons": list(A.SEASONS), "conditions": [{"key": k, "label": v[0]} for k, v in A.CONDITIONS.items()],
+        "holidays": len(panel.holidays), "holiday_to": max(panel.holidays) if panel.holidays else None,
+        "weather_filled_share": float(panel.filled.mean()) if panel.filled is not None else None,
+        "env_filled": any(v for vals in environment().values.values() for v in vals.values()),
+    })
+
+
+@app.get("/api/analysis/stations")
+def analysis_stations(group: str | None = None, code: str | None = None, months: str | None = None, season: str | None = None,
+                      daytype: str | None = None, holiday: str | None = None, db: Session = Depends(get_db)):
+    """질문 1: 어느 역이 가장 고장이 잦은가(기대 대비, 노선 평균 쪽으로 당김) + 역 날씨·환경으로 설명."""
+    from psd import analysis as A
+
+    panel = A.get_panel(db)
+    cm, dm, key = _analysis_args(panel, group, code, months, season, daytype, holiday)
+    return A.clean(A.cached("stations", key, lambda: A.station_ranking(panel, cm, dm)))
+
+
+@app.get("/api/analysis/stations/{station_id}")
+def analysis_station(station_id: int, group: str | None = None, code: str | None = None, months: str | None = None,
+                     season: str | None = None, daytype: str | None = None, holiday: str | None = None, db: Session = Depends(get_db)):
+    """한 역: 잦은 장애부위·문(질문 1)과 언제 잦은가(질문 2)."""
+    from psd import analysis as A
+
+    panel = A.get_panel(db)
+    if station_id not in panel.station_ids:
+        raise HTTPException(404, "운영 중인 역이 아닙니다")
+    cm, dm, key = _analysis_args(panel, group, code, months, season, daytype, holiday)
+    return A.clean(A.cached("station", (station_id, *key), lambda: {
+        "detail": A.station_detail(panel, station_id, cm, dm), "when": A.when(panel, cm, dm, station_id)}))
+
+
+@app.get("/api/analysis/when")
+def analysis_when(group: str | None = None, code: str | None = None, months: str | None = None, season: str | None = None,
+                  daytype: str | None = None, holiday: str | None = None, db: Session = Depends(get_db)):
+    """질문 2(노선 전체): 달·계절·요일, 날씨 조건, 평년보다 습한 날 등, 공휴일, 역 × 달 히트맵, 이 역만 그 계절에 유독."""
+    from psd import analysis as A
+
+    panel = A.get_panel(db)
+    cm, dm, key = _analysis_args(panel, group, code, months, season, daytype, holiday)
+    return A.clean(A.cached("when", key, lambda: A.when(panel, cm, dm)))
+
+
+@app.get("/api/analysis/parts")
+def analysis_parts(months: str | None = None, season: str | None = None, daytype: str | None = None, holiday: str | None = None,
+                   db: Session = Depends(get_db)):
+    """장애부위마다 날씨 영향(평년보다 습한 날 등 · 날씨 조건 뒤 일주일 · 주말). 고장 20건 미만은 재지 않는다. 처음엔 몇 초 걸린다."""
+    from psd import analysis as A
+
+    panel = A.get_panel(db)
+    _cm, dm, key = _analysis_args(panel, None, None, months, season, daytype, holiday)
+    return A.clean({"parts": A.cached("parts", key, lambda: A.part_weather_table(panel, dm))})
+
+
 @app.get("/api/repeat-doors")
 def repeat_doors(db: Session = Depends(get_db)):
     """같은 역 다른 문보다 유난히 고장이 잦은 문(반복 고장 의심). 우연일 확률이 낮은 순."""

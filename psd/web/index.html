@@ -106,6 +106,12 @@ a { color: var(--accent); }
 .tab { appearance: none; border: 0; background: none; font: inherit; font-size: 0.93rem; font-weight: 700; color: #fff; opacity: .8; padding: 7px 14px; border-radius: 3px; cursor: pointer; white-space: nowrap; }
 .tab:hover { opacity: 1; }
 .tab[aria-selected="true"] { background: #fff; color: var(--hdr); opacity: 1; }
+/* 탭이 6개가 되며(고장 분석, 2026-11-27) 800~1000px 폭에서 밝기 스위치가 다음 줄로 밀렸다 — 그 폭에선 조금 줄인다 */
+@media (max-width: 1040px) and (min-width: 641px) {
+  .top-inner { padding: 12px 20px; column-gap: 10px; }
+  .tab { padding: 6px 9px; font-size: 0.88rem; }
+  .tabs { gap: 2px; }
+}
 @media (max-width: 640px) {
   .top-inner { padding: 10px 16px; column-gap: 10px; }
   .tabs { margin-left: 0; width: 100%; overflow-x: auto; order: 1; }
@@ -420,6 +426,16 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
 .doorsvg .chip text, .stsvg .chip text { fill: var(--ink); font-size: 12px; font-weight: 600; font-family: var(--font-body); }
 .doorsvg .chip:hover rect, .doorsvg .chip:focus-visible rect, .stsvg .chip:hover rect, .stsvg .chip:focus-visible rect { stroke-width: 3; }
 .doorsvg .chip:focus, .stsvg .chip:focus { outline: none; }
+/* 고장 분석(2026-11-27) */
+.an-filters select { max-width: 180px; }
+.anh { margin: 14px 0 6px; font-size: 0.95rem; }
+.an2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.anbars { width: 100%; height: auto; }
+.anbars .ax { fill: var(--muted); font-size: 10px; font-family: var(--font-body); }
+.antable td, .antable th { white-space: nowrap; }
+.antable tr[aria-selected="true"] { background: var(--accent-soft); }
+.rbar { display: block; }
+.heat .hcell { min-width: 44px; font-size: 0.8rem; }
 /* 장애부위별 상태 → 부품 전체 표(2026-11-27) */
 .xwrap { max-height: 520px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
 .xtable { min-width: 640px; }
@@ -517,6 +533,7 @@ details.more[open] > summary { margin-bottom: 10px; }
       <button class="tab" id="tab-route" role="tab" aria-selected="false">역</button>
       <button class="tab" id="tab-plan" role="tab" aria-selected="false">교체 계획</button>
       <button class="tab" id="tab-records" role="tab" aria-selected="false">교체 기록</button>
+      <button class="tab" id="tab-analysis" role="tab" aria-selected="false">고장 분석</button>
       <button class="tab" id="tab-ai" role="tab" aria-selected="false">AI 관리</button>
     </nav>
     <button class="themebtn" id="theme-btn" type="button" role="switch" aria-checked="false"><span class="theme-label">WHITE MODE</span><span class="sw" aria-hidden="true"><span class="knob"></span></span></button>
@@ -679,6 +696,11 @@ details.more[open] > summary { margin-bottom: 10px; }
         if (v.raction) q.set("action", v.raction);
         if (v.rpage > 1) q.set("page", v.rpage);
         break;
+      case "analysis":
+        path = "/analysis";
+        for (const k of ["group", "code", "months", "season", "daytype", "holiday"]) if (v[k]) q.set(k, v[k]);
+        if (v.ast) q.set("st", v.ast);
+        break;
       case "model":
         path = "/ai";
         if (v.ast) q.set("st", v.ast);
@@ -741,6 +763,12 @@ details.more[open] > summary { margin-bottom: 10px; }
           if (q.get("page")) v.rpage = Number(q.get("page"));
           return v;
         }
+        case "analysis": {
+          const v = { name: "analysis" };
+          for (const k of ["group", "code", "months", "season", "daytype", "holiday"]) if (q.get(k)) v[k] = q.get(k);
+          if (q.get("st")) v.ast = Number(q.get("st"));
+          return v;
+        }
         case "ai":
         case "model": {  // 예전 주소(#/model)도 그대로 열리게
           const v = { name: "model" };
@@ -797,6 +825,7 @@ details.more[open] > summary { margin-bottom: 10px; }
   document.getElementById("tab-route").onclick = () => go({ name: "route" });
   document.getElementById("tab-plan").onclick = () => go({ name: "plan" });
   document.getElementById("tab-records").onclick = () => go({ name: "records" });
+  document.getElementById("tab-analysis").onclick = () => go({ name: "analysis" });
   document.getElementById("tab-ai").onclick = () => go({ name: "model" });
   document.getElementById("nav-back").onclick = () => history.back();
   document.getElementById("nav-fwd").onclick = () => history.forward();
@@ -820,13 +849,13 @@ details.more[open] > summary { margin-bottom: 10px; }
   systemDark.addEventListener("change", showTheme);
   showTheme();
 
-  const TAB_OF = { home: "home", work: "home", route: "route", station: "route", part: "route", plan: "plan", records: "records", model: "ai" };
+  const TAB_OF = { home: "home", work: "home", route: "route", station: "route", part: "route", plan: "plan", records: "records", analysis: "analysis", model: "ai" };
   // 화면을 빨리 바꾸면 먼저 시작한 느린 화면이 나중에 끝나 새 화면을 덮었다. 가장 최근 것만 그린다
   let renderSeq = 0;
   async function render() {
     const my = ++renderSeq;
     const tab = TAB_OF[view.name];
-    ["home", "route", "plan", "records", "ai"].forEach(t => document.getElementById("tab-" + t).setAttribute("aria-selected", String(t === tab)));
+    ["home", "route", "plan", "records", "analysis", "ai"].forEach(t => document.getElementById("tab-" + t).setAttribute("aria-selected", String(t === tab)));
     tipEl.hidden = true;
     // 같은 화면을 다시 그릴 때(keep: 방향 바꾸기·거르기·쪽 넘기기 등)는 "불러오는 중…"으로 비우지 않고, 다 그린 뒤
     // 스크롤 위치(창·역 목록·문 줄 가로 스크롤)를 되돌린다 — 비웠다 채우면 화면이 위아래로 튀었다(2026-11-02)
@@ -844,7 +873,7 @@ details.more[open] > summary { margin-bottom: 10px; }
         view = { name: "station", st: pp.part.station_id, ...(pp.part.door_id ? { door: pp.part.door_id } : {}), open: view.partId };
         history.replaceState(null, "", encodeView(view));
       }
-      const html = await ({ home: vHome, work: vWork, route: vRoute, records: vRecords, model: vModel, station: vStation, plan: vPlan }[view.name])();
+      const html = await ({ home: vHome, work: vWork, route: vRoute, records: vRecords, analysis: vAnalysis, model: vModel, station: vStation, plan: vPlan }[view.name])();
       if (my !== renderSeq) return;
       app.innerHTML = html;
       bind();
@@ -916,6 +945,8 @@ details.more[open] > summary { margin-bottom: 10px; }
     if (hw) setupHomeWork(hw);
     const ps = app.querySelector("#partsum");
     if (ps) setupPartSummary(ps);
+    const an = app.querySelector("#analysis");
+    if (an) setupAnalysis(an);
     const xf = app.querySelector("#xlsxform");
     if (xf) setupUploadForm(xf);
     const lkb = app.querySelector("#lkbox");
@@ -1348,6 +1379,169 @@ details.more[open] > summary { margin-bottom: 10px; }
           ${rows.length > RISK_FIRST ? `<button type="button" class="linkbtn" id="ai-more" style="padding:0">더 보기 (${rows.length - RISK_FIRST}개) ›</button>` : ""}`
           : `<p class="small muted">고른 조건에 해당하는 부품이 없습니다.</p>`}
       </div>`;
+  }
+  // ---------- 고장 분석(2026-11-27, psd/analysis.py, 날씨_역분석_엑셀연동_설계.md 1·2장) ----------
+  // 질문 1: 어느 역이 가장 고장이 잦은가(기대 대비) — 역 날씨로 설명, 역 → 장애부위 → 문.
+  // 질문 2: 언제 잦은가 — 달·계절·요일, 날씨 조건(같은 역·같은 달 안 비교), 날씨 아닌 것(주말·공휴일·이 역만 그 계절에).
+  const AN_KEYS = ["group", "code", "months", "season", "daytype", "holiday"];
+  function anQs(skip = []) {
+    const q = new URLSearchParams();
+    AN_KEYS.forEach(k => { if (view[k] && !skip.includes(k)) q.set(k, view[k]); });
+    const s = q.toString();
+    return s ? "?" + s : "";
+  }
+  const xr = r => (r == null || !isFinite(r)) ? "-" : r.toFixed(2) + "배";
+  const rng = x => x && x.lo != null && x.hi != null ? `${x.lo.toFixed(2)}~${x.hi.toFixed(2)}` : "-";
+  function vchip(v) {
+    const cls = { 잦음: "s-red", 드묾: "s-green", "차이 모름": "s-check" }[v] || "";
+    return `<span class="pill ${cls}">${esc(v || "모름")}</span>`;
+  }
+  // 고장 비율 막대(1 = 기대만큼). 막대 + 80% 범위 선
+  function ratioBar(r, lo, hi, max = 2) {
+    const W = 160, x = v => Math.max(0, Math.min(W, (v / max) * W));
+    const col = r == null ? "var(--muted)" : r >= 1 ? "var(--red)" : "var(--green)";
+    return `<svg class="rbar" viewBox="0 0 ${W} 14" width="${W}" height="14" aria-hidden="true"><rect x="0" y="4" width="${x(r || 0)}" height="6" rx="2" fill="${col}" opacity="0.55"/>${lo != null && hi != null ? `<line x1="${x(lo)}" x2="${x(hi)}" y1="7" y2="7" stroke="var(--ink)" stroke-width="1.5"/>` : ""}<line x1="${x(1)}" x2="${x(1)}" y1="0" y2="14" stroke="var(--muted)" stroke-dasharray="2 2"/></svg>`;
+  }
+  function heatCell(r) {
+    if (r == null) return `<td class="num muted">-</td>`;
+    const a = Math.min(1, Math.abs(r - 1) / 0.6) * 0.75;
+    const bg = r >= 1 ? `rgba(220,38,38,${a.toFixed(2)})` : `rgba(37,99,235,${a.toFixed(2)})`;
+    return `<td class="num hcell" style="background:${bg}">${r.toFixed(2)}</td>`;
+  }
+  function barsSvg(items, label) {  // items: [{label, ratio, lo, hi, obs, exp}]
+    const W = 560, H = 140, n = items.length, bw = (W - 40) / n, y = v => H - 22 - Math.min(2, v || 0) / 2 * (H - 40);
+    const bars = items.map((it, i) => {
+      const x0 = 30 + i * bw + bw * 0.15, w = bw * 0.7, r = it.ratio;
+      const col = r == null ? "var(--muted)" : r >= 1 ? "var(--red)" : "var(--green)";
+      return `<rect x="${x0}" y="${y(r)}" width="${w}" height="${H - 22 - y(r)}" fill="${col}" opacity="0.55" rx="2"><title>${esc(it.label)} ${xr(r)} (80% ${rng(it)}) · 실제 ${it.obs} / 기대 ${it.exp}</title></rect>`
+        + (it.lo != null && it.hi != null ? `<line x1="${x0 + w / 2}" x2="${x0 + w / 2}" y1="${y(it.hi)}" y2="${y(it.lo)}" stroke="var(--ink)" stroke-width="1.2"/>` : "")
+        + `<text x="${x0 + w / 2}" y="${H - 6}" text-anchor="middle" class="ax">${esc(it.label)}</text>`;
+    }).join("");
+    return `<svg class="anbars" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}"><line x1="26" x2="${W - 6}" y1="${y(1)}" y2="${y(1)}" stroke="var(--muted)" stroke-dasharray="3 3"/><text x="2" y="${y(1) + 4}" class="ax">1배</text><text x="2" y="${y(2) + 8}" class="ax">2배</text>${bars}</svg>`;
+  }
+  function rrRow(label, r, extra = "") {
+    return `<tr><td>${esc(label)}</td><td class="num"><b>${xr(r && r.rr)}</b></td><td class="num small muted">${rng(r)}</td><td>${vchip(r && r.verdict)}</td><td class="num small muted">${r && r.obs != null ? r.obs : ""}</td>${extra}</tr>`;
+  }
+  function weekCell(r) {
+    return `<td class="num small">${xr(r.rr)} <span class="muted">${rng(r)}</span>${r.verdict === "잦음" ? " " + vchip("잦음") : ""}</td>`;
+  }
+  function whenPanels(w, where) {
+    const months = w.by_month.map(m => ({ ...m, label: m.key + "월" }));
+    const wd = w.by_weekday.map(m => ({ ...m, label: m.label }));
+    const weatherRows = [
+      ...w.daily_weather.map(d => rrRow(d.label, d.same_day, weekCell(d.week))),
+      ...w.conditions.map(c => rrRow(`${c.label} (날의 ${Math.round(c.days_share * 100)}%)`, c.same_day, weekCell(c.week))),
+    ].join("");
+    const monthly = w.monthly_weather.map(m => rrRow(m.label, m)).join("");
+    const cal = w.calendar.map(c => rrRow(c.label, c)).join("");
+    const ss = (w.station_season || []).slice(0, 8).map(x => `<tr><td>${esc(x.station_name)}</td><td>${x.season}</td><td class="num"><b>${xr(x.rr)}</b></td><td class="num small muted">${x.lo.toFixed(2)}~${x.hi.toFixed(2)}</td><td class="num small muted">${x.obs}</td></tr>`).join("");
+    const ssBlock = !w.station_season ? "" : ss
+      ? `<p class="small" style="margin:10px 0 4px"><b>이 역만 그 계절에 유독</b> <span class="muted">(그 역의 계절 비율 ÷ 노선 전체 같은 계절 비율, 80% 범위가 1을 넘는 역만)</span></p>
+         <div class="scroll"><table class="ptable antable"><thead><tr><th>역</th><th>계절</th><th>배수</th><th>80% 범위</th><th>고장</th></tr></thead><tbody>${ss}</tbody></table></div>`
+      : `<p class="small muted">이 역만 그 계절에 유독 잦은 역은 없습니다.</p>`;
+    return `<div class="panel">
+        <div class="headrow"><h3>언제 고장이 잦은가 — ${esc(where)}</h3><span class="small muted">실제 ${w.obs.toLocaleString()}건 / 기대 ${w.exp.toLocaleString()}건 · 1배 = 나이로 보면 그만큼(평범)</span></div>
+        <h4 class="anh">① 달별 · 요일별 고장 비율 <span class="small muted">원인은 묻지 않음 — 대비 시기를 정하는 데</span></h4>
+        <div class="an2">${barsSvg(months, "달별 고장 비율")}${barsSvg(wd, "요일별 고장 비율")}</div>
+        <p class="small muted">계절: ${w.by_season.map(s => `${s.key} <b>${xr(s.ratio)}</b>`).join(" · ")}</p>
+        <h4 class="anh">② 날씨 때문인 부분 <span class="small muted">같은 역·같은 달 안에서 비교해 계절 자체는 빼고 잰 값</span></h4>
+        <div class="scroll"><table class="ptable antable"><thead><tr><th>조건</th><th>그날</th><th>80% 범위</th><th>판정</th><th>고장</th><th>그날~일주일 뒤</th></tr></thead><tbody>${weatherRows}</tbody></table></div>
+        <details class="more"><summary>평년보다 습했던(더웠던 …) 달 — 같은 역·같은 달의 다른 해끼리 <span class="small muted">(해가 4~5개뿐이라 범위가 넓다)</span></summary>
+          <div class="scroll"><table class="ptable antable"><thead><tr><th>조건</th><th>비율비</th><th>80% 범위</th><th>판정</th><th>고장</th></tr></thead><tbody>${monthly}</tbody></table></div></details>
+        <h4 class="anh">③ 날씨 아닌 것 <span class="small muted">이용객·일정 등 — 계절과 겹쳐 날씨로 잘못 읽히기 쉬운 것</span></h4>
+        <div class="scroll"><table class="ptable antable"><thead><tr><th>조건</th><th>비율비</th><th>80% 범위</th><th>판정</th><th>고장</th></tr></thead><tbody>${cal}</tbody></table></div>
+        ${ssBlock}
+      </div>`;
+  }
+  async function vAnalysis() {
+    const [meta, rank] = await Promise.all([api("/api/analysis/meta"), api("/api/analysis/stations" + anQs())]);
+    const st = view.ast && rank.stations.some(s => s.station_id === view.ast) ? view.ast : null;
+    const [w, sd] = await Promise.all([st ? Promise.resolve(null) : api("/api/analysis/when" + anQs()), st ? api(`/api/analysis/stations/${st}` + anQs()) : Promise.resolve(null)]);
+    const opt = (v, t, cur) => `<option value="${esc(v)}" ${String(v) === String(cur || "") ? "selected" : ""}>${esc(t)}</option>`;
+    const codes = meta.codes.filter(c => !view.group || c.group === view.group);
+    const filters = `<div class="filters an-filters">
+        <select data-an="group" aria-label="대분류">${opt("", "모든 대분류")}${meta.groups.map(g => opt(g, g, view.group)).join("")}</select>
+        <select data-an="code" aria-label="장애부위">${opt("", "모든 장애부위")}${codes.map(c => opt(c.code, c.name, view.code)).join("")}</select>
+        <select data-an="season" aria-label="계절">${opt("", "모든 계절")}${meta.seasons.map(x => opt(x, x, view.season)).join("")}</select>
+        <select data-an="months" aria-label="달">${opt("", "모든 달")}${Array.from({ length: 12 }, (_, i) => opt(String(i + 1), (i + 1) + "월", view.months)).join("")}</select>
+        <select data-an="daytype" aria-label="요일">${opt("", "모든 요일")}${opt("weekday", "평일만", view.daytype)}${opt("weekend", "토·일만", view.daytype)}</select>
+        <select data-an="holiday" aria-label="공휴일">${opt("", "공휴일 포함")}${opt("only", "공휴일만", view.holiday)}${opt("exclude", "공휴일 빼고", view.holiday)}</select>
+        ${AN_KEYS.some(k => view[k]) ? `<button type="button" class="linkbtn" data-an-reset>거르기 지우기</button>` : ""}
+      </div>`;
+    const maxR = Math.max(2, ...rank.stations.map(s => s.hi || 0));
+    const rows = rank.stations.map((s, i) => `<tr class="prow" tabindex="0" data-an-st="${s.station_id}" aria-selected="${s.station_id === st}"><td class="num">${i + 1}</td><td><b>${esc(s.station_name)}</b></td><td class="num"><b>${xr(s.ratio)}</b></td><td>${ratioBar(s.ratio, s.lo, s.hi, maxR)}</td><td class="num small muted">${rng(s)}</td><td>${vchip(s.verdict)}</td><td class="num small muted">${s.obs} / ${s.exp}</td></tr>`).join("");
+    const explain = rank.explain.map(e => `<tr><td>${esc(e.label)}${e.kind === "env" ? "" : ` <span class="small muted">(높은 역: ${(e.top || []).map(esc).join("·")})</span>`}</td><td class="num"><b>${xr(e.rr)}</b></td><td class="num small muted">${rng(e)}</td><td>${vchip(e.verdict)}</td></tr>`).join("");
+    let stPanel = "";
+    if (sd) {
+      const d = sd.detail;
+      // 기대 고장이 1건도 안 되고 실제도 거의 없는 장애부위(역 공통 장비 대부분)는 비교할 거리가 없어 따로 묶는다
+      const thin = d.parts.filter(x => x.exp < 1 && x.obs < 3);
+      d.parts = d.parts.filter(x => !(x.exp < 1 && x.obs < 3));
+      const prow = d.parts.map(x => `<tr><td><b>${esc(x.name)}</b> <span class="small muted">${esc(x.group)}${x.unit === "station" ? " · 역 공통" : ""}</span></td><td class="num"><b>${xr(x.ratio)}</b></td><td>${ratioBar(x.ratio, x.lo, x.hi, Math.max(2, x.hi || 0))}</td><td class="num small muted">${rng(x)}</td><td>${vchip(x.verdict)}</td><td class="num small muted">${x.obs} / ${x.exp}</td></tr>`).join("");
+      const drow = d.doors.map(x => `<tr class="prow" tabindex="0" ${goAttr({ name: "station", st: d.station_id, door: x.door_id })}><td><b>${esc(x.label)}</b></td><td class="num"><b>${x.obs}</b></td><td class="num small muted">${x.exp}</td><td class="small">${x.top_parts.map(t => `${esc(t.name)} ${t.obs}`).join(" · ")}</td></tr>`).join("");
+      stPanel = `<div class="panel" id="an-st">
+          <div class="headrow"><h3>${esc(d.station_name)} — 어떤 장애부위·문이 잦은가</h3><button type="button" class="linkbtn" data-an-st="">역 고르기 지우기(노선 전체 보기)</button></div>
+          <p class="small muted">고장 비율은 노선 평균 쪽으로 당긴 값입니다. 확실히 잦은 것(80% 범위 아래쪽이 높은 것)이 위에 옵니다.</p>
+          <div class="scroll"><table class="ptable antable"><thead><tr><th>장애부위</th><th>고장 비율</th><th></th><th>80% 범위</th><th>판정</th><th>실제 / 기대</th></tr></thead><tbody>${prow}</tbody></table></div>
+          ${thin.length ? `<p class="small muted" style="margin:6px 0 0">기록이 적어 비교하지 않은 장애부위 ${thin.length}종(기대 고장 1건 미만): ${thin.map(x => `${esc(x.name)} ${x.obs}건`).join(" · ")}</p>` : ""}
+          <p class="small" style="margin:12px 0 4px"><b>고장이 많은 문</b> <span class="muted">(${esc(d.doors_note)}) · 줄을 누르면 그 문으로</span></p>
+          <div class="scroll"><table class="ptable antable"><thead><tr><th>문</th><th>고장</th><th>문 하나 평균 기대</th><th>많은 장애부위</th></tr></thead><tbody>${drow}</tbody></table></div>
+        </div>${whenPanels(sd.when, d.station_name)}`;
+    }
+    const heat = w ? (w.heatmap || []).map(r => `<tr><td><button type="button" class="linkbtn" style="padding:0" data-an-st="${r.station_id}">${esc(r.station_name)}</button></td>${r.months.map(c => heatCell(c.ratio)).join("")}</tr>`).join("") : "";
+    const filled = meta.weather_filled_share > 0 ? " 날씨 자료가 2025년까지라 그 뒤 날은 가장 가까운 해의 같은 날 값으로 채웠습니다." : "";
+    return `<section class="view" id="analysis">
+      <div><h2 style="margin:0">고장 분석</h2><p class="small muted" style="margin:4px 0 0">고장 비율 = 실제 고장 ÷ 기대 고장(노선 전체에서 같은 장애부위·같은 나이 구간이면 이만큼). 1.3배면 평범한 경우보다 1.3배 잦다는 뜻입니다. 사후조치(고장)만 셉니다. 기간 ${dotDate(meta.from)} ~ ${dotDate(meta.to)} · 지금은 <b>더미 데이터</b> 결과입니다.${filled}</p></div>
+      ${filters}
+      <div class="panel">
+        <div class="headrow"><h3>어느 역이 가장 고장이 잦은가</h3><span class="small muted">건수가 적은 역이 우연히 위로 가지 않게 노선 평균 쪽으로 당김 · 줄을 누르면 그 역 자세히</span></div>
+        <div class="scroll"><table class="ptable antable"><thead><tr><th>순위</th><th>역</th><th>고장 비율</th><th>(점선 = 1배, 가로선 = 80% 범위)</th><th>80% 범위</th><th>판정</th><th>실제 / 기대</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <h4 class="anh">역의 날씨·환경으로 설명하면 <span class="small muted">그 특성이 역들 사이에서 1 표준편차 높을 때 고장 비율이 몇 배인가</span></h4>
+        <div class="scroll"><table class="ptable antable"><thead><tr><th>특성</th><th>배수</th><th>80% 범위</th><th>판정</th></tr></thead><tbody>${explain}</tbody></table></div>
+        <p class="small muted">역 날씨는 AWS 지점 ${rank.weather_points}곳뿐이라(여러 역이 한 지점을 나눠 씀) 역 사이 비교로 잰 날씨 영향은 범위가 넓습니다 — 아래 "언제"의 같은 역 시기별 비교가 더 정확합니다. ${meta.env_filled ? "" : "역 구조·외기 노출은 역환경 파일이 비어 있어 아직 쓰지 않았습니다(채우면 여기에 나옵니다)."}</p>
+      </div>
+      ${stPanel}
+      ${w ? whenPanels(w, "노선 전체") : ""}
+      ${w ? `<div class="panel"><div class="headrow"><h3>역 × 달 고장 비율</h3><span class="small muted">빨강 = 기대보다 잦음, 파랑 = 드묾 (칸마다 노선 평균 쪽으로 조금 당김) · 역 이름을 누르면 그 역</span></div>
+        <div class="scroll"><table class="hgrid heat"><tr><th>역</th>${Array.from({ length: 12 }, (_, i) => `<th>${i + 1}월</th>`).join("")}</tr>${heat}</table></div></div>` : ""}
+      <div class="panel" id="an-parts">
+        <div class="headrow"><h3>장애부위별 날씨 영향</h3><button type="button" class="btn ghost" data-an-parts>불러오기 (처음엔 몇 초)</button></div>
+        <p class="small muted">장애부위마다 "평년보다 습한(더운·추운·바람 센) 날"이 같은 역·같은 달 다른 날보다 몇 배인지. 고장이 20건 안 되는 장애부위는 기록이 더 필요해 재지 않습니다. 위의 대분류·장애부위 거르기는 쓰지 않고 날 거르기만 씁니다.</p>
+        <div id="an-parts-body"></div>
+      </div>
+    </section>`;
+  }
+  const ANCOND = { rain: "비 온 날", heavy_rain: "폭우", cond: "결로", heat: "폭염", cold: "한파", thaw: "해동", wind: "강풍·비바람" };
+  async function loadAnalysisParts(box) {
+    const body = box.querySelector("#an-parts-body");
+    body.innerHTML = `<p class="small muted">계산하는 중…</p>`;
+    const r = await api("/api/analysis/parts" + anQs(["group", "code"]));
+    const B = [["humid", "습기"], ["heat", "열"], ["cold", "추위"], ["wind", "바람"]];
+    const cell = x => x ? `<td class="num">${x.verdict === "잦음" ? `<b>${xr(x.rr)}</b> ${vchip("잦음")}` : xr(x.rr) + (x.verdict === "드묾" ? " " + vchip("드묾") : "")}</td>` : `<td></td>`;
+    const rows = r.parts.map(x => x.too_few
+      ? `<tr><td><b>${esc(x.name)}</b> <span class="small muted">${esc(x.group)}</span></td><td class="num small muted">${x.obs}</td><td colspan="6" class="small muted">기록이 더 필요함(고장 ${x.obs}건)</td></tr>`
+      : `<tr><td><b>${esc(x.name)}</b> <span class="small muted">${esc(x.group)}</span></td><td class="num small muted">${x.obs}</td>${B.map(([k]) => cell(x.daily[k])).join("")}<td class="small">${Object.entries(x.week).filter(([, v]) => v.verdict === "잦음").map(([k, v]) => `${esc(ANCOND[k] || k)} ${xr(v.rr)}`).join(" · ") || '<span class="muted">-</span>'}</td><td class="num">${xr(x.weekend.rr)}${x.weekend.verdict === "잦음" ? " " + vchip("잦음") : ""}</td></tr>`).join("");
+    body.innerHTML = `<div class="scroll"><table class="ptable antable"><thead><tr><th>장애부위</th><th>고장</th>${B.map(([, l]) => `<th>평년보다 ${l} 높은 날</th>`).join("")}<th>조건 뒤 일주일에 잦음</th><th>토·일</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="small muted">"잦음" = 80% 범위가 1을 넘음. 장애부위·조건을 많이 견주면 우연히 "잦음"이 몇 개 나올 수 있어, 여러 해에 걸쳐 같은 결과가 이어지는지 함께 봐야 합니다.</p>`;
+  }
+  function setupAnalysis(box) {
+    box.querySelectorAll("[data-an]").forEach(sel => sel.addEventListener("change", () => {
+      const v = { ...view, [sel.dataset.an]: sel.value || undefined, keep: true };
+      if (sel.dataset.an === "group") v.code = undefined;
+      if (sel.dataset.an === "season" && sel.value) v.months = undefined;
+      if (sel.dataset.an === "months" && sel.value) v.season = undefined;
+      go(v);
+    }));
+    const reset = box.querySelector("[data-an-reset]");
+    if (reset) reset.addEventListener("click", () => go({ name: "analysis", ast: view.ast }));
+    box.querySelectorAll("[data-an-st]").forEach(el => {
+      const pick = () => go({ ...view, ast: el.dataset.anSt ? Number(el.dataset.anSt) : undefined, keep: false });
+      el.addEventListener("click", pick);
+      if (el.tagName !== "BUTTON") el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+    });
+    const pb = box.querySelector("[data-an-parts]");
+    if (pb) pb.addEventListener("click", async () => { pb.disabled = true; try { await loadAnalysisParts(box); } catch (e) { toast(e.message); } finally { pb.disabled = false; } });
+    if (view.ast && !view.keep) { const el = box.querySelector("#an-st"); if (el) el.scrollIntoView({ block: "start" }); }
   }
   async function vModel() {
     const riskQs = "/api/risk?limit=200" + (view.ast ? "&station_id=" + view.ast : "");

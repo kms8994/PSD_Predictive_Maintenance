@@ -472,3 +472,28 @@ def test_part_types_endpoint_gives_form_vocabulary():
     assert r["reasons"] == {"fail": "사후조치", "prev": "사전조치"}
     assert r["actions"]["full"] == "교체" and r["fault_type"]["reset"] == "예방보수"
     assert r["taxonomy"] in ("private", "sample") and r["part_types"]
+
+
+# ---------- 고장 분석 (psd/analysis.py, 2026-11-27) ----------
+
+
+def test_analysis_stations_ranking_adds_up_and_filters():
+    r = client.get("/api/analysis/stations").json()
+    assert r["stations"] and abs(sum(s["obs"] for s in r["stations"]) - r["total_obs"]) == 0
+    ratios = [s["ratio"] for s in r["stations"]]
+    assert ratios == sorted(ratios, reverse=True)
+    assert {e["bundle"] for e in r["explain"]} >= {"humid", "heat", "cold", "wind"}
+    summer = client.get("/api/analysis/stations?season=여름&daytype=weekend").json()
+    assert summer["total_obs"] <= r["total_obs"]
+    assert client.get("/api/analysis/stations?code=NOPE").status_code == 400
+
+
+def test_analysis_station_and_when_shapes():
+    sid = client.get("/api/analysis/stations").json()["stations"][0]["station_id"]
+    one = client.get(f"/api/analysis/stations/{sid}").json()
+    assert one["detail"]["station_id"] == sid and one["detail"]["parts"]
+    assert len(one["when"]["by_month"]) == 12 and len(one["when"]["by_weekday"]) == 7
+    w = client.get("/api/analysis/when?months=7").json()
+    assert [m["obs"] for m in w["by_month"] if m["key"] != 7] == [0] * 11
+    assert len(w["heatmap"]) == len(client.get("/api/analysis/stations").json()["stations"])
+    assert client.get("/api/analysis/stations/99999").status_code == 404
