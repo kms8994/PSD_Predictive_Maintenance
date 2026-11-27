@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import io
+import os
+from contextlib import asynccontextmanager, contextmanager
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -13,6 +15,7 @@ from urllib.parse import quote
 from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -28,7 +31,8 @@ from psd.cycle import (
     period_average_af,
     reference_climate,
 )
-from psd.db import get_session
+from psd import link
+from psd.db import engine, get_session
 from psd.excel_io import (
     REASON_CODE_TO_LABEL,
     ExcelFormatError,
@@ -56,7 +60,23 @@ from psd.status import (
 from psd.stations import LINE_NAME, STATION_BY_ID, STATION_ID_BY_NAME, environment
 from psd.sync import RecordSig, diff_records
 
-app = FastAPI(title="동해선 PSD 교체주기 API")
+
+@asynccontextmanager
+async def _lifespan(_app):
+    """서버가 켜질 때: 연동 표가 없으면 만들고(psd/link.py ensure_schema), 연동 파일 감시를 시작한다.
+    감시를 끄려면 환경변수 PSD_LINK_WATCH=0(테스트는 TestClient를 with 없이 써서 여기를 안 탄다)."""
+    try:
+        for msg in link.ensure_schema(engine):
+            link.log.warning("DB 구조 맞춤: %s", msg)
+    except Exception:
+        link.log.exception("연동 표를 만들지 못했습니다")
+    if os.environ.get("PSD_LINK_WATCH", "1") != "0":
+        _link_watcher.start()
+    yield
+    _link_watcher.stop()
+
+
+app = FastAPI(title="동해선 PSD 교체주기 API", lifespan=_lifespan)
 # CORS는 열지 않는다: 화면(psd/web)은 같은 주소에서 나가서 필요 없고, allow_origins=["*"]로 두면 아무 웹사이트나
 # 이 API의 기록·보고서를 읽어 갈 수 있었다(2026-11-02 QA). 로그인은 아직 없다 — 배포 전에 넣는다
 
@@ -727,8 +747,6 @@ def _retrain_job(trigger: str, force: bool = False) -> None:
 
 
 def _auto_retrain(background: BackgroundTasks, trigger: str) -> None:
-    import os
-
     if os.environ.get("PSD_AUTO_RETRAIN", "1") != "0":
         background.add_task(_retrain_job, trigger)
 
@@ -1161,9 +1179,11 @@ SHOW_ROWS = 300  # 비교 결과에 줄 단위로 보여 줄 최대 수(건수�
 MISSING_WARN = 20  # 엑셀에서 빠진 기록이 이만큼 넘으면 "다른 파일을 고른 것 같다"고 경고
 
 
-def _sync(db: Session, content: bytes, file_name: str, delete_missing: bool, uploaded_by: str | None = None) -> dict:
+def _sync(db: Session, content: bytes, file_name: str, delete_missing: bool, uploaded_by: str | None = None,
+          source: str | None = None, counts_only: bool = False) -> dict:
     """엑셀을 DB와 비교하고 엑셀에 맞춘다(flush까지만). 커밋·롤백은 부르는 쪽이 정한다 —
-    비교 화면·정비기록 시연은 롤백, "반영하기"는 커밋.
+    비교 화면·정비기록 시연은 롤백, "반영하기"는 커밋. source="link"는 연동 파일 감지로 반영한 것(업로드 이력에 표시).
+    counts_only면 건수·줄만 내고 기록은 넣지 않는다 — 교체주기 영향(changes) 계산이 수십 초 걸려서, 연동 파일 감지는 이것만 쓴다.
 
     - 엑셀에만 있음 → 넣는다 / 같은 역·문·날짜·소분류인데 다른 칸이 다름 → 고친다
     - DB에만 있음(비교 범위 안) → delete_missing일 때만 지운다(화면에서 체크해야 지움)
@@ -1226,14 +1246,14 @@ def _sync(db: Session, content: bytes, file_name: str, delete_missing: bool, upl
         "batch_id": None,
         "changes": [],
     }
-    if not to_insert and not to_delete:
+    if counts_only or (not to_insert and not to_delete):
         return result  # 바뀌는 게 없으면 이력도 남기지 않는다
 
     before = _group_snapshot(db, keys)
     batch = UploadBatch(
         file_name=file_name[:255], scope_from=scope_from, scope_to=scope_to, station_count=len(station_ids),
         inserted=len(d.new), updated=len(d.changed), deleted=result["deleted"], removed=[_record_dict(r) for r in to_delete],
-        uploaded_by=(uploaded_by or "").strip()[:50] or None,
+        uploaded_by=(uploaded_by or "").strip()[:50] or None, source=source,
     )
     db.add(batch)
     db.flush()
@@ -1322,6 +1342,205 @@ async def sync_replacement_records(background: BackgroundTasks, file: UploadFile
     return result
 
 
+# ---------- 원본 엑셀 연동(psd/link.py, 날씨_역분석_엑셀연동_설계.md 4장, 2026-11-27) ----------
+# 연동 파일이 바뀌면 서버가 비교만 해 두고(감시 스레드), 사람이 화면에서 비교 결과를 보고 "반영"을 눌러야 저장한다.
+
+
+def _link_compare(content: bytes, file_name: str, delete_missing: bool = False, counts_only: bool = True) -> dict:
+    """연동 파일을 DB와 비교만 한다(자기 세션을 열고 롤백 — 감시 스레드에서도 부른다). 파일이 틀렸으면 link.CompareFailed.
+    감지·미리 보기는 건수만(counts_only, 1~2초). 반영 전 "비교 결과 보기"만 교체주기 영향까지 계산한다."""
+    db = get_session()
+    try:
+        r = _sync(db, content, file_name, delete_missing, counts_only=counts_only)
+    except HTTPException as e:
+        if e.status_code == 400:
+            raise link.CompareFailed(e.detail)
+        raise
+    finally:
+        db.rollback()
+        db.close()
+    r.pop("batch_id", None)  # 롤백해서 없는 이력
+    return r
+
+
+def _link_try_compare(content: bytes, file_name: str, delete_missing: bool = False,
+                      counts_only: bool = True) -> tuple[dict | None, dict | None]:
+    try:
+        return _link_compare(content, file_name, delete_missing, counts_only), None
+    except link.CompareFailed as e:
+        return None, link.error_summary(e.detail)
+
+
+_link_watcher = link.Watcher(_link_compare)
+
+_HASH = r"^[0-9a-f]{64}$"
+
+
+class LinkPathIn(BaseModel):
+    path: str = Field(max_length=1000)
+
+
+class LinkSetIn(LinkPathIn):
+    hash: str = Field(pattern=_HASH)  # 미리 비교해 본 내용 — 그 사이 파일이 바뀌었으면 바꾸지 않는다
+    set_by: str | None = Field(None, max_length=100)
+
+
+class LinkCompareIn(BaseModel):
+    delete_missing: bool = False
+
+
+class LinkApplyIn(LinkCompareIn):
+    hash: str = Field(pattern=_HASH)  # 사람이 본 비교 결과의 내용
+    uploaded_by: str | None = Field(None, max_length=100)
+
+
+class LinkHashIn(BaseModel):
+    hash: str = Field(pattern=_HASH)
+
+
+def _link_path(raw: str):
+    try:
+        return link.validate_path(raw)
+    except link.LinkPathError as e:
+        raise HTTPException(400, str(e))
+
+
+def _link_read(p) -> link.Snapshot:
+    try:
+        return link.read_stable(p)
+    except link.FileNotReady as e:
+        raise HTTPException(409, str(e))
+    except link.LinkPathError as e:
+        raise HTTPException(400, str(e))
+
+
+@contextmanager
+def _link_exclusive():
+    """감지·비교·반영은 한 번에 하나. 다른 것이 30초 넘게 돌고 있으면 409."""
+    try:
+        with link.exclusive(timeout=30):
+            yield
+    except link.LinkBusy as e:
+        raise HTTPException(409, str(e))
+
+
+def _linked_state(db: Session):
+    st = link.get_state(db)
+    if not st.path:
+        raise HTTPException(404, "연동 파일이 정해져 있지 않습니다")
+    return st
+
+
+def _snap_info(p, snap: link.Snapshot) -> dict:
+    return {"path": str(p), "file_name": p.name, "hash": snap.hash, "size": snap.size, "excel_open": snap.excel_open,
+            "modified": datetime.fromtimestamp(snap.mtime_ns / 1e9).replace(microsecond=0)}
+
+
+@app.get("/api/link")
+def link_status(db: Session = Depends(get_db)):
+    """연동 상태(경로·마지막 확인·감지·반영·알림·감지 기록). 화면 위 알림이 10초마다 부른다."""
+    return link.status_dict(db, _link_watcher)
+
+
+@app.post("/api/link/preview")
+def link_preview(body: LinkPathIn, db: Session = Depends(get_db)):
+    """연동할(바꿀) 파일을 미리 비교만 한다. 아무것도 바꾸지 않는다. 틀린 파일이면 result 대신 error."""
+    p = _link_path(body.path)
+    snap = _link_read(p)
+    result, error = _link_try_compare(snap.content, p.name)
+    cur = db.get(link.LinkedFile, 1)
+    return {**_snap_info(p, snap), "current_path": cur.path if cur else None, "result": result, "error": error}
+
+
+@app.post("/api/link")
+def link_set(body: LinkSetIn, db: Session = Depends(get_db)):
+    """미리 비교해 본 파일로 연동한다(처음 정하기·바꾸기). 기록은 넣지 않는다 — 바꾼 뒤 비교 결과를 보고 "반영"을 눌러야 들어간다."""
+    p = _link_path(body.path)
+    with _link_exclusive():
+        snap = _link_read(p)
+        if snap.hash != body.hash:
+            raise HTTPException(409, "비교해 본 뒤 파일이 또 바뀌었습니다. 다시 비교해 보세요")
+        result, error = _link_try_compare(snap.content, p.name)
+        st = link.get_state(db)
+        link.set_link(db, st, p, body.set_by)
+        st.checked_at = datetime.now()
+        link.note_compare(db, st, snap, result, error)
+        db.commit()
+    return link.status_dict(db, _link_watcher)
+
+
+@app.delete("/api/link")
+def link_unset(db: Session = Depends(get_db)):
+    """연동을 끊는다(파일 감시를 멈춤). 이미 반영한 기록과 업로드 이력은 그대로다."""
+    with _link_exclusive():
+        link.unset_link(db, link.get_state(db))
+        db.commit()
+    return link.status_dict(db, _link_watcher)
+
+
+@app.post("/api/link/check")
+def link_check_now(db: Session = Depends(get_db)):
+    """"지금 확인": 기다리지 않고 바로 파일을 읽어 다시 비교한다."""
+    if link.check_once(_link_compare, full=True, recompare=True) is None:
+        raise HTTPException(409, "다른 확인·반영이 진행 중입니다. 잠시 뒤 다시 하세요")
+    db.expire_all()
+    return link.status_dict(db, _link_watcher)
+
+
+@app.post("/api/link/compare")
+def link_compare(body: LinkCompareIn, db: Session = Depends(get_db)):
+    """연동 파일의 지금 내용을 비교한다(저장 안 함). 화면의 "비교 결과 보기". 돌려준 hash를 반영할 때 다시 보낸다."""
+    with _link_exclusive():
+        st = _linked_state(db)
+        p = _link_path(st.path)
+        try:
+            snap = link.read_stable(p)
+        except link.FileNotReady as e:
+            link.set_issue(db, st, e.issue, str(e))
+            db.commit()
+            raise HTTPException(409, str(e))
+        result, error = _link_try_compare(snap.content, p.name, body.delete_missing, counts_only=False)
+        st.checked_at = datetime.now()
+        link.clear_issue(db, st)
+        link.note_compare(db, st, snap, result, error)
+        db.commit()
+        state = st.state
+    return {**_snap_info(p, snap), "state": state, "result": result, "error": error}
+
+
+@app.post("/api/link/apply", status_code=201)
+def link_apply(body: LinkApplyIn, background: BackgroundTasks, db: Session = Depends(get_db)):
+    """사람이 비교 결과를 보고 누른 "반영": 연동 파일에 맞춰 DB를 고친다. 업로드 이력에 "연동 파일 감지"로 남아 되돌릴 수 있다.
+    비교한 뒤 파일이 또 바뀌었으면(hash가 다름) 저장하지 않고 최신 내용으로 다시 비교해 둔 뒤 409."""
+    with _link_exclusive():
+        st = _linked_state(db)
+        p = _link_path(st.path)
+        snap = _link_read(p)
+        if snap.hash != body.hash:
+            result, error = _link_try_compare(snap.content, p.name)
+            link.note_compare(db, st, snap, result, error)
+            db.commit()
+            raise HTTPException(409, "비교한 뒤 연동 파일이 또 바뀌었습니다 — 최신 내용으로 다시 비교하세요")
+        result = _sync(db, snap.content, p.name, body.delete_missing, body.uploaded_by, source="link")
+        link.mark_applied(db, st, snap, result)
+        db.commit()
+    if result["batch_id"]:
+        _auto_retrain(background, "upload")
+    return result
+
+
+@app.post("/api/link/dismiss")
+def link_dismiss(body: LinkHashIn, db: Session = Depends(get_db)):
+    """이번 변경은 반영하지 않는다(알림을 내림). 파일이 또 바뀌면 다시 알린다."""
+    with _link_exclusive():
+        st = _linked_state(db)
+        if st.seen_hash != body.hash:
+            raise HTTPException(409, "그 사이 연동 파일이 또 바뀌었습니다. 화면을 새로 고치세요")
+        link.dismiss(db, st)
+        db.commit()
+    return link.status_dict(db, _link_watcher)
+
+
 # ---------- 업로드 이력·되돌리기 ----------
 
 
@@ -1343,6 +1562,7 @@ def list_upload_batches(limit: int = 20, db: Session = Depends(get_db)):
                 "scope_from": b.scope_from, "scope_to": b.scope_to, "station_count": b.station_count,
                 "inserted": b.inserted, "updated": b.updated, "deleted": b.deleted,
                 "undone_at": b.undone_at, "can_undo": b.id == latest, "uploaded_by": b.uploaded_by,
+                "source": b.source, "source_label": "연동 파일 감지" if b.source == "link" else "화면에서 올림",
             }
             for b in batches
         ],
@@ -1378,6 +1598,7 @@ def undo_upload_batch(batch_id: int, background: BackgroundTasks, db: Session = 
     db.flush()
     _recompute_parts(db, part_keys)
     batch.undone_at = datetime.now()
+    link.on_batch_undone(db, batch.id)
     db.commit()
     _auto_retrain(background, "undo")
     return {"file": batch.file_name, "deleted": len(added), "restored": len(restore)}
