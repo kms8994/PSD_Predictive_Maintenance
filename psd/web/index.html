@@ -415,11 +415,27 @@ ol.src { margin: 0; padding-left: 20px; font-size: 0.85rem; display: flex; flex-
 .doorsvg .leaf { fill: var(--accent-soft); stroke: var(--muted); stroke-width: 1.5; }
 .doorsvg .stripe { stroke: var(--red); stroke-width: 3; opacity: 0.7; }
 .doorsvg .floor { stroke: var(--ink); stroke-width: 2; }
-.doorsvg .chip { cursor: pointer; }
-.doorsvg .chip rect { fill: var(--st-soft); stroke: var(--st); stroke-width: 1.5; }
-.doorsvg .chip text { fill: var(--ink); font-size: 12px; font-weight: 600; font-family: var(--font-body); }
-.doorsvg .chip:hover rect, .doorsvg .chip:focus-visible rect { stroke-width: 3; }
-.doorsvg .chip:focus { outline: none; }
+.doorsvg .chip, .stsvg .chip { cursor: pointer; }
+.doorsvg .chip rect, .stsvg .chip rect { fill: var(--st-soft); stroke: var(--st); stroke-width: 1.5; }
+.doorsvg .chip text, .stsvg .chip text { fill: var(--ink); font-size: 12px; font-weight: 600; font-family: var(--font-body); }
+.doorsvg .chip:hover rect, .doorsvg .chip:focus-visible rect, .stsvg .chip:hover rect, .stsvg .chip:focus-visible rect { stroke-width: 3; }
+.doorsvg .chip:focus, .stsvg .chip:focus { outline: none; }
+/* 장애부위별 상태 → 부품 전체 표(2026-11-27) */
+.xwrap { max-height: 520px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.xtable { min-width: 640px; }
+.xtable thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: 0 1px 0 var(--line); }
+.xtable td, .xtable th { white-space: nowrap; }
+.xsort { appearance: none; border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: inherit; cursor: pointer; }
+.xsort:hover { text-decoration: underline; }
+/* 역 공통 장비 그림(2026-11-27) */
+.stsvg { width: 100%; height: auto; display: block; }
+.stsvg .zone { fill: var(--gray-soft); stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
+.stsvg .zcap { fill: var(--muted); font-size: 11px; font-family: var(--font-body); }
+.stsvg .plat { fill: var(--bg); stroke: var(--muted); stroke-width: 1.5; }
+.stsvg .edge { stroke: var(--amber); stroke-width: 4; }
+.stsvg .rl { stroke: var(--muted); stroke-width: 3; }
+.stsvg .tie { stroke: var(--muted); stroke-width: 2; opacity: 0.5; }
+.stsvg .due { fill: var(--muted); font-size: 10px; font-family: var(--font-body); }
 .doorparts { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .ptable .prow { cursor: pointer; }
 .ptable .prow:hover, .ptable .prow:focus-visible { background: var(--accent-soft); outline: none; }
@@ -1594,7 +1610,79 @@ details.more[open] > summary { margin-bottom: 10px; }
     const warn = env.warnings.length ? `<details class="more"><summary class="small">역 환경 파일 확인할 것 ${env.warnings.length}건</summary><ul class="small muted" style="margin:0;padding-left:20px">${env.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></details>` : "";
     return `<details class="more" ${filled ? "open" : ""}><summary><b>역 환경</b> <span class="small muted">${note}</span></summary>${blocks}${warn}</details>`;
   }
-  function partSummary(parts, stName, openCode) {
+  // ---------- 장애부위별 상태 → "부품 전체 표"(2026-11-27) ----------
+  // 이 역의 모든 부품(문마다 + 역 공통)을 엑셀처럼 한 줄씩. 선로·대분류·상태로 거르고, 머리글을 눌러 정렬, CSV로 받는다.
+  let psAll = null;  // { parts, sides, stName }
+  let psTab = "sum";  // 같은 역에서 문을 바꿔 다시 그려도 보던 탭이 그대로
+  const xs = { sort: "loc", dir: 1, side: "", group: "", status: "" };
+  let xsRows = [];  // 지금 표에 보이는 줄(CSV로 받을 때)
+  function allPartRows() {
+    const { parts, sides } = psAll, order = Object.keys(sides);
+    const rows = [];
+    PART_TYPES.forEach((p, pi) => (parts[p.code] ? parts[p.code].units || [] : []).forEach(u => {
+      const [car, pos] = (u.no || "0-0").split("-").map(Number);
+      rows.push({ p, pi, u, car, pos, no: u.no || "—", group: (p.group || "").replace(/ 장애$/, ""),
+        side: u.side ? (sides[u.side] ? sides[u.side].label : u.side) : "역 공통", sideIx: u.side ? order.indexOf(u.side) : 99 });
+    }));
+    return rows;
+  }
+  function allPartTable() {
+    const all = allPartRows();
+    const loc = (a, b) => a.sideIx - b.sideIx || a.car - b.car || a.pos - b.pos;
+    const cmp = {
+      loc: (a, b) => loc(a, b) || a.pi - b.pi,
+      group: (a, b) => a.group.localeCompare(b.group, "ko") || a.pi - b.pi || loc(a, b),
+      part: (a, b) => a.pi - b.pi || loc(a, b),
+      status: (a, b) => RANK[a.u.status] - RANK[b.u.status] || a.u.days_left - b.u.days_left,
+      due: (a, b) => a.u.days_left - b.u.days_left || loc(a, b),
+    }[xs.sort];
+    xsRows = all.filter(r => (!xs.side || r.side === xs.side) && (!xs.group || r.group === xs.group) && (!xs.status || r.u.status === xs.status))
+      .sort((a, b) => xs.dir * cmp(a, b));
+    const uniq = arr => [...new Set(arr)];
+    const sel = (key, label, opts) => `<label class="small">${label} <select data-xf="${key}"><option value="">전체</option>${opts.map(([v, t]) => `<option value="${esc(v)}" ${v === xs[key] ? "selected" : ""}>${esc(t)}</option>`).join("")}</select></label>`;
+    const th = (k, t) => k ? `<th><button type="button" class="xsort" data-xs="${k}">${t}<span aria-hidden="true">${xs.sort === k ? (xs.dir > 0 ? " ▲" : " ▼") : ""}</span></button></th>` : `<th>${t}</th>`;
+    const body = xsRows.map(r => `<tr class="prow" tabindex="0" ${goAttr({ name: "part", partId: r.u.part_id })}><td>${esc(r.side)}</td><td class="num">${esc(r.no)}</td><td>${esc(r.group)}</td><td><b>${esc(r.p.name)}</b></td><td>${pill(r.u.status)}</td><td class="num">${dotDate(r.u.due)}</td><td class="num">${dur(r.u.days_left)}</td></tr>`).join("");
+    return `<div class="filters">${sel("side", "선로", uniq(all.map(r => r.side)).map(s => [s, s]))}${sel("group", "대분류", uniq(all.map(r => r.group)).map(g => [g, g]))}${sel("status", "상태", ["빨강", "확인_필요", "노랑", "초록"].map(s => [s, STATE[s][0]]))}
+        <span class="small muted">${xsRows.length.toLocaleString()}개 / 전체 ${all.length.toLocaleString()}개</span><button type="button" class="linkbtn" data-xcsv>이 표를 엑셀(CSV)로 받기</button></div>
+      <div class="xwrap"><table class="ptable xtable"><thead><tr>${th("loc", "승강장 선로")}${th("", "출입문")}${th("group", "대분류")}${th("part", "장애부위")}${th("status", "상태")}${th("due", "다음 교체")}${th("", "남은 기간")}</tr></thead><tbody>${body}</tbody></table></div>
+      ${xsRows.length ? "" : `<p class="small muted">거른 조건에 맞는 부품이 없습니다.</p>`}`;
+  }
+  function downloadPartCsv() {
+    const q = v => `"${String(v).replace(/"/g, '""')}"`;
+    const head = ["역", "승강장 선로", "출입문", "장애부위①(대분류)", "장애부위②(소분류)", "상태", "다음 교체", "남은 일수"];
+    const lines = [head, ...xsRows.map(r => [psAll.stName, r.side, r.no === "—" ? "" : r.no, r.group, r.p.name, STATE[r.u.status][0], r.u.due, r.u.days_left])]
+      .map(row => row.map(q).join(","));
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });  // BOM: 엑셀에서 한글이 안 깨지게
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${psAll.stName}_부품전체_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  function drawAllParts(el) {
+    el.innerHTML = allPartTable();
+    bindGo(el);
+    el.querySelectorAll("[data-xf]").forEach(s => s.addEventListener("change", () => { xs[s.dataset.xf] = s.value; drawAllParts(el); }));
+    el.querySelectorAll("[data-xs]").forEach(b => b.addEventListener("click", () => {
+      xs.dir = xs.sort === b.dataset.xs ? -xs.dir : 1;
+      xs.sort = b.dataset.xs;
+      drawAllParts(el);
+    }));
+    el.querySelector("[data-xcsv]").addEventListener("click", downloadPartCsv);
+  }
+  function showPsTab(box) {
+    box.querySelectorAll("[data-pstab]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.pstab === psTab)));
+    box.querySelector("#ps-sum").hidden = psTab !== "sum";
+    box.querySelector("#ps-hint").textContent = psTab === "sum"
+      ? '대상 = 그 상태인 부품 수 / 전체 · 줄을 누르면 가장 급한 부품 상세 · "문 목록"은 어느 문인지'
+      : "이 역의 모든 부품을 한 줄씩 · 머리글을 누르면 정렬 · 줄을 누르면 부품 상세";
+    const all = box.querySelector("#ps-all");
+    all.hidden = psTab !== "all";
+    if (psTab === "all") drawAllParts(all);
+  }
+  function partSummary(parts, stName, openCode, sides = {}) {
+    if (!psAll || psAll.stName !== stName) Object.assign(xs, { side: "", group: "", status: "" });  // 다른 역이면 거르기 초기화
+    psAll = { parts, sides, stName };
     const rows = PART_TYPES.filter(p => parts[p.code]).map(p => ({ p, x: parts[p.code] }))
       .sort((a, b) => RANK[a.x.status] - RANK[b.x.status] || a.x.days_left - b.x.days_left)
       .map(({ p, x }) => {
@@ -1603,9 +1691,12 @@ details.more[open] > summary { margin-bottom: 10px; }
         const btn = listable ? `<button type="button" class="linkbtn" style="padding:0" data-pltoggle="${p.code}" aria-expanded="${open}">${open ? "문 목록 닫기" : "문 목록"}</button>` : "";
         return `<tr class="prow" tabindex="0" ${goAttr({ name: "part", partId: x.part_id })}><td><b>${esc(p.name)}</b>${p.unit === "station" ? ' <span class="small muted">역 공통</span>' : ""}</td><td>${pill(x.status)}</td><td class="num">${x.counts[x.status]} <span class="muted">/ ${x.total}</span></td><td class="num">${dotDate(x.due)}</td><td class="num">${dur(x.days_left)}</td><td>${btn}</td></tr>${listable ? doorListRow(stName, p, x, open) : ""}`;
       }).join("");
+    const total = PART_TYPES.reduce((n, p) => n + (parts[p.code] ? parts[p.code].total : 0), 0);
     return `<div class="panel" id="partsum">
-        <div class="headrow"><h3>장애부위별 상태</h3><span class="small muted">대상 = 그 상태인 부품 수 / 전체 · 줄을 누르면 가장 급한 부품 상세 · "문 목록"은 어느 문인지</span></div>
-        <div class="scroll"><table class="ptable"><tr><th>장애부위</th><th>상태</th><th>대상</th><th>다음 교체</th><th>남은 기간</th><th></th></tr>${rows}</table></div>
+        <div class="headrow"><h3>장애부위별 상태</h3><div class="seg" role="group" aria-label="보기 방식"><button type="button" class="segbtn" data-pstab="sum" aria-pressed="${psTab === "sum"}">장애부위별 요약</button><button type="button" class="segbtn" data-pstab="all" aria-pressed="${psTab === "all"}">부품 전체 표 (${total.toLocaleString()}개)</button></div></div>
+        <p class="small muted" id="ps-hint" style="margin:0 0 8px"></p>
+        <div id="ps-sum"><div class="scroll"><table class="ptable"><tr><th>장애부위</th><th>상태</th><th>대상</th><th>다음 교체</th><th>남은 기간</th><th></th></tr>${rows}</table></div></div>
+        <div id="ps-all" hidden></div>
       </div>`;
   }
   async function copyText(text) {
@@ -1618,6 +1709,9 @@ details.more[open] > summary { margin-bottom: 10px; }
     return ok;
   }
   function setupPartSummary(box) {
+    if (view.plist && !view.keep) psTab = "sum";  // 현황에서 "문 N개"로 들어오면 문 목록이 있는 요약으로
+    box.querySelectorAll("[data-pstab]").forEach(b => b.addEventListener("click", () => { psTab = b.dataset.pstab; showPsTab(box); }));
+    showPsTab(box);
     box.querySelectorAll("[data-pltoggle]").forEach(b => b.addEventListener("click", e => {
       e.stopPropagation();  // 줄 전체가 부품 상세로 가는 버튼이라 막는다
       const row = box.querySelector(`.plist[data-pl="${b.dataset.pltoggle}"]`);
@@ -1664,6 +1758,71 @@ details.more[open] > summary { margin-bottom: 10px; }
             <div class="scroll"><table class="ptable"><tr><th>장애부위</th><th>상태</th><th>교체주기</th><th>다음 교체</th><th>남은 기간</th></tr>${partRows}</table></div>
           </div>
         </div>`;
+  }
+  // ---------- 역 공통 장비 그림(2026-11-27) ----------
+  // 문에 달리지 않은 장비(역·선로에 하나씩)를 승강장 모양으로 놓는다. 칸은 대분류 이름으로 정해, 분류표가 바뀌어도 새 소분류가
+  // 알맞은 칸에 들어가고 맞는 칸이 없으면 "그 밖"에 놓인다. 칩 색 = 상태, 아래 숫자 = 다음 교체 연.월, 누르면 부품 상세.
+  const ST_ZONES = [
+    { key: "show", label: "현시 — 승강장 위", match: g => g.includes("현시") },
+    { key: "door", label: "문 — 승강장 끝·벽", match: g => g.includes("도어") },
+    { key: "ctrl", label: "제어반", match: g => g.includes("제어") },
+    { key: "power", label: "전원", match: g => g.includes("전원") },
+    { key: "track", label: "선로 쪽 센서·통신", match: g => g.includes("센서") || g.includes("통신") },
+  ];
+  const textW = s => [...s].reduce((n, ch) => n + (ch.charCodeAt(0) > 0x2e80 ? 12 : 7.2), 0);
+  function stationEquipPanel(parts) {
+    const items = PART_TYPES.filter(p => p.unit === "station" && parts[p.code])
+      .map(p => ({ p, x: parts[p.code], label: p.name.replace(/\s*\(.*\)\s*/, "") }));
+    if (!items.length) return "";
+    const by = {};
+    items.forEach(it => { const z = (ST_ZONES.find(z => z.match(it.p.group || "")) || { key: "etc" }).key; (by[z] = by[z] || []).push(it); });
+    const W = 720, L = 16, R = 704, PAD = 10, ROW = 46, CAP = 22, GAP = 12;
+    const place = (x, w, list) => {  // 칸 안에서 왼쪽부터 놓고 넘치면 다음 줄
+      let cx = x + PAD, row = 0;
+      const out = (list || []).map(it => {
+        const cw = Math.max(52, Math.ceil(textW(it.label)) + 18);
+        if (cx + cw > x + w - PAD && cx > x + PAD) { row++; cx = x + PAD; }
+        const r = { ...it, cx, row, cw }; cx += cw + 8; return r;
+      });
+      return { out, rows: out.length ? row + 1 : 0 };
+    };
+    const chip = (it, y0) => {
+      const y = y0 + CAP + it.row * ROW, x0 = it.x;
+      return `<g class="chip c-${x0.status}" tabindex="0" role="link" aria-label="${esc(it.p.name + " " + STATE[x0.status][0] + " · 다음 교체 " + dotDate(x0.due))}" ${goAttr({ name: "part", partId: x0.part_id })}><title>${esc(it.p.name)} · ${STATE[x0.status][0]} · ${dotDate(x0.due)} (${dur(x0.days_left)})</title><rect x="${it.cx}" y="${y}" width="${it.cw}" height="24" rx="5"/><text x="${it.cx + it.cw / 2}" y="${y + 16}" text-anchor="middle">${esc(it.label)}</text></g>`
+        + `<text class="due" x="${it.cx + it.cw / 2}" y="${y + 37}" text-anchor="middle">${dotDate(x0.due).slice(0, 7)}</text>`;
+    };
+    const zone = (x, y, w, h, label, placed) => `<rect class="zone" x="${x}" y="${y}" width="${w}" height="${h}" rx="6"/><text class="zcap" x="${x + 8}" y="${y + 15}">${label}</text>${placed.out.map(it => chip(it, y)).join("")}`;
+    const hOf = rows => CAP + Math.max(1, rows) * ROW;
+    let y = 8, svg = "";
+    if (by.show) { const p = place(L, R - L, by.show), h = hOf(p.rows); svg += zone(L, y, R - L, h, ST_ZONES[0].label, p); y += h + GAP; }
+    // 가운데 줄: 문·제어반·전원(있는 칸만 나란히) — 승강장 바닥 위
+    const mid = ["door", "ctrl", "power"].filter(k => by[k]);
+    if (mid.length) {
+      const w = (R - L - GAP * (mid.length - 1)) / mid.length;
+      const ps = mid.map((k, i) => ({ k, x: L + i * (w + GAP), p: place(L + i * (w + GAP), w, by[k]) }));
+      const h = hOf(Math.max(...ps.map(q => q.p.rows)));
+      svg += `<rect class="plat" x="${L - 8}" y="${y - 6}" width="${R - L + 16}" height="${h + 12}" rx="4"/>`;
+      svg += ps.map(q => zone(q.x, y, w, h, ST_ZONES.find(z => z.key === q.k).label, q.p)).join("");
+      y += h + 6;
+      svg += `<line class="edge" x1="${L - 8}" x2="${R + 8}" y1="${y}" y2="${y}"/>`;
+      y += GAP;
+    }
+    if (by.track) {
+      const p = place(L, R - L, by.track), h = hOf(p.rows);
+      svg += zone(L, y, R - L, h, ST_ZONES[4].label, p);
+      y += h + 10;
+      const ties = Array.from({ length: 24 }, (_, i) => `<line class="tie" x1="${L + 8 + i * 29}" x2="${L + 8 + i * 29}" y1="${y - 3}" y2="${y + 15}"/>`).join("");
+      svg += `${ties}<line class="rl" x1="${L - 8}" x2="${R + 8}" y1="${y}" y2="${y}"/><line class="rl" x1="${L - 8}" x2="${R + 8}" y1="${y + 12}" y2="${y + 12}"/>`;
+      y += 22;
+    }
+    if (by.etc) { const p = place(L, R - L, by.etc), h = hOf(p.rows); svg += zone(L, y, R - L, h, "그 밖", p); y += h + GAP; }
+    const H = y + 4;
+    const worst = items.filter(it => it.x.status !== "초록").length;
+    return `<div class="panel">
+        <div class="headrow"><h3>역 공통 장비</h3><span class="small muted">문에 달리지 않고 역·선로에 하나씩 있는 장비 ${items.length}종${worst ? ` · 안전이 아닌 것 ${worst}종` : ""} · 아래 숫자는 다음 교체 연.월 · 누르면 상세</span></div>
+        <svg class="stsvg" viewBox="0 0 ${W} ${H}" role="img" aria-label="역 공통 장비 배치와 상태">${svg}</svg>
+        <p class="small muted" style="margin:6px 0 0">자리는 장비 종류(현시·문·제어반·전원·선로 쪽)로 나눈 그림이고, 실제 설치 위치와는 다를 수 있습니다.</p>
+      </div>`;
   }
   // 문을 누를 때마다 역 화면 전체를 다시 그리면("불러오는 중…"으로 비웠다 채움) 스크롤과 문 줄의 가로 스크롤이
   // 튀었다(2026-11-02). 누른 문 표시만 옮기고 아래 칸만 새로 받아 바꾼다. 주소는 전처럼 남겨 뒤로 가기가 된다
@@ -1742,13 +1901,14 @@ details.more[open] > summary { margin-bottom: 10px; }
         ${repLine}
         <div class="filters"><span class="small muted">${s.name}역 보고서</span>${reportBox([], s.id)}</div>
       </div>
-      ${partSummary(detail.parts, s.name, view.plist)}
+      ${partSummary(detail.parts, s.name, view.plist, detail.sides)}
       <div class="panel">
         <div class="psdhead"><h3>승강장 안전문</h3>${dirTabs}</div>
         ${strip}
         <div class="legend">${pill("빨강")}<span class="muted">6개월 이하</span><span class="${zeroCls(c.확인_필요)}">${pill("확인_필요")} <span class="muted">기록 없이 지남</span></span>${pill("노랑")}<span class="muted">1년 이하</span>${pill("초록")}<span class="muted">여유</span>${repDoors.length ? `<span class="repbadge">↻ 반복</span><span class="muted">반복 고장 의심</span>` : ""}</div>
       </div>
       <div class="panel doorpanel">${doorPanel(doorDetail)}</div>
+      ${stationEquipPanel(detail.parts)}
       </div></div>
     </section>`;
   }
