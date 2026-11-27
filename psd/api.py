@@ -70,6 +70,10 @@ async def _lifespan(_app):
             link.log.warning("DB 구조 맞춤: %s", msg)
     except Exception:
         link.log.exception("연동 표를 만들지 못했습니다")
+    try:
+        _ensure_weather_table()
+    except Exception:
+        link.log.exception("날씨 설정 표를 만들지 못했습니다")
     if os.environ.get("PSD_LINK_WATCH", "1") != "0":
         _link_watcher.start()
     yield
@@ -482,6 +486,82 @@ def _repeat_dict(r: DoorRepeat) -> dict:
 
 
 REPEAT_RULE = {"window_years": REPEAT_WINDOW_YEARS, "min_failures": REPEAT_MIN_FAILURES, "p_max": REPEAT_P_MAX}
+
+
+# ---------- 교체주기 모델의 날씨 민감도와 담당자 수동 0 (psd/calibrate.py, 설계 3장, 2026-11-27) ----------
+
+
+def _ensure_weather_table() -> None:
+    from psd.models import WeatherSetting
+
+    WeatherSetting.__table__.create(engine, checkfirst=True)
+
+
+class WeatherSettingIn(BaseModel):
+    part_type_code: str
+    bundle: str
+    enabled: bool
+    updated_by: str | None = Field(default=None, max_length=50)
+    reason: str | None = Field(default=None, max_length=200)
+
+
+@app.get("/api/weather-sensitivity")
+def weather_sensitivity(db: Session = Depends(get_db)):
+    """장애부위마다 날씨 민감도(습기·열·추위·바람)와 그 근거(같은 역·같은 달 안 비율비), 담당자 설정, 역 사이 주기 차이."""
+    from psd.calibrate import WEATHER_BUNDLES, WEATHER_MIN_FAILURES, W_PRIOR_ZERO, W_PRIOR_ZERO_HUMID
+    from psd.models import WeatherSetting
+
+    cal = calibration_map(db)
+    try:
+        settings = {(r.part_type_code, r.bundle): r for r in db.execute(select(WeatherSetting)).scalars()}
+    except Exception:
+        db.rollback()
+        settings = {}
+    out = []
+    for p in PART_TYPES:
+        rows = [c for (sid, code), c in cal.items() if code == p["code"]]
+        if not rows:
+            continue
+        info = rows[0].weather or {}
+        speeds = [c.speed for c in rows]
+        years = [c.years for c in rows]
+        out.append({
+            "code": p["code"], "name": p["name"], "group": p["group"].replace(" 장애", ""), "formula": p["formula"],
+            "failures": sum(c.failures for c in rows), "estimated": bool(info.get("estimated")), "reason": info.get("reason", ""),
+            "w": info.get("w", {}), "p": info.get("p", {}), "rr": info.get("rr", {}), "off": info.get("off", []),
+            "speed_min": round(min(speeds), 3), "speed_max": round(max(speeds), 3),
+            "years_min": round(min(years), 2), "years_max": round(max(years), 2),
+            "settings": {b: {"enabled": r.enabled, "updated_by": r.updated_by, "reason": r.reason, "updated_at": r.updated_at}
+                         for (c, b), r in settings.items() if c == p["code"]},
+        })
+    return {"bundles": list(WEATHER_BUNDLES), "min_failures": WEATHER_MIN_FAILURES,
+            "prior_zero": W_PRIOR_ZERO, "prior_zero_humid": W_PRIOR_ZERO_HUMID, "parts": out}
+
+
+@app.post("/api/weather-sensitivity")
+def set_weather_setting(body: WeatherSettingIn, background: BackgroundTasks, db: Session = Depends(get_db)):
+    """담당자가 장애부위 × 묶음의 날씨 학습을 끄거나(민감도 0 고정) 다시 켠다. 바꾼 사람·때·이유를 남긴다.
+    주기가 다시 계산되고(캐시 열쇠에 이 표가 들어 있다), AI 위험도 모델도 기록이 바뀐 것처럼 다시 학습한다."""
+    from psd.calibrate import WEATHER_BUNDLES
+    from psd.models import WeatherSetting
+
+    if body.part_type_code not in NAME_BY_CODE:
+        raise HTTPException(400, "모르는 장애부위입니다")
+    if body.bundle not in WEATHER_BUNDLES:
+        raise HTTPException(400, "모르는 날씨 묶음입니다")
+    _ensure_weather_table()
+    row = db.execute(select(WeatherSetting).where(WeatherSetting.part_type_code == body.part_type_code,
+                                                  WeatherSetting.bundle == body.bundle)).scalar_one_or_none()
+    if row is None:
+        row = WeatherSetting(part_type_code=body.part_type_code, bundle=body.bundle)
+        db.add(row)
+    row.enabled = body.enabled
+    row.updated_at = datetime.now().replace(microsecond=0)
+    row.updated_by = (body.updated_by or "").strip() or None
+    row.reason = (body.reason or "").strip() or None
+    db.commit()
+    _auto_retrain(background, "manual")
+    return {"ok": True, "part_type_code": body.part_type_code, "bundle": body.bundle, "enabled": body.enabled}
 
 
 # ---------- 역별·시기별 고장 분석 (psd/analysis.py, 날씨_역분석_엑셀연동_설계.md 1·2장, 2026-11-27) ----------

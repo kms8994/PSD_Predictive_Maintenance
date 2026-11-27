@@ -248,3 +248,22 @@ class LinkEvent(Base):
     path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     message: Mapped[str] = mapped_column(String(500))
+
+
+class WeatherSetting(Base):
+    """교체주기 모델의 날씨 민감도 수동 설정(2026-11-27, 날씨_역분석_엑셀연동_설계.md 3장 "담당자 수동 0").
+
+    기본은 모두 "자동"(표에 줄이 없음) — 기록이 날씨 영향을 충분히 보여 줄 때만 민감도가 커진다(psd/calibrate.py).
+    담당자가 "이 장애부위는 이 날씨를 학습할 필요 없음"이라고 하면 enabled=False로 두어 민감도를 0으로 고정한다.
+    줄은 지우지 않고 바꿀 때마다 덮어쓰며, 바꾼 사람·때·이유를 남긴다.
+    """
+
+    __tablename__ = "weather_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    part_type_code: Mapped[str] = mapped_column(String(20))
+    bundle: Mapped[str] = mapped_column(String(10))  # "humid" | "heat" | "cold" | "wind"
+    enabled: Mapped[bool] = mapped_column(default=True)  # False = 민감도 0으로 고정
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime)
+    updated_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(200), nullable=True)

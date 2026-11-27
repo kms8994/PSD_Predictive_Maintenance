@@ -947,6 +947,8 @@ details.more[open] > summary { margin-bottom: 10px; }
     if (ps) setupPartSummary(ps);
     const an = app.querySelector("#analysis");
     if (an) setupAnalysis(an);
+    const wsb = app.querySelector("#wsens");
+    if (wsb) setupWeatherSens(wsb);
     const xf = app.querySelector("#xlsxform");
     if (xf) setupUploadForm(xf);
     const lkb = app.querySelector("#lkbox");
@@ -1543,10 +1545,50 @@ details.more[open] > summary { margin-bottom: 10px; }
     if (pb) pb.addEventListener("click", async () => { pb.disabled = true; try { await loadAnalysisParts(box); } catch (e) { toast(e.message); } finally { pb.disabled = false; } });
     if (view.ast && !view.keep) { const el = box.querySelector("#an-st"); if (el) el.scrollIntoView({ block: "start" }); }
   }
+  // ---------- 교체주기 모델의 날씨 민감도 + 담당자 수동 0 (2026-11-27, psd/calibrate.py, 설계 3장) ----------
+  const WS_LABEL = { humid: "습기", heat: "열", cold: "추위", wind: "바람" };
+  function weatherSensPanel(ws) {
+    const cell = (x, b) => {
+      const off = x.off.includes(b);
+      const btn = `<button type="button" class="linkbtn small" style="padding:0" data-ws="${x.code}|${b}|${off ? "on" : "off"}">${off ? "다시 켜기" : "끄기"}</button>`;
+      const setBy = x.settings[b] && !x.settings[b].enabled ? `<span class="small muted" title="${esc((x.settings[b].reason || "") + (x.settings[b].updated_by ? " · " + x.settings[b].updated_by : ""))}">담당자가 끔</span>` : "";
+      if (off) return `<td>${setBy || '<span class="small muted">꺼짐</span>'}<br>${btn}</td>`;
+      if (!x.estimated) return `<td class="muted small">-<br>${btn}</td>`;
+      const w = x.w[b] || 0, pr = x.p[b] || 0, r = x.rr && x.rr[b];
+      const strong = pr >= 0.8 && w >= 0.1;
+      const tip = r ? `같은 역·같은 달 안에서 평년보다 ${WS_LABEL[b]} 높은 날의 고장이 ${r.rr.toFixed(2)}배 (80% ${r.lo.toFixed(2)}~${r.hi.toFixed(2)}, 고장 ${r.obs}건)` : "";
+      return `<td class="num" title="${esc(tip)}">${strong ? `<b>${w.toFixed(2)}</b> ${vchip("잦음").replace("잦음", "영향 있음")}` : `${w.toFixed(2)}`} <span class="small muted">(${Math.round(pr * 100)}%)</span><br>${btn}</td>`;
+    };
+    const rows = ws.parts.map(x => `<tr><td><b>${esc(x.name)}</b> <span class="small muted">${esc(x.group)}</span><div class="small muted">${x.estimated ? `고장 ${x.failures}건` : esc(x.reason)}</div></td>
+        ${ws.bundles.map(b => cell(x, b)).join("")}
+        <td class="num small">${x.speed_max - x.speed_min > 0.005 ? `${x.speed_min.toFixed(2)}~${x.speed_max.toFixed(2)}배` : '<span class="muted">-</span>'}</td></tr>`).join("");
+    return `<div class="panel" id="wsens">
+        <div class="headrow"><h3>장애부위별 날씨 민감도 <span class="small muted">교체주기 모델</span></h3></div>
+        <p class="small muted">민감도 = 그 날씨가 평소의 2배인 날에 나이를 몇 배 더 먹는지(0이면 무관, 0.4면 1.4배). 같은 역·같은 달 안에서 평년보다 그 날씨가 높은 날과 낮은 날의 고장을 견줘 재고, 0 쪽에 무게(습기 ${Math.round(ws.prior_zero_humid * 100)}%, 나머지 ${Math.round(ws.prior_zero * 100)}%)를 둔 채 시작해 기록이 충분히 보여 줄 때만 커집니다. 괄호 = 영향이 있을 확률. 고장이 ${ws.min_failures}건 안 되는 장애부위와 날씨 공식이 이미 있는 모터·DCU는 재지 않습니다. <b>끄기</b>는 담당자가 "이 장애부위는 이 날씨를 학습할 필요 없음"이라고 판단할 때 — 민감도를 0으로 고정하고 이력을 남깁니다(주기를 다시 계산합니다).</p>
+        <div class="scroll"><table class="ptable antable"><thead><tr><th>장애부위</th>${ws.bundles.map(b => `<th>${WS_LABEL[b]}</th>`).join("")}<th>역 사이 나이 먹는 속도</th></tr></thead><tbody>${rows}</tbody></table></div>
+      </div>`;
+  }
+  function setupWeatherSens(box) {
+    box.querySelectorAll("[data-ws]").forEach(b => b.addEventListener("click", async () => {
+      const [code, bundle, act] = b.dataset.ws.split("|");
+      const name = (PART[code] || {}).name || code;
+      let reason = null;
+      if (act === "off") {
+        reason = prompt(`${name}의 ${WS_LABEL[bundle]} 학습을 끕니다(민감도 0으로 고정). 이유를 적어 주세요(선택).`, "");
+        if (reason === null) return;
+      }
+      b.disabled = true;
+      try {
+        await apiPost("/api/weather-sensitivity", { part_type_code: code, bundle, enabled: act === "on", reason });
+        toast(act === "on" ? `${name} ${WS_LABEL[bundle]} 학습을 다시 켰습니다.` : `${name} ${WS_LABEL[bundle]} 학습을 껐습니다.`);
+        go({ ...view, keep: true });
+      } catch (e) { toast(e.message); b.disabled = false; }
+    }));
+  }
   async function vModel() {
     const riskQs = "/api/risk?limit=200" + (view.ast ? "&station_id=" + view.ast : "");
-    const [d, vf, risk, st] = await Promise.all([api("/api/risk-models"), api("/api/virtual-field"),
-      api(riskQs).catch(() => ({ model: null, parts: [] })), api("/api/stations")]);
+    const [d, vf, risk, st, ws] = await Promise.all([api("/api/risk-models"), api("/api/virtual-field"),
+      api(riskQs).catch(() => ({ model: null, parts: [] })), api("/api/stations"), api("/api/weather-sensitivity").catch(() => null)]);
     const a = d.active, rt = d.retrain;
     const run = rt.running ? `<p class="small"><b>학습하는 중…</b> ${dotDate(String(rt.started_at).slice(0, 10))} 시작. 30초 안팎 걸립니다. 끝나면 이 화면을 다시 열어 보세요.</p>` : "";
     const err = rt.error ? `<p class="err">지난 학습이 실패했습니다: ${esc(rt.error)} — 지금 모델을 그대로 씁니다.</p>` : "";
@@ -1573,6 +1615,7 @@ details.more[open] > summary { margin-bottom: 10px; }
       ${run}${err}
       ${riskTable(risk, st.stations)}
       ${head}
+      ${ws ? weatherSensPanel(ws) : ""}
       <div class="panel">
         <div class="headrow"><h3>학습 이력</h3><button class="btn ghost" id="mdl-retrain" type="button" ${rt.running ? "disabled" : ""}>지금 다시 학습</button></div>
         <p class="small muted">정비기록을 올리거나 되돌리면 자동으로 다시 학습합니다. 새 모델과 지금 모델을 <b>둘 다 학습 때 못 본 최근 기간</b>으로 맞혀 보고, 새 모델이 지지 않을 때만 바꿉니다(AUC 0.005 이내는 같은 것으로 봄). 기록이 그대로면 학습하지 않습니다.</p>

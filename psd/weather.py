@@ -156,3 +156,23 @@ def station_profile() -> pd.DataFrame:
     """지점별 평균 묶음 점수(역 차이를 한눈에). 행 = 지점, 열 = 묶음."""
     s = daily_stress()
     return s.groupby("stn")[list(BUNDLES)].mean()
+
+
+def station_day_matrix(aws_stns: list[str], day0: date, n_days: int, columns: list[str] | None = None) -> dict[str, np.ndarray]:
+    """지점 목록 × 날(day0부터 n_days일)의 묶음 점수 등 행렬. 자료 밖의 날은 가장 가까운 해의 같은 날, 빠진 날은 1(평소).
+    교체주기 모델의 유효 시간(psd/calibrate.py)과 분석(psd/analysis.py)이 같이 쓴다."""
+    columns = columns or list(BUNDLES)
+    s = daily_stress()
+    first, last = min(s["date"]), max(s["date"])
+    days = [day0 + pd.Timedelta(days=i).to_pytimedelta() for i in range(n_days)]
+    src = [d if first <= d <= last else _source_day(d, first, last) for d in days]
+    out = {c: np.ones((len(aws_stns), n_days)) for c in columns}
+    for i, stn in enumerate(aws_stns):
+        g = s[s["stn"] == str(stn)].set_index("date")
+        if g.empty:
+            continue
+        gi = g.reindex(src)
+        for c in columns:
+            v = gi[c].to_numpy(dtype=float)
+            out[c][i] = np.where(np.isfinite(v), v, 1.0 if not c.endswith("_anom") else 0.0)
+    return out

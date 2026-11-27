@@ -30,6 +30,21 @@ v2(2026-11-16, 데이터셋_v2_설계.md 4장)에서 바꾼 것 — 숨은 정�
 - 사전조치(예방)는 그때까지 고장 안 났다는 중도절단이고, 조치만큼 나이가 줄어든다.
 - 기록은 달력 시간으로 센다(날씨로 빨라지는 계절 차이는 1년 평균으로 보면 공식 주기에 이미 들어 있다).
 - 데이터가 적어 일반 ML을 역 x 부품마다 따로 학습하는 건 맞지 않는다 — 공식 값에서 출발해 기록이 쌓일수록 옮겨 간다.
+
+**날씨 민감도(2026-11-27, 날씨_역분석_엑셀연동_설계.md 3장)** — 모든 소분류에 날씨를 넣고, 영향이 적으면 자동으로 0에 머문다:
+- 기록을 달력 시간 대신 **유효 시간**으로 센다: 하루 = 1 + Σ w_묶음 × (그날 그 역 묶음 점수 − 1)(psd/weather.py, 평소 하루 = 1).
+  습한 날이 많은 역·시기에 쓴 기간은 더 길게 센다 → 같은 고장 기록이 "습한 역은 덜 버틴다"로 설명된다.
+- w(민감도)는 소분류 × 묶음(습기·열·추위·바람)마다 **같은 역·같은 달 안에서 평년보다 그 묶음이 높은 날과 낮은 날의 고장
+  비율비**(층화 Mantel-Haenszel, psd/analysis.py와 같은 방법)로 잰다. 유효 시간 모델에선 그날 고장 확률이 그날 나이 먹는 속도에
+  비례하므로 비율비 = (1 + w(높은 날 평균 점수 − 1)) / (1 + w(낮은 날 평균 점수 − 1)) — 이걸 거꾸로 풀어 후보 W_GRID 위 사후분포를
+  낸다. 사전확률은 0에 60%를 둬서 기록이 영향을 충분히 보여 줄 때만 커진다("자동으로 가중치가 떨어지는" 장치). 습기만 현장
+  의견("습도가 중요한 것 같다")대로 0에 40%로 조금 기울였다.
+  처음엔 와이블 우도 자체로 w를 골랐는데, 사용개시가 한겨울(2022-01)이라 추위 민감도가 "처음부터 나이를 좀 먹고 시작"한 효과를
+  흉내 내 날씨와 무관한 소분류까지 추위 0.6으로 뽑혔다(2026-11-27). 같은 달 안 비교는 계절·사용개시 시점과 섞이지 않는다.
+- 담당자가 끈 칸(weather_settings 표, enabled=False)은 0으로 고정한다.
+- 고장이 WEATHER_MIN_FAILURES건 안 되는 소분류, 날씨 공식이 이미 있는 소분류(모터·DCU)는 재지 않는다(공식과 두 번 넣지 않게).
+- 결과 주기(유효 연)를 역마다 달력 연으로 바꾼다: 달력 주기 = 유효 주기 ÷ 그 역의 평균 속도(1 + Σ w × (그 역 평균 점수 − 1)).
+- 날씨로 쌓인 나이도 조치 규칙(AGE_FACTOR: 교체 0, 단순교체 절반, 수리·조정 그대로 — 가정)을 그대로 따른다.
 """
 from __future__ import annotations
 
@@ -68,6 +83,14 @@ TAU_PRIOR_MEDIAN, TAU_PRIOR_SIGMA = 0.15, 0.7
 # 수리·조정·리셋·기타는 1(고장 직전과 같음). 현장 판단으로 바꿀 값(향후_방향_MVP이후.md 5절).
 # 더미 생성기(scripts/generate_dummy_records.py)의 단순교체 0.4와 일부러 맞추지 않았다: 맞추면 정답을 알려 주는 셈이다
 AGE_FACTOR = {"full": 0.0, "partial": 0.5, "repair": 1.0, "adjust": 1.0, "reset": 1.0, "other": 1.0}
+# 날씨 민감도(2026-11-27, 맨 위 설명)
+WEATHER_BUNDLES = ("humid", "heat", "cold", "wind")
+W_GRID = np.array([0.0, 0.2, 0.4, 0.6])  # 민감도 후보
+W_PRIOR_ZERO = 0.6  # 민감도 0의 사전확률 — 기록이 충분히 보여 줄 때만 커지게
+W_PRIOR_ZERO_HUMID = 0.4  # 습기만 현장 의견대로 조금 기울임
+W_MAX_TOTAL = 0.8  # 민감도 합 상한(나이 먹는 속도가 음수가 되지 않게)
+WEATHER_MIN_FAILURES = 15  # 이보다 고장이 적은 소분류는 재지 않는다
+WEATHER_FORMULAS = ("dcm", "motor", "humid")  # 날씨 공식이 이미 있는 소분류 — 공식으로만(두 번 넣지 않게)
 RANGE_PROB = 0.8  # lo~hi는 80% 범위
 N_DRAWS = 4000  # 범위를 낼 때 사후분포에서 뽑는 수(시드 고정이라 같은 기록이면 같은 범위)
 
@@ -93,6 +116,8 @@ class Calibrated:
     bias: float = 1.0  # 이 부품 종류의 공식 치우침 κ(사후, 전 역 공통) — 1보다 작으면 공식이 길게 잡았다는 뜻
     tau: float = math.nan  # 역 사이 흩어짐 τ(사후, log 표준편차)
     prior_weight: float = PRIOR_FAILURES  # 사전값의 무게(고장 몇 건만큼 공식을 믿었나, 사후 평균)
+    weather: dict | None = None  # 이 소분류의 날씨 민감도(전 역 공통): {"estimated", "reason", "w": {묶음: 값}, "p": {묶음: P(w>0)}, "off": [...]}
+    speed: float = 1.0  # 이 역의 평균 나이 먹는 속도(1 + Σ w × (역 평균 점수 − 1)). 달력 주기 = 유효 주기 ÷ speed
 
     @property
     def capped(self) -> bool:
@@ -126,55 +151,69 @@ def fit_group(formulas: list[float], groups: list[list[tuple]], seed: int = 0, b
     """같은 부품 종류의 여러 역을 함께 보정한다. formulas[g]는 역 g의 공식 주기, groups[g]는 그 역 구간 목록.
     β(형상)·κ(공식 치우침)·τ(역 사이 흩어짐)는 모두 함께 추정하고, 척도·주기·범위는 역마다 낸다.
     bias_sigma: κ 사전분포의 폭(공식이 없는 소분류는 BIAS_PRIOR_SIGMA_NO_FORMULA)."""
-    G = len(formulas)
-    F = np.asarray(formulas, dtype=float)
     ints = [[_as_interval(i) for i in g if _as_interval(i)[1] > 0] for g in groups]
     gi = np.array([g for g, lst in enumerate(ints) for _ in lst], dtype=int)
     v = np.array([i[0] for lst in ints for i in lst], dtype=float)
     x = np.array([i[1] for lst in ints for i in lst], dtype=float)
     failed = np.array([i[2] for lst in ints for i in lst], dtype=bool)
+    return _fit_arrays(np.asarray(formulas, dtype=float), gi, v, x, failed, x, seed=seed, bias_sigma=bias_sigma)
+
+
+def _fit_arrays(F: np.ndarray, gi: np.ndarray, v: np.ndarray, x: np.ndarray, failed: np.ndarray, x_cal: np.ndarray, seed: int = 0,
+                bias_sigma: float = BIAS_PRIOR_SIGMA, evidence_only: bool = False, coarse: bool = False):
+    """fit_group의 본체(구간을 배열로 받는다). x는 수명 계산에 쓰는 기간(유효 시간일 수 있음), x_cal은 달력 기간(지켜본 기간 표시용).
+    evidence_only면 (β, κ, τ)를 모두 더한 주변우도의 log만 돌려준다(날씨 민감도 후보를 견줄 때). coarse면 격자를 반만 쓴다(빠르게)."""
+    G = len(F)
+    keep = x > 0
+    gi, v, x, failed, x_cal = gi[keep], v[keep], x[keep], failed[keep], x_cal[keep]
     end = v + x
     n = np.bincount(gi[failed], minlength=G).astype(float)
     T = np.bincount(gi[failed], weights=np.log(end[failed]), minlength=G)
 
     from scipy.special import gammaln
 
-    K, J, L = len(SHAPE_GRID), len(BIAS_GRID), len(TAU_GRID)
-    B = SHAPE_GRID[:, None, None, None]  # (K, 1, 1, 1)
-    gam = np.array([math.gamma(1 + 1 / b) for b in SHAPE_GRID])[:, None, None, None]
-    S = np.stack([np.bincount(gi, weights=end ** b - v ** b, minlength=G) for b in SHAPE_GRID]) if len(gi) else np.zeros((K, G))
+    sl = slice(None, None, 2) if coarse else slice(None)
+    SG, BG, TG = SHAPE_GRID[sl], BIAS_GRID[sl], TAU_GRID[sl]
+    K, J, L = len(SG), len(BG), len(TG)
+    B = SG[:, None, None, None]  # (K, 1, 1, 1)
+    gam = np.array([math.gamma(1 + 1 / b) for b in SG])[:, None, None, None]
+    S = np.stack([np.bincount(gi, weights=end ** b - v ** b, minlength=G) for b in SG]) if len(gi) else np.zeros((K, G))
     S = S[:, None, None, :]  # (K, 1, 1, G)
     # 사전값의 무게 a0: 역 사이 평균 수명의 흩어짐 τ(log 표준편차)에 맞춘다 — Gamma(a0)의 log 분산 ≈ 1/a0이고
     # log 평균 수명 = −log λ / β라서 a0 ≈ 1/(βτ)² + 0.5. β가 작을수록(우연 고장) 같은 τ에 더 무거운 사전값이 된다
-    a0 = 1 / (B * TAU_GRID[None, None, :, None]) ** 2 + 0.5  # (K, 1, L, 1)
-    b0 = a0 * (F[None, None, None, :] * BIAS_GRID[None, :, None, None] / gam) ** B  # (K, J, L, G): 사전 평균 수명 = 공식 × κ
+    a0 = 1 / (B * TG[None, None, :, None]) ** 2 + 0.5  # (K, 1, L, 1)
+    b0 = a0 * (F[None, None, None, :] * BG[None, :, None, None] / gam) ** B  # (K, J, L, G): 사전 평균 수명 = 공식 × κ
     a = a0 + n[None, None, None, :]
     b = b0 + S
     log_m = n * np.log(B) + (B - 1) * T + a0 * np.log(b0) - gammaln(a0) + gammaln(a) - a * np.log(b)
-    log_post = (log_m.sum(axis=3) + _shape_log_prior()[:, None, None] + _bias_log_prior(bias_sigma)[None, :, None]
-                + _tau_log_prior()[None, None, :])  # (K, J, L)
-    w = np.exp(log_post - log_post.max())
+    log_post = (log_m.sum(axis=3) + _shape_log_prior()[sl][:, None, None] + _bias_log_prior(bias_sigma)[sl][None, :, None]
+                + _tau_log_prior()[sl][None, None, :])  # (K, J, L)
+    top = log_post.max()
+    if evidence_only:
+        return float(top + math.log(np.exp(log_post - top).sum()))
+    w = np.exp(log_post - top)
     w /= w.sum()
 
     # 점 추정은 사후분포로 평균한 log(평균 수명)의 지수 — 기록이 없으면 κ 사전분포가 log 대칭이라 정확히 F
     point = np.exp((w[..., None] * np.log(gam * (b / a) ** (1 / B))).sum(axis=(0, 1, 2)))
-    shape_mean = float((w.sum(axis=(1, 2)) * SHAPE_GRID).sum())
-    bias_mean = float(np.exp((w.sum(axis=(0, 2)) * np.log(BIAS_GRID)).sum()))
-    tau_mean = float(np.exp((w.sum(axis=(0, 1)) * np.log(TAU_GRID)).sum()))
+    shape_mean = float((w.sum(axis=(1, 2)) * SG).sum())
+    bias_mean = float(np.exp((w.sum(axis=(0, 2)) * np.log(BG)).sum()))
+    tau_mean = float(np.exp((w.sum(axis=(0, 1)) * np.log(TG)).sum()))
     prior_weight = float((w * a0[:, :, :, 0]).sum())
     rng = np.random.default_rng(seed)
     flat = rng.choice(K * J * L, size=N_DRAWS, p=w.ravel())
     k, j, ll = flat // (J * L), (flat // L) % J, flat % L
     q = ((1 - RANGE_PROB) / 2, (1 + RANGE_PROB) / 2)
-    shape_lo, shape_hi = (float(s) for s in np.quantile(SHAPE_GRID[k], q))
+    shape_lo, shape_hi = (float(s) for s in np.quantile(SG[k], q))
     a_full = np.broadcast_to(a, b.shape)
     out = []
     for g in range(G):
         lam = rng.gamma(a_full[k, j, ll, g], 1 / b[k, j, ll, g])
-        life = gam[k, 0, 0, 0] * lam ** (-1 / SHAPE_GRID[k])
+        life = gam[k, 0, 0, 0] * lam ** (-1 / SG[k])
         lo, hi = np.quantile(life, q)
         raw = float(point[g])
-        out.append(Calibrated(float(F[g]), min(raw, MAX_YEARS), int(n[g]), len(ints[g]), float(sum(i[1] for i in ints[g])), raw,
+        mine = gi == g
+        out.append(Calibrated(float(F[g]), min(raw, MAX_YEARS), int(n[g]), int(mine.sum()), float(x_cal[mine].sum()), raw,
                               float(lo), float(hi), shape_mean, shape_lo, shape_hi, bias_mean, tau_mean, prior_weight))
     return out
 
@@ -205,6 +244,130 @@ def part_intervals(start: date, records: list[tuple], today: date, age_factor: d
     return out
 
 
+# ---------- 날씨 민감도: 유효 시간 ----------
+
+
+def part_segments(start: int, records: list[tuple], today: int, age_factor: dict[str, float] = AGE_FACTOR) -> list[tuple]:
+    """part_intervals의 날짜 판: [(시작 날 번호, 끝 날 번호, 고장으로 끝났는지, 끝난 뒤 남는 나이 비율)]. 날 번호는 day0부터.
+    records는 (날 번호, 사유 코드, 조치 코드)."""
+    out = []
+    for day, reason, *rest in sorted(records):
+        action = rest[0] if rest else "full"
+        if day <= start:
+            continue
+        out.append((start, day, reason == "fail", age_factor.get(action, 0.0)))
+        start = day
+    if today > start:
+        out.append((start, today, False, 0.0))
+    return out
+
+
+@dataclass
+class _Segs:
+    """한 소분류의 모든 부품 구간(역 그룹 g, 날씨 행 st, 부품 안 순서 pos)."""
+    g: np.ndarray
+    st: np.ndarray
+    pos: np.ndarray
+    d0: np.ndarray
+    d1: np.ndarray
+    failed: np.ndarray
+    factor: np.ndarray
+
+    @staticmethod
+    def build(per_group: list[tuple[int, list[list[tuple]]]]) -> "_Segs":
+        g, st, pos, d0, d1, f, fac = [], [], [], [], [], [], []
+        for gi, (strow, parts) in enumerate(per_group):
+            for segs in parts:
+                for k, (a, b, failed, factor) in enumerate(segs):
+                    g.append(gi), st.append(strow), pos.append(k), d0.append(a), d1.append(b), f.append(failed), fac.append(factor)
+        arr = lambda x, t: np.array(x, dtype=t)  # noqa: E731
+        return _Segs(arr(g, int), arr(st, int), arr(pos, int), arr(d0, int), arr(d1, int), arr(f, bool), arr(fac, float))
+
+    def ages(self, cum: dict[str, np.ndarray], w: dict[str, float]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(시작 가상 나이 v, 유효 기간 x, 달력 기간 x_cal). 유효 기간 = 달력 + Σ w × (그 기간 (점수 − 1) 합)."""
+        x_cal = (self.d1 - self.d0) / 365.25
+        x = x_cal.copy()
+        for b, wb in w.items():
+            if wb:
+                c = cum[b]
+                x = x + wb * (c[self.st, self.d1] - c[self.st, self.d0])
+        x = np.maximum(x, 1e-6)
+        v = np.zeros_like(x)
+        for k in range(1, int(self.pos.max()) + 1 if len(self.pos) else 1):  # 부품 안 순서대로 나이를 넘긴다(배열이 부품·순서로 정렬돼 있다)
+            i = np.flatnonzero(self.pos == k)
+            v[i] = (v[i - 1] + x[i - 1]) * self.factor[i - 1]
+        return v, x, x_cal
+
+
+def _w_log_prior(bundle: str) -> np.ndarray:
+    p0 = W_PRIOR_ZERO_HUMID if bundle == "humid" else W_PRIOR_ZERO
+    rest = (1 - p0) / (len(W_GRID) - 1)
+    return np.log(np.array([p0] + [rest] * (len(W_GRID) - 1)))
+
+
+def estimate_weather(fail_days: dict[int, list[int]], n_parts: np.ndarray, stress: dict[str, np.ndarray], anom: dict[str, np.ndarray],
+                     ym: np.ndarray, D: int, off: set[str]) -> dict:
+    """한 소분류의 묶음별 민감도(맨 위 설명). fail_days = 역 행 → 고장 날 번호들, n_parts = 역 행마다 부품 수,
+    stress/anom = 묶음 → [역 행, 날] 점수·평년 대비, ym = 날 → 해-달 번호. off(담당자가 끈 묶음)는 0으로 고정."""
+    from psd.analysis import Z80, mh_rate_ratio
+
+    S = len(n_parts)
+    O = np.zeros((S, D))
+    for srow, days in fail_days.items():
+        days = [d for d in days if 0 <= d < D]
+        np.add.at(O[srow], days, 1)
+    E = np.broadcast_to(n_parts[:, None].astype(float), (S, D))
+    strata = np.arange(S)[:, None] * 100000 + ym[None, :D]
+    w, p, rr_info = {}, {}, {}
+    for b in WEATHER_BUNDLES:
+        if b in off:
+            w[b], p[b] = 0.0, 0.0
+            continue
+        X = anom[b][:, :D] > 0
+        r = mh_rate_ratio(O, E, X, strata)
+        if not np.isfinite(r.get("rr", np.nan)) or r["lo"] <= 0:
+            w[b], p[b] = 0.0, 0.0
+            rr_info[b] = None
+            continue
+        se = (math.log(r["hi"]) - math.log(r["lo"])) / (2 * Z80)
+        hi_mean = float(np.average(stress[b][:, :D][X], weights=E[X])) if X.any() else 1.0
+        lo_mean = float(np.average(stress[b][:, :D][~X], weights=E[~X])) if (~X).any() else 1.0
+        pred = np.log((1 + W_GRID * (hi_mean - 1)) / np.maximum(1 + W_GRID * (lo_mean - 1), 1e-6))
+        lp = -0.5 * ((math.log(r["rr"]) - pred) / max(se, 1e-6)) ** 2 + _w_log_prior(b)
+        post = np.exp(lp - lp.max())
+        post /= post.sum()
+        w[b] = float((post * W_GRID).sum())
+        p[b] = float(1 - post[0])
+        rr_info[b] = {"rr": round(r["rr"], 3), "lo": round(r["lo"], 3), "hi": round(r["hi"], 3), "obs": r["obs"]}
+    total = sum(w.values())
+    if total > W_MAX_TOTAL:  # 합 상한(나이 먹는 속도가 음수가 되지 않게)
+        w = {b: v * W_MAX_TOTAL / total for b, v in w.items()}
+    return {"estimated": True, "reason": "", "w": {b: round(w[b], 3) for b in WEATHER_BUNDLES},
+            "p": {b: round(p[b], 3) for b in WEATHER_BUNDLES}, "rr": rr_info, "off": sorted(off)}
+
+
+def weather_overrides(session: Session) -> set[tuple[str, str]]:
+    """담당자가 끈 (소분류, 묶음). 표가 아직 없으면 빈 것."""
+    from psd.models import WeatherSetting
+
+    try:
+        rows = session.execute(select(WeatherSetting.part_type_code, WeatherSetting.bundle).where(WeatherSetting.enabled.is_(False))).all()
+    except Exception:  # 표가 없는 예전 DB
+        session.rollback()
+        return set()
+    return {(c, b) for c, b in rows}
+
+
+def _weather_version(session: Session) -> tuple:
+    from psd.models import WeatherSetting
+
+    try:
+        return tuple(session.execute(select(func.count(WeatherSetting.id), func.max(WeatherSetting.updated_at))).one())
+    except Exception:
+        session.rollback()
+        return (0, None)
+
+
 _cache: dict = {}  # {"key": 데이터 버전, "map": 전체 역 결과} — 마지막 한 벌만 둔다
 
 
@@ -214,7 +377,7 @@ def data_version(session: Session, today: date) -> tuple:
     rp = session.execute(select(func.count(ReplacementPart.id), func.max(ReplacementPart.id))).one()
     cr = session.execute(select(func.count(), func.sum(CycleResult.base_years)).select_from(CycleResult)).one()
     parts = session.scalar(select(func.count(Part.id)))
-    return (today, tuple(rec), tuple(rp), tuple(cr), parts)
+    return (today, tuple(rec), tuple(rp), tuple(cr), parts, _weather_version(session))
 
 
 def calibration_map(session: Session, today: date | None = None, station_id: int | None = None,
@@ -245,17 +408,78 @@ def _compute(session: Session, today: date) -> dict[tuple[int, str], Calibrated]
     for sid, door_id, code, replaced_on, reason, action in session.execute(rec_q):
         records.setdefault((sid, door_id, code), []).append((replaced_on, reason, action))
 
-    intervals: dict[tuple[int, str], list[Interval]] = {}
-    for sid, door_id, code in session.execute(select(Part.station_id, Part.door_id, Part.part_type_code)):
-        intervals.setdefault((sid, code), []).extend(part_intervals(PSD_START[sid], records.get((sid, door_id, code), []), today))
+    # 날 번호(day0부터)로 바꾼 부품별 구간 — 날씨로 유효 시간을 셀 수 있게
+    day0 = min(PSD_START.values())
+    D = max((today - day0).days, 1)
+    # 민감도를 잴 때는 마지막 기록 날까지만 본다(기록을 아직 안 올린 최근 기간은 고장이 없어 보여 비교를 흐린다)
+    data_end = max((d for lst in records.values() for d, *_ in lst), default=today)
+    D_est = max(min((data_end - day0).days, D), 1)
+    segs: dict[tuple[int, str], list[list[tuple]]] = {}
+    for sid, door_id, code in session.execute(select(Part.station_id, Part.door_id, Part.part_type_code).order_by(Part.id)):
+        recs = [((d - day0).days, r, a) for d, r, a in records.get((sid, door_id, code), [])]
+        start = (PSD_START[sid] - day0).days
+        segs.setdefault((sid, code), []).append(part_segments(start, recs, D))
+
+    # 역별 날씨 묶음의 (점수 − 1) 누적(년 단위) — cum[b][역 행, i] = 0~i−1일 합 / 365.25
+    station_ids = sorted({sid for sid, _c in formula})
+    row = {sid: i for i, sid in enumerate(station_ids)}
+    by_id = {s.id: s for s in STATIONS}
+    cum: dict[str, np.ndarray] = {}
+    mean_stress: dict[str, np.ndarray] = {}
+    try:
+        from psd.weather import station_day_matrix
+
+        mat = station_day_matrix([by_id[sid].aws_stn for sid in station_ids], day0, D,
+                                 [*WEATHER_BUNDLES, *(b + "_anom" for b in WEATHER_BUNDLES)])
+        for b in WEATHER_BUNDLES:
+            cum[b] = np.concatenate([np.zeros((len(station_ids), 1)), np.cumsum(mat[b] - 1, axis=1) / 365.25], axis=1)
+            mean_stress[b] = mat[b].mean(axis=1)
+        anom = {b: mat[b + "_anom"] for b in WEATHER_BUNDLES}
+        stress = {b: mat[b] for b in WEATHER_BUNDLES}
+        from datetime import timedelta
+
+        ym = np.array([(day0 + timedelta(days=i)).year * 12 + (day0 + timedelta(days=i)).month for i in range(D)])
+    except Exception:  # 날씨 파일이 없거나 열이 모자라면 날씨 없이(예전과 같게)
+        cum = {}
+    overrides = weather_overrides(session)
 
     out: dict[tuple[int, str], Calibrated] = {}
+    from dataclasses import replace
+
     from psd.catalog import PART_TYPES
 
-    no_formula = {p["code"] for p in PART_TYPES if p["formula"] is None}
+    formula_of = {p["code"]: p["formula"] for p in PART_TYPES}
     for code in sorted({c for _s, c in formula}):
         keys = sorted(k for k in formula if k[1] == code)
-        sigma = BIAS_PRIOR_SIGMA_NO_FORMULA if code in no_formula else BIAS_PRIOR_SIGMA
-        fits = fit_group([formula[k] for k in keys], [intervals.get(k, []) for k in keys], bias_sigma=sigma)
-        out.update(zip(keys, fits))
+        sigma = BIAS_PRIOR_SIGMA_NO_FORMULA if formula_of.get(code) is None else BIAS_PRIOR_SIGMA
+        F = np.array([formula[k] for k in keys], dtype=float)
+        sg = _Segs.build([(row[k[0]], segs.get(k, [])) for k in keys])
+        off = {b for c, b in overrides if c == code}
+        n_fail = int(sg.failed.sum())
+        if formula_of.get(code) in WEATHER_FORMULAS:
+            info = {"estimated": False, "reason": "날씨 공식이 이미 있어 공식으로 반영", "w": {}, "p": {}, "off": sorted(off)}
+        elif not cum:
+            info = {"estimated": False, "reason": "날씨 자료가 없어 재지 않음", "w": {}, "p": {}, "off": sorted(off)}
+        elif n_fail < WEATHER_MIN_FAILURES:
+            info = {"estimated": False, "reason": f"고장 {n_fail}건 — {WEATHER_MIN_FAILURES}건 이상 쌓이면 잰다", "w": {}, "p": {}, "off": sorted(off)}
+        elif len(off) == len(WEATHER_BUNDLES):
+            info = {"estimated": False, "reason": "담당자가 날씨 학습을 모두 끔", "w": {b: 0.0 for b in WEATHER_BUNDLES}, "p": {}, "off": sorted(off)}
+        else:
+            fails: dict[int, list[int]] = {}
+            n_parts = np.zeros(len(station_ids))
+            for (sid, _door, c), lst in records.items():
+                if c == code:
+                    fails.setdefault(row[sid], []).extend((d - day0).days for d, r, _a in lst if r == "fail")
+            for k in keys:
+                n_parts[row[k[0]]] = len(segs.get(k, []))
+            info = estimate_weather(fails, n_parts, stress, anom, ym, D_est, off)
+        w = {b: v for b, v in info["w"].items() if v}
+        v, x, x_cal = sg.ages(cum, w) if cum else sg.ages({}, {})
+        fits = _fit_arrays(F, sg.g, v, x, sg.failed, x_cal, bias_sigma=sigma)
+        for k, fit in zip(keys, fits):
+            speed = 1.0 + sum(wb * (mean_stress[b][row[k[0]]] - 1) for b, wb in w.items()) if w else 1.0
+            speed = max(float(speed), 0.2)
+            raw = fit.raw_years / speed
+            out[k] = replace(fit, years=min(raw, MAX_YEARS), raw_years=raw, lo_years=fit.lo_years / speed, hi_years=fit.hi_years / speed,
+                             weather=info, speed=round(speed, 4))
     return out

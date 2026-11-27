@@ -93,3 +93,46 @@ def test_repair_keeps_age_and_partial_halves_it():
     ages = [round(v, 2) for v, _x, _f in ints]
     assert ages == [0.0, 1.0, round((1.0 + 1.0) * 0.5, 2), 0.0]
     assert [f for _v, _x, f in ints] == [True, True, True, False]  # 수리로 끝난 고장도 모두 센다
+
+
+# ---------- 날씨 민감도 (2026-11-27) ----------
+
+
+def test_part_segments_follow_records_and_age_factor():
+    from psd.calibrate import AGE_FACTOR, part_segments
+
+    segs = part_segments(0, [(100, "fail", "repair"), (300, "fail", "full"), (50, "prev", "partial")], 400)
+    assert [(a, b, f) for a, b, f, _ in segs] == [(0, 50, False), (50, 100, True), (100, 300, True), (300, 400, False)]
+    assert [x[3] for x in segs[:3]] == [AGE_FACTOR["partial"], AGE_FACTOR["repair"], AGE_FACTOR["full"]]
+
+
+def test_effective_time_grows_with_weather_and_carries_virtual_age():
+    import numpy as np
+
+    from psd.calibrate import _Segs
+
+    sg = _Segs.build([(0, [[(0, 365, True, 1.0), (365, 730, False, 0.0)]])])
+    cum = {"humid": np.concatenate([[0.0], np.cumsum(np.full(730, 1.0)) / 365.25])[None, :]}  # 매일 점수 2(점수 − 1 = 1)
+    v0, x0, xc = sg.ages(cum, {})
+    v1, x1, _ = sg.ages(cum, {"humid": 0.5})
+    assert np.allclose(x0, xc) and np.allclose(x1, xc * 1.5)  # 날마다 1.5배로 나이를 먹는다
+    assert v1[1] == pytest.approx(x1[0])  # 수리(1.0)라 나이를 그대로 넘긴다
+
+
+def test_estimate_weather_finds_planted_sensitivity_and_respects_off():
+    import numpy as np
+
+    from psd.calibrate import WEATHER_BUNDLES, estimate_weather
+
+    rng = np.random.default_rng(0)
+    S, D = 20, 1400
+    stress = {b: np.clip(1 + rng.normal(0, 0.8, (S, D)), 0, None) for b in WEATHER_BUNDLES}
+    anom = {b: stress[b] - 1 for b in WEATHER_BUNDLES}
+    rate = 0.03 * (1 + 0.5 * (stress["humid"] - 1))  # 습기만 민감도 0.5
+    fails = {s: list(np.flatnonzero(rng.poisson(rate[s]) > 0)) for s in range(S)}
+    ym = np.arange(D) // 30
+    info = estimate_weather(fails, np.full(S, 1.0), stress, anom, ym, D, set())
+    assert info["w"]["humid"] >= 0.35 and info["p"]["humid"] > 0.9
+    assert max(info["w"][b] for b in ("heat", "cold", "wind")) < 0.2  # 무관한 묶음은 0 쪽
+    off = estimate_weather(fails, np.full(S, 1.0), stress, anom, ym, D, {"humid"})
+    assert off["w"]["humid"] == 0.0 and off["off"] == ["humid"]
