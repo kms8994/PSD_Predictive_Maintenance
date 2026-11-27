@@ -9,6 +9,13 @@ v2(2026-11-16)의 방식을 그대로 두고 단위만 소분류로 바꿨다:
    정답은 정답 파일에 따로 저장하고 앱은 읽지 않는다. 정답은 --truth-seed로 정해져 가상 노선을 여러 벌 만들어도 같다
    (같은 동해선을 여러 번 겪는 셈 — 사건만 --seed마다 다르다).
 2. **날씨에 따른 계절 변화** — 날씨에 민감한 소분류는 그 역 AWS 지점의 일별 가속 계수(psd/cycle.py daily_af)만큼 나이를 더 먹는다.
+   **2026-11-27 날씨 정답 v4**(날씨_역분석_엑셀연동_설계.md 3장 "채점용 더미"): 공식 없는 소분류의 날씨 정답을 바꿨다.
+   - **오래 쌓이는 영향(aging)**: 습기·열·추위·바람 묶음(psd/weather.py)에 소분류마다 몰래 민감도를 준다. 분석이 쓰는 꼴과
+     일부러 다르게 — 묶음 점수 대신 재료 하나(예: 결로 시간만)를 쓰거나, 제곱해서(심한 날이 훨씬 세게) 쓴다.
+     **역마다 평균을 1로 맞추지 않는다**(예전엔 맞춰서 습한 역도 평균 수명이 같았다) — 습한 역은 실제로 더 빨리 닳는다.
+   - **짧은 충격(shock)**: 폭우(시간당 10mm↑)·폭풍(비바람·강풍)·해동·폭염 날, 며칠 안에 일정 확률로 고장 난다(나이와 무관).
+   - **날씨 아닌 계절·요일 효과(usage)**: 해수욕장·관광지 역(송정·일광·오시리아)은 7~8월에 센서·도어류를 1.6배로 쓰고,
+     모든 역이 주말에 1.3배로 쓴다(평일과 합쳐 평균 1). 분석이 이것을 습도·더위로 착각하지 않는지 보려고.
 3. **조치와 가상 나이**(Kijima 1형) — 고장(사후조치) 나면 조치를 고르고 나이를 줄인다: 교체 0, 단순교체 ×0.4,
    수리·조정·리셋·기타는 그대로(고장 직전과 같음). 보정(psd/calibrate.py)은 단순교체를 0.5로 가정한다 — 일부러 다르게 뒀다.
 4. **사전조치** — 2024년부터 반기 정기 점검에서 반년 안에 고장 날 부품을 일정 확률로 찾아 교체·단순교체·조정한다.
@@ -32,7 +39,7 @@ import math
 import random
 import sys
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -53,7 +60,6 @@ UNITS = {p["code"]: p for p in PART_TYPES}
 KNOWN_SHAPE = {"BELT": 3.0, "HANGER": 2.5, "MOTOR": 2.0, "DCU": 1.6, "PSC": 1.5}
 KNOWN_BIAS = {"MOTOR": 0.9, "BELT": 0.8, "HANGER": 0.9, "DCU": 0.75, "PSC": 1.0}
 UNKNOWN_LIFE = (4.0, 15.0)  # 공식 없는 소분류의 평균 수명 범위(년, 로그 균등)
-HIDDEN_WEATHER_SHARE = 0.35  # 공식 없는 소분류 중 몰래 날씨에 민감한 비율
 STATION_SIGMA = 0.15  # 날씨로 설명 안 되는 역 차이(로그정규 σ)
 FRAILTY_VAR = 0.3  # 문별 약함(감마, 평균 1) — 고장 위험에 곱한다
 WEAK_DOOR_SHARE = 0.02  # 설치·정렬 문제가 있는 문의 비율 → 반복 고장(psd/repeat.py)
@@ -62,6 +68,33 @@ WEAK_DOOR_FACTOR = 3.0
 # ---------- 2. 날씨 ----------
 # 공식 소분류는 psd/cycle.py 기본 비중과 같게. 나머지 비중은 날씨 무관(1)
 FORMULA_WEATHER = {"dcm": {"af_cap": 0.25, "af_sol": 0.25, "af_hum": 0.25}, "motor": {"af_mot": 0.3}, "humid": {"af_hum": 0.5}}
+
+# 날씨 정답 v4 (2026-11-27) — 공식 없는 소분류. 확률은 소분류 성격(kind_of)마다, 묶음마다 따로 뽑는다
+AGING_SHARE = {
+    # 현장 의견("습도가 중요한 것 같다")대로 습기를 가장 흔하게 — 그래도 날씨 무관 소분류가 절반쯤 남는다
+    "elec": {"humid": 0.45, "heat": 0.12, "cold": 0.03, "wind": 0.03},
+    "sensor": {"humid": 0.45, "heat": 0.05, "cold": 0.05, "wind": 0.10},
+    "mech": {"humid": 0.15, "heat": 0.03, "cold": 0.15, "wind": 0.12},
+}
+AGING_WEIGHT = (0.25, 0.6)  # 민감도(묶음 하나)
+AGING_MAX_TOTAL = 0.8  # 민감도 합 상한(나이 먹는 속도가 음수가 되지 않게)
+AGING_SQUARE_SHARE = 0.3  # 제곱(심한 날이 훨씬 세게)으로 쓸 확률
+AGING_COMPONENT_SHARE = 0.5  # 묶음 점수 대신 재료 하나만 쓸 확률
+SHOCK_SHARE = 0.15  # 짧은 충격을 받을 확률
+SHOCK_EVENTS = {"sensor": ("heavy_rain", "storm"), "mech": ("thaw", "storm"), "elec": ("heavy_rain", "heat")}
+SHOCK_PROB = (0.001, 0.004)  # 충격 날 하루에 부품 하나가 고장 날 확률
+SHOCK_LAG_MAX = 7  # 충격 뒤 고장까지 최대 일 수(0~이 값 사이에서 고정)
+# 충격 날(AWS 하루 값). 지점마다 1년에: 폭우 약 13일, 폭풍 2~76일(간절곶이 가장 많음), 해동 23~58일, 폭염 2~39일
+EVENT_RULES = {
+    "heavy_rain": lambda w: w["rn_max"] >= 10,
+    "storm": lambda w: (w["rain_wind_hours"] >= 2) | (w["wind_hours"] >= 3),
+    "thaw": lambda w: w["thaw_count"] >= 1,
+    "heat": lambda w: w["hot_hours"] >= 4,
+}
+# 날씨 아닌 계절·요일 효과 — 문에 달린 센서·도어류(kind sensor·mech)만
+BEACH_STATIONS = ("송정", "일광", "오시리아")
+BEACH_SUMMER = 1.6  # 7~8월
+WEEKEND = 1.3  # 토·일(평일과 합쳐 평균 1이 되게 나눈다)
 
 # ---------- 3. 조치 ----------
 AGE_FACTOR = {"full": 0.0, "partial": 0.4, "repair": 1.0, "adjust": 1.0, "reset": 1.0, "other": 1.0}
@@ -100,22 +133,40 @@ def pick(rng: random.Random, weighted: list[tuple]) -> object:
 
 
 def make_truth(truth_seed: int) -> dict[str, dict]:
-    """소분류마다 숨은 정답: shape, bias(공식 대비) 또는 mean_years(공식 없음), weather(일별 가속 계수 비중)."""
+    """소분류마다 숨은 정답: shape, bias(공식 대비) 또는 mean_years(공식 없음),
+    weather(공식 소분류의 일별 가속 계수 비중), aging(날씨 묶음 민감도), shock(짧은 충격), usage(날씨 아닌 계절·요일 효과)."""
+    from psd.weather import COMPONENTS
+
     out = {}
     for p in PART_TYPES:
         code = p["code"]
         rng = random.Random(f"{truth_seed}-{code}")
+        wrng = random.Random(f"{truth_seed}-{code}-weather")  # 날씨 정답은 수명 정답과 씨앗을 나눈다
+        kind = kind_of(code)
+        usage = p["unit"] == "door" and kind in ("sensor", "mech")
         if p["formula"] is not None:
             out[code] = {"shape": KNOWN_SHAPE.get(code, round(rng.uniform(1.3, 2.8), 2)),
                          "bias": KNOWN_BIAS.get(code, round(math.exp(rng.gauss(0, 0.2)), 3)),
-                         "weather": FORMULA_WEATHER.get(p["formula"], {})}
-        else:
-            weather = {}
-            if rng.random() < HIDDEN_WEATHER_SHARE:
-                weather = {rng.choice(["af_hum", "af_cap"]): round(rng.uniform(0.3, 0.6), 2)}
-            lo, hi = UNKNOWN_LIFE
-            out[code] = {"shape": round(rng.uniform(1.1, 3.0), 2),
-                         "mean_years": round(math.exp(rng.uniform(math.log(lo), math.log(hi))), 2), "weather": weather}
+                         "weather": FORMULA_WEATHER.get(p["formula"], {}), "aging": [], "shock": None, "usage": usage}
+            continue
+        lo, hi = UNKNOWN_LIFE
+        t = {"shape": round(rng.uniform(1.1, 3.0), 2),
+             "mean_years": round(math.exp(rng.uniform(math.log(lo), math.log(hi))), 2), "weather": {}}
+        aging = []
+        for bundle, share in AGING_SHARE[kind].items():
+            if wrng.random() < share:
+                source = (bundle if wrng.random() >= AGING_COMPONENT_SHARE else "r_" + wrng.choice(COMPONENTS[bundle]))
+                aging.append({"bundle": bundle, "source": source, "power": 2 if wrng.random() < AGING_SQUARE_SHARE else 1,
+                              "weight": round(wrng.uniform(*AGING_WEIGHT), 2)})
+        total = sum(a["weight"] for a in aging)
+        if total > AGING_MAX_TOTAL:
+            for a in aging:
+                a["weight"] = round(a["weight"] * AGING_MAX_TOTAL / total, 2)
+        shock = None
+        if wrng.random() < SHOCK_SHARE:
+            shock = {"event": wrng.choice(SHOCK_EVENTS[kind]), "prob": round(wrng.uniform(*SHOCK_PROB), 4),
+                     "lag": wrng.randint(0, SHOCK_LAG_MAX)}
+        out[code] = {**t, "aging": aging, "shock": shock, "usage": usage}
     return out
 
 
@@ -130,6 +181,12 @@ class PartSim:
     v: float = 0.0  # last 시점의 가상 나이
     last: int = 0  # 마지막 사건 날(일 번호)
     next_fail: int | None = None
+    shocks: list[int] = field(default_factory=list)  # 날씨 충격으로 고장 날 날(나이와 무관, 미리 뽑아 둔다)
+
+    def next_shock(self) -> int | None:
+        while self.shocks and self.shocks[0] <= self.last:
+            self.shocks.pop(0)  # 이미 다른 사건으로 손본 날 이전 충격은 지나간 것
+        return self.shocks[0] if self.shocks else None
 
     def age_at(self, i: int) -> float:
         return self.v + float(self.cum[i] - self.cum[self.last])
@@ -142,7 +199,9 @@ class PartSim:
         u = rng.random()
         total = self.scale * (self.hazard_cum(self.v) - math.log(1 - u)) ** (1 / self.shape)
         target = self.cum[self.last] + (total - self.v)
-        idx = max(int(np.searchsorted(self.cum, target, side="left")), self.last + 1)
+        # cum[j] < target <= cum[j+1]이면 j일 동안 수명이 다한 것 → 고장 날은 j(예전엔 j+1로 하루 늦게 적었다 — 2026-11-27 고침,
+        # 계절엔 영향이 거의 없지만 요일 효과가 하루 밀려 보였다)
+        idx = max(int(np.searchsorted(self.cum, target, side="left")) - 1, self.last + 1)
         self.next_fail = idx if idx < len(self.cum) - 1 else None
 
     def renew(self, i: int, action: str, rng: random.Random) -> None:
@@ -166,13 +225,14 @@ def simulate_unit(parts: list[PartSim], inspections: list[int], rng: random.Rand
         p.resample(rng)
     pending = sorted(i for i in inspections if i > min(p.last for p in parts))
     while True:
-        fails = [p.next_fail for p in parts if p.next_fail is not None]
-        nf = min(fails) if fails else None
+        # 나이로 오는 고장과 날씨 충격 고장 중 이른 것
+        cands = [(d, p) for p in parts for d in (p.next_fail, p.next_shock()) if d is not None]
+        nf = min(d for d, _p in cands) if cands else None
         ni = pending[0] if pending else None
         if nf is None and ni is None:
             break
         if nf is not None and (ni is None or nf <= ni):
-            p = next(p for p in parts if p.next_fail == nf)
+            p = next(p for d, p in cands if d == nf)
             action = pick(rng, FAIL_ACTIONS[kind_of(p.code)])
             events.append(Event(nf, "fail", action, [p.code]))
             p.renew(nf, action, rng)
@@ -191,31 +251,66 @@ def simulate_unit(parts: list[PartSim], inspections: list[int], rng: random.Rand
 # ---------- 날씨 → 유효 나이 누적 ----------
 
 
-def weather_multipliers(day0: date, n_days: int, truth: dict[str, dict]) -> tuple[dict[tuple[str, str], np.ndarray], dict[str, dict[str, float]]]:
-    """(AWS 지점, 소분류) → 날마다 나이를 먹는 배수(기간 평균 1), 그리고 지점별 기간 평균 가속 계수.
+def weather_multipliers(day0: date, n_days: int, truth: dict[str, dict]) -> tuple[dict, dict, dict]:
+    """날씨가 나이·고장에 주는 정답. 돌려주는 것:
+    - mult: (AWS 지점, 소분류) → 날마다 나이를 먹는 배수.
+      공식 소분류(weather)는 지점마다 기간 평균 1(공식 주기에 지점 차이가 이미 들어 있어 두 번 넣지 않게).
+      날씨 정답 v4(aging)는 **동해선 전체 평균 1** — 습한 지점은 평균이 1보다 커서 실제로 더 빨리 닳는다.
+    - af_by_stn: 지점별 기간 평균 가속 계수.
+    - events: AWS 지점 → {충격 이름: 날마다 True/False 배열}.
     날씨 CSV는 2022~2025년이라 그 밖의 날은 가장 가까운 해의 같은 날 값을 쓴다(2/29는 2/28)."""
     import pandas as pd
 
-    from psd.cycle import daily_af, load_aws_weather, period_average_af, reference_climate
+    from psd.cycle import daily_af, load_aws_weather, period_average_af, reference_climate, station_counts
+    from psd.weather import daily_stress
 
     weather = load_aws_weather()
     ref = reference_climate(weather)
     daily = daily_af(weather, ref)
+    stress = daily_stress().copy()
+    stress["date"] = pd.to_datetime(stress["date"])
     years = sorted(daily["date"].dt.year.unique())
     grid = []
     for i in range(n_days):
         d = day0 + timedelta(days=i)
         y = min(max(d.year, years[0]), years[-1])
         grid.append(pd.Timestamp(date(y, d.month, 28 if (d.month, d.day) == (2, 29) else d.day)))
-    out = {}
+    counts = station_counts()
+
+    def ref_mean(col: str, power: int) -> float:  # 동해선 지점들의 역 수 가중 평균(psd/weather.py와 같은 기준)
+        s = stress[stress["stn"].isin(counts)]
+        x = s[col].astype(float) ** power
+        w = s["stn"].map(counts).astype(float)
+        ok = x.notna()
+        return float(np.average(x[ok], weights=w[ok]))
+
+    refs = {(a["source"], a["power"]): ref_mean(a["source"], a["power"]) for t in truth.values() for a in t.get("aging", [])}
+    out, events = {}, {}
     for stn, g in daily.groupby("stn"):
         g = g.set_index("date")
+        sg = stress[stress["stn"] == stn].set_index("date")
         for code, t in truth.items():
-            if not t["weather"]:
-                continue
-            combined = sum(g[k] * w for k, w in t["weather"].items()) + (1 - sum(t["weather"].values()))
-            out[(stn, code)] = (combined / combined.mean()).reindex(grid).fillna(1.0).to_numpy()
-    return out, period_average_af(daily)
+            if t["weather"]:
+                combined = sum(g[k] * w for k, w in t["weather"].items()) + (1 - sum(t["weather"].values()))
+                out[(stn, code)] = (combined / combined.mean()).reindex(grid).fillna(1.0).to_numpy()
+            elif t.get("aging") and not sg.empty:
+                combined = 1 - sum(a["weight"] for a in t["aging"])
+                for a in t["aging"]:
+                    x = (sg[a["source"]].astype(float) ** a["power"] / refs[(a["source"], a["power"])]).fillna(1.0)
+                    combined = combined + a["weight"] * x
+                out[(stn, code)] = combined.reindex(grid).fillna(1.0).to_numpy()
+        events[stn] = {name: rule(g).reindex(grid).fillna(False).to_numpy(dtype=bool) for name, rule in EVENT_RULES.items()}
+    return out, period_average_af(daily), events
+
+
+def usage_multiplier(station_name: str, day0: date, n_days: int) -> np.ndarray:
+    """날씨 아닌 계절·요일 효과(센서·도어류): 주말 1.3배(평일과 합쳐 평균 1), 해수욕장·관광지 역은 7~8월 1.6배."""
+    days = [day0 + timedelta(days=i) for i in range(n_days)]
+    weekend = np.array([WEEKEND if d.weekday() >= 5 else 1.0 for d in days])
+    weekend = weekend / (5 / 7 + WEEKEND * 2 / 7)
+    if station_name in BEACH_STATIONS:
+        weekend = weekend * np.array([BEACH_SUMMER if d.month in (7, 8) else 1.0 for d in days])
+    return weekend
 
 
 def cumulative(mult: np.ndarray) -> np.ndarray:
@@ -311,27 +406,47 @@ def simulate_all(inputs: SimInputs, today: date, seed: int, truth_seed: int = 20
     rng = random.Random(seed)
     day0 = min(PSD_START[s.id] for s in inputs.stations)
     n_days = (today - day0).days + 1
-    mult, af_by_stn = weather or weather_multipliers(day0, n_days, truth)
-    flat = cumulative(np.ones(n_days))
+    w = weather or weather_multipliers(day0, n_days, truth)
+    mult, af_by_stn = w[0], w[1]
+    events = w[2] if len(w) > 2 else {}
     door_codes = [p["code"] for p in PART_TYPES if p["unit"] == "door"]
     station_codes = [p["code"] for p in PART_TYPES if p["unit"] == "station"]
     record = {"seed": seed, "truth_seed": truth_seed, "today": today.isoformat(), "taxonomy": TAXONOMY.source,
               "units": truth, "station_sigma": STATION_SIGMA, "frailty_var": FRAILTY_VAR, "weak_door_factor": WEAK_DOOR_FACTOR,
-              "age_factor": AGE_FACTOR, "station_part": [], "weak_doors": []}
+              "age_factor": AGE_FACTOR, "station_part": [], "weak_doors": [],
+              "weather_truth": {"version": 4, "beach_stations": list(BEACH_STATIONS), "beach_summer": BEACH_SUMMER,
+                                "weekend": WEEKEND, "shock_events": {"heavy_rain": "시간당 최대 강수 10mm 이상",
+                                                                     "storm": "비바람 2시간 이상 또는 강풍 3시간 이상",
+                                                                     "thaw": "얼었다 녹음 1번 이상", "heat": "30℃ 이상 4시간 이상"}}}
     out: list[SimUnit] = []
     for s in inputs.stations:
         start = (PSD_START[s.id] - day0).days
         inspections = inspection_days(s.seq, day0, today, rng)
+        usage = usage_multiplier(s.name, day0, n_days)
+        rates = {}  # 소분류 → 날마다 나이를 먹는 배수(날씨 × 이용)
+        for code, t in truth.items():
+            m = mult.get((s.aws_stn, code))
+            m = np.ones(n_days) if m is None else m[:n_days]
+            rates[code] = m * usage if t.get("usage") else m
         scale0 = {}
         for code, t in truth.items():
             formula = inputs.base.get((s.id, code), 10.0)
             mean = (formula * t["bias"] if "bias" in t else t["mean_years"]) * math.exp(trng.gauss(0, STATION_SIGMA))
             scale0[code] = mean / math.gamma(1 + 1 / t["shape"])
+            # 유효 나이로 mean년 = 달력으로 mean ÷ (이 역의 평균 나이 먹는 속도)년. 보정이 맞혀야 할 값은 달력 쪽이다
+            speed = float(rates[code][start:].mean()) if start < n_days else 1.0
             record["station_part"].append({"station": s.name, "part": code, "formula_years": round(formula, 3),
-                                           "true_mean_years": round(mean, 3), "true_shape": t["shape"]})
+                                           "true_mean_years": round(mean / speed, 3), "true_shape": t["shape"],
+                                           "aging_speed": round(speed, 3)})
 
-        def cum_of(code: str) -> np.ndarray:
-            return cumulative(mult[(s.aws_stn, code)][:n_days]) if (s.aws_stn, code) in mult else flat
+        def part_of(code: str, scale: float) -> PartSim:
+            p = PartSim(code, scale, truth[code]["shape"], cumulative(rates[code]), last=start)
+            sh = truth[code].get("shock")
+            if sh and s.aws_stn in events:
+                days = np.flatnonzero(events[s.aws_stn][sh["event"]][:n_days])
+                hits = [int(d) + sh["lag"] for d in days if d >= start and rng.random() < sh["prob"]]
+                p.shocks = sorted(d for d in hits if d < n_days - 1)
+            return p
 
         units = []
         for door in inputs.doors.get(s.id, []):
@@ -339,14 +454,15 @@ def simulate_all(inputs: SimInputs, today: date, seed: int, truth_seed: int = 20
             if rng.random() < WEAK_DOOR_SHARE:
                 z *= WEAK_DOOR_FACTOR
                 record["weak_doors"].append({"station": s.name, "door": door.label, "frailty": round(z, 2)})
-            parts = [PartSim(c, scale0[c] / z ** (1 / truth[c]["shape"]), truth[c]["shape"], cum_of(c), last=start) for c in door_codes]
+            parts = [part_of(c, scale0[c] / z ** (1 / truth[c]["shape"])) for c in door_codes]
             units.append(SimUnit(s, door, start, parts, [], z))
         for c in station_codes:
-            units.append(SimUnit(s, None, start, [PartSim(c, scale0[c], truth[c]["shape"], cum_of(c), last=start)], []))
+            units.append(SimUnit(s, None, start, [part_of(c, scale0[c])], []))
         # 역 평균 수명: 이 역 문 전체의 평균(문마다 약함이 달라 "약함 1인 문"의 수명과 다르다). 보정이 맞혀야 할 값은 이쪽이다
         for row in record["station_part"][-len(truth):]:
             lives = [p.scale * math.gamma(1 + 1 / p.shape) for u in units for p in u.parts if p.code == row["part"]]
-            row["true_station_mean_years"] = round(float(np.mean(lives)), 3) if lives else row["true_mean_years"]
+            row["true_station_mean_years"] = (round(float(np.mean(lives)) / row["aging_speed"], 3) if lives
+                                              else row["true_mean_years"])
         for u in units:
             u.events = simulate_unit(u.parts, inspections, rng)
         out.extend(units)
@@ -447,8 +563,13 @@ def main() -> None:
     print(f"분류표 {TAXONOMY.source} · 소분류 {len(PART_TYPES)} · 기준 {today}, 초기 데이터 ~{cutoff} / 샘플 {cutoff + timedelta(days=1)}~")
     print("[전체] " + summary(rows))
     print("[샘플] " + summary(sample))
-    print(f"약한 문 {len(truth['weak_doors'])}개 · 몰래 날씨에 민감한 소분류 "
-          f"{[c for c, t in truth['units'].items() if t['weather'] and UNITS[c]['formula'] is None]}")
+    print(f"약한 문 {len(truth['weak_doors'])}개")
+    for c, t in truth["units"].items():
+        bits = [f"{a['bundle']}({a['source']}{'²' if a['power'] == 2 else ''}) {a['weight']}" for a in t.get("aging", [])]
+        if t.get("shock"):
+            bits.append(f"충격 {t['shock']['event']} {t['shock']['prob']}/일, {t['shock']['lag']}일 뒤")
+        if bits:
+            print(f"  몰래 날씨에 민감: {c} {UNITS[c]['name']} — " + " · ".join(bits))
     if not args.save:
         print("--save 없이 실행해서 저장은 안 함")
         return
