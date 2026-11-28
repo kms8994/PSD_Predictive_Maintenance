@@ -37,7 +37,10 @@ AWS_STATION_NAMES: dict[str, str] = {
     "943": "매곡", "949": "정자", "954": "온산",
 }
 
-_STATION_COLS = ["ID", "순서", "역 이름", "옛 이름", "개통일", "PSD 사용개시일", "AWS 지점", "운영", "바다·하천 인접(추정)", "비고"]
+_STATION_COLS = ["ID", "순서", "역 이름", "옛 이름", "개통일", "PSD 사용개시일", "AWS 지점", "운영", "바다·하천 인접(추정)", "업체", "비고"]
+# 업체(2026-11-28, 미팅/코레일_피드백_정리_1127.md): 유지보수 업체. 일광까지 업체 1, 좌천~태화강 업체 2. 부품 목록은 같고 회사만 다르다 —
+# 내년 부품 사용량(예산) 계획을 업체별로도 보려고 둔다. 비워도 된다(전체 합계에만 들어간다). 칸이 없는 예전 파일도 읽는다
+VENDORS = ("업체 1", "업체 2")
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,7 @@ class Station:
     near_water: bool = False  # 바다·하천 인접(추정, 표시용)
     aliases: tuple[str, ...] = ()  # 옛 이름(이 이름으로 적힌 정비기록도 이 역으로 읽는다)
     note: str = ""
+    vendor: str = ""  # 유지보수 업체(VENDORS 중 하나, 비면 미정)
 
     @property
     def psd_start(self) -> date:
@@ -132,7 +136,10 @@ def load_station_file(path: Path = STATION_FILE) -> list[Station]:
             if psd and psd < open_date:
                 raise StationFileError(f"{where}: PSD 사용개시일({psd})이 개통일({open_date})보다 앞섭니다")
             aliases = tuple(a for a in (x.strip() for x in re.split(r"[,，]", _text(r.get("옛 이름")))) if a)
-            out.append(Station(sid, seq, name, open_date, psd, aws, run == "운영", near == "예", aliases, _text(r.get("비고"))))
+            vendor = re.sub(r"\s+", " ", _text(r.get("업체"))).replace("업체1", "업체 1").replace("업체2", "업체 2")
+            if vendor and vendor not in VENDORS:
+                raise StationFileError(f"{where}: 업체는 {list(VENDORS)} 중 하나이거나 비워야 합니다: {vendor!r}")
+            out.append(Station(sid, seq, name, open_date, psd, aws, run == "운영", near == "예", aliases, _text(r.get("비고")), vendor))
         except (StationFileError, ValueError) as e:
             errors.append(str(e) if isinstance(e, StationFileError) else f"{where}: ID·순서는 숫자여야 합니다")
     for label, key in (("ID", lambda s: s.id), ("순서", lambda s: s.seq)):

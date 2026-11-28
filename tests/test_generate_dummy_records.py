@@ -1,6 +1,6 @@
 """scripts/generate_dummy_records.py(v3, 2026-11-24) 검증: 조건부 와이블·가상 나이·사건 순서·양식 줄. DB 없이 돈다.
 
-소분류 코드는 예시 분류표와 실제 분류표에 함께 있는 것(MOTOR, BELT, HANGER, DCU, PSC)만 쓴다.
+소분류 코드는 예시 분류표와 실제 분류표에 함께 있는 것(MOTOR, BELT, HANGER, OBST, DCU, RF)만 쓴다.
 """
 import math
 import random
@@ -116,7 +116,7 @@ def test_truth_is_fixed_by_truth_seed_and_covers_every_unit():
 def test_shock_days_bring_failures_regardless_of_age():
     """날씨 충격 날이면 나이와 상관없이 그날 고장 난다(수명이 아주 길어도)."""
     rng = random.Random(5)
-    p = PartSim("STEP", 500.0, 2.0, LONG, last=0)
+    p = PartSim("OBST", 500.0, 2.0, LONG, last=0)
     p.shocks = [100, 250]
     events = simulate_unit([p], [], rng)
     assert [e.day for e in events][:2] == [100, 250]
@@ -125,7 +125,7 @@ def test_shock_days_bring_failures_regardless_of_age():
 
 def test_shock_before_a_renewal_is_skipped():
     """이미 다른 사건으로 손본 날 이전의 충격은 지나간 것으로 본다."""
-    p = PartSim("STEP", 500.0, 2.0, LONG, last=300)
+    p = PartSim("OBST", 500.0, 2.0, LONG, last=300)
     p.shocks = [100, 400]
     assert p.next_shock() == 400
 

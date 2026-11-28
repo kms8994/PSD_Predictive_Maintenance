@@ -11,6 +11,7 @@ psd/api.py 자체가 DB 없이는 응답을 만들 수 없기 때문이다(psd/d
 """
 from datetime import date
 
+import pytest
 from fastapi.testclient import TestClient
 
 from psd.api import CAUSES, app
@@ -19,10 +20,10 @@ client = TestClient(app)
 
 
 def _xlsx(*specs: dict) -> bytes:
-    """양식 줄 엑셀(2026-11-24 v3). spec 기본값: 부전 역 단위 종합제어반(PSC), 사후조치·교체."""
+    """양식 줄 엑셀(2026-11-24 v3). spec 기본값: 부전 역 단위 RF장치(RF), 사후조치·교체."""
     from psd.excel_io import record_row, rows_to_excel_bytes
 
-    base = dict(day=date(2026, 1, 1), station="부전", reason="fail", unit_code="PSC", action="full")
+    base = dict(day=date(2026, 1, 1), station="부전", reason="fail", unit_code="RF", action="full")
     return rows_to_excel_bytes([record_row(**{**base, **sp}) for sp in specs])
 
 
@@ -99,7 +100,7 @@ def test_station_part_summary_adds_up_and_shows_the_most_urgent_unit():
         # 표시하는 상태는 그 부품 중 가장 급한 것이어야 한다
         assert p["counts"][p["status"]] > 0
         assert all(RANK[s] >= RANK[p["status"]] for s, n in p["counts"].items() if n)
-    assert parts["PSC"]["total"] == 1
+    assert parts["RF"]["total"] == 1
 
 
 def test_station_part_summary_lists_every_door_most_urgent_first():
@@ -115,7 +116,7 @@ def test_station_part_summary_lists_every_door_most_urgent_first():
     from psd.catalog import SIDES
 
     assert all(u["side"] in SIDES and u["no"] for u in parts["DCU"]["units"])
-    assert parts["PSC"]["units"][0]["no"] is None
+    assert parts["RF"]["units"][0]["no"] is None
     assert "units" not in client.get("/api/stations").json()["stations"][0]["parts"].get("DCU", {})
 
 
@@ -497,3 +498,69 @@ def test_analysis_station_and_when_shapes():
     assert [m["obs"] for m in w["by_month"] if m["key"] != 7] == [0] * 11
     assert len(w["heatmap"]) == len(client.get("/api/analysis/stations").json()["stations"])
     assert client.get("/api/analysis/stations/99999").status_code == 404
+
+
+def test_budget_plan_vendors_add_up_and_export_has_a_sheet_per_scope():
+    """내년 부품 사용량(2026-11-28): 업체 1 + 업체 2 = 전체(업체 빈 역이 없을 때), 교체 + 단순교체 = 부품 합계, 엑셀 시트."""
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    r = client.get("/api/budget-plan").json()
+    assert r["year"] == date.today().year + 1 and r["units"] > 0
+    t = r["totals"]
+    if not r["no_vendor_stations"]:
+        both = t["업체 1"]["next"]["uses"]["mean"] + t["업체 2"]["next"]["uses"]["mean"]
+        assert abs(both - t["전체"]["next"]["uses"]["mean"]) < 0.2
+    for row in [*r["rows"], {"by": t}]:
+        b = row["by"]["전체"]["next"]
+        assert abs(b["full"]["mean"] + b["partial"]["mean"] - b["uses"]["mean"]) < 0.2
+        assert b["uses"]["lo"] <= b["uses"]["mean"] <= b["uses"]["hi"]
+    assert sum(row["by"]["전체"]["next"]["uses"]["mean"] for row in r["rows"]) == pytest.approx(t["전체"]["next"]["uses"]["mean"], abs=0.5)
+    assert client.get(f"/api/budget-plan?year={date.today().year}").status_code == 400
+
+    wb = load_workbook(BytesIO(client.get("/api/budget-plan/export").content))
+    assert wb.sheetnames == ["전체", "업체 1", "업체 2", "역별", "설명"]
+    assert wb["전체"].cell(wb["전체"].max_row, 1).value == "합계"
+
+
+def test_status_settings_change_thresholds_and_manual_cycle_then_clear():
+    """교체 기준(2026-11-28): 장애부위 기준·수동 주기를 바꾸면 상태·예정일이 바뀌고, 지우면 자동으로 돌아온다.
+    개발 DB를 건드리므로 끝에 반드시 지운다."""
+    import psd.api as api_mod
+
+    retrains = []
+    real = api_mod._auto_retrain
+    api_mod._auto_retrain = lambda background, trigger: retrains.append(trigger)
+    code = "DCU"
+    try:
+        before = client.get("/api/status-settings").json()
+        row0 = next(p for p in before["parts"] if p["code"] == code)
+        assert row0["setting"] is None and row0["manual_years"] is None
+        assert client.post("/api/status-settings", json={"part_type_code": code, "red_months": 6, "yellow_months": 3}).status_code == 400
+        assert client.post("/api/status-settings", json={"part_type_code": "*", "manual_years": 3}).status_code == 400
+
+        r = client.post("/api/status-settings", json={"part_type_code": code, "red_months": 1, "manual_years": 2.5, "updated_by": "테스트",
+                                                      "reason": "test"})
+        assert r.status_code == 200 and retrains == ["manual"]
+        row = next(p for p in client.get("/api/status-settings").json()["parts"] if p["code"] == code)
+        assert (row["manual_years"], row["red_days"], row["setting"]["updated_by"]) == (2.5, 30, "테스트")
+        assert row["learned_min"] == row0["learned_min"]  # 학습값은 그대로 보인다
+        from sqlalchemy import select
+
+        from psd.db import get_session
+        from psd.models import Part
+
+        with get_session() as s:
+            pid = s.scalar(select(Part.id).where(Part.part_type_code == code).limit(1))
+        d = client.get(f"/api/parts/{pid}").json()
+        assert d["cycle_years"] == 2.5 and d["calibration"]["manual_years"] == 2.5 and d["calibration"]["red_days"] == 30
+        assert d["status"] == ("빨강" if d["days_left"] <= 30 else "노랑" if d["days_left"] <= before["default"]["yellow_days"] else "초록")
+
+        assert client.post("/api/status-settings", json={"part_type_code": code}).json()["cleared"] is True
+        assert retrains == ["manual", "manual"]  # 수동 주기를 지웠으니 다시 학습
+        row = next(p for p in client.get("/api/status-settings").json()["parts"] if p["code"] == code)
+        assert row["setting"] is None and row["manual_years"] is None and row["red_days"] == before["default"]["red_days"]
+    finally:
+        client.post("/api/status-settings", json={"part_type_code": code})
+        api_mod._auto_retrain = real

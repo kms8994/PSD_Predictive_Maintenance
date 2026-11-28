@@ -1,6 +1,6 @@
 """psd/excel_io.py 검증: 코레일 장애 이력 양식 읽기·쓰기 (2026-11-24 v3, 데이터셋_v3_설계.md 1·5장).
 
-소분류는 예시 분류표와 실제 분류표에 함께 있는 것(모터&엔코더, 밸트·스크류, DCU(MCU), 종합제어반)만 쓴다.
+소분류는 예시 분류표와 실제 분류표에 함께 있는 것(모터&엔코더, 밸트·스크류, DCU(MCU), RF장치)만 쓴다.
 """
 from datetime import date, timedelta
 from io import BytesIO
@@ -34,9 +34,9 @@ def test_reads_door_level_row():
 
 
 def test_station_level_unit_ignores_door():
-    r = _one(**{"장애부위②(소분류)": "종합제어반", "출입문": "", "승강장 선로": "", "장애인지": "사전조치", "조치사항": "단순교체",
+    r = _one(**{"장애부위②(소분류)": "RF장치(지상)", "출입문": "", "승강장 선로": "", "장애인지": "사전조치", "조치사항": "단순교체",
                 "장애내용①": ""})
-    assert (r.unit_code, r.side, r.door_no, r.reason_code, r.action_code) == ("PSC", None, None, "prev", "partial")
+    assert (r.unit_code, r.side, r.door_no, r.reason_code, r.action_code) == ("RF", None, None, "prev", "partial")
 
 
 @pytest.mark.parametrize("text, side", [("상본선(#3)", "U"), ("하선(#1)", "D"), ("상부본선(#4)", "UB"), ("하부본선(#1)", "DB"),
@@ -149,3 +149,56 @@ def test_header_matches_columns():
     ws = load_workbook(BytesIO(rows_to_excel_bytes([]))).active
     assert ws.title == "고장현황 전체"
     assert [c.value for c in ws[1]] == COLUMNS
+
+
+# ---------- 예측 대상과 가이드레일 (2026-11-28, 미팅/코레일_피드백_정리_1127.md) ----------
+
+
+def test_guide_rail_is_split_from_sliding_door_by_symptom():
+    """가동문 줄은 장애내용①이 가이드레일 목록(이탈·처짐·이물질 끼임 ...)이면 가이드레일(GUIDE)로 받는다."""
+    from psd.catalog import TAXONOMY
+
+    symptom = TAXONOMY.by_code("GUIDE").symptoms[0]
+    r = _one(**{"장애부위①(대분류)": "도어 장애", "장애부위②(소분류)": "가동문", "장애내용①": symptom})
+    assert (r.unit_code, r.side, r.door_no) == ("GUIDE", "U", "1-1")
+    assert r.warnings == []
+
+
+def test_rows_outside_the_targets_are_skipped_and_counted_even_if_otherwise_broken():
+    """도어(가이드레일 아닌 가동문)·전원 장애 등은 건너뛰고 소분류별로 센다. 안 쓰는 줄의 날짜가 틀려도 막지 않는다."""
+    res = parse_upload(_xlsx([
+        _row(),
+        _row(**{"장애부위②(소분류)": "가동문", "장애내용①": "유리 파손"}),
+        _row(**{"장애부위②(소분류)": "가동문", "장애내용①": ""}),
+        _row(월=13, **{"장애부위②(소분류)": "UPS", "출입문": "", "승강장 선로": ""}),
+    ]))
+    assert [r.unit_code for r in res.rows] == ["MOTOR"]
+    assert res.skipped_not_target == {"가동문": 2, "UPS": 1}
+
+
+def test_file_with_only_non_target_rows_says_why_nothing_was_read():
+    with pytest.raises(ExcelFormatError, match="예측 대상이 아닌 소분류 1줄"):
+        parse_upload(_xlsx([_row(**{"장애부위②(소분류)": "UPS", "출입문": "", "승강장 선로": ""})]))
+
+
+def test_guide_rail_is_written_back_as_sliding_door():
+    """내려받기는 양식 표기 그대로: 가이드레일 기록은 '가동문' + 원래 장애내용으로 쓰고, 다시 읽으면 가이드레일."""
+    from psd.catalog import TAXONOMY
+
+    symptom = TAXONOMY.by_code("GUIDE").symptoms[1]
+    row = record_row(day=date(2026, 1, 15), station="부전", reason="fail", unit_code="GUIDE", action="adjust", side="D",
+                     door_no="2-3", symptom=symptom)
+    assert (row["장애부위①(대분류)"], row["장애부위②(소분류)"], row["장애내용①"]) == ("도어 장애", "가동문", symptom)
+    assert parse_upload(_xlsx([row])).rows[0].unit_code == "GUIDE"
+
+
+def test_download_lists_offer_the_whole_form_not_only_targets():
+    """현장은 한 파일에 모든 장애를 적는다 — 드롭다운은 양식 소분류 전체(가이드레일은 양식에 없어 빠짐)."""
+    from openpyxl import load_workbook
+
+    from psd.catalog import TAXONOMY
+
+    wb = load_workbook(BytesIO(rows_to_excel_bytes([])))
+    col = [c.value for c in wb["목록"]["C"][1:] if c.value]
+    assert col == [u.name for u in TAXONOMY.form_units]
+    assert "가이드레일" not in col and "UPS" in col

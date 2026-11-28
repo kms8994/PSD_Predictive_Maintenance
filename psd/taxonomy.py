@@ -11,6 +11,12 @@
     units: [{code, name, group, unit("door"|"station"), formula("motor"|"dcm"|"humid"|"fixed"|null),
              symptoms(장애내용① 목록, 비면 자유 입력), main_parts, minor_parts}, ...]
     aliases: {현장에서 다르게 적는 소분류 표기: 코드}
+    splits: [{code, name, from(양식 소분류 코드), symptoms(이 장애내용①이면 갈라 냄), main_parts, minor_parts}, ...] — 없어도 된다
+
+갈라 낸 단위(splits, 2026-11-28): 양식에는 없는데 현장이 따로 보고 싶어 하는 부위. 예: 가이드레일은 양식의
+'가동문' 소분류 안에서 장애내용①이 가이드레일 쪽 장애(분류표 splits에 적은 목록)인 기록이다. 엑셀에는 '가동문'으로 적히고,
+읽을 때 장애내용①을 보고 갈라 낸다(classify). 내려받을 때는 다시 '가동문'으로 쓴다(form_name).
+대분류·문/역 단위는 원래 소분류를 따르고, 날씨 공식은 없다(데이터로 배운다).
 """
 from __future__ import annotations
 
@@ -37,17 +43,40 @@ class Unit:
     symptoms: tuple[str, ...]
     main_parts: tuple[str, ...]
     minor_parts: tuple[str, ...]
+    split_from: str | None = None  # 갈라 낸 단위면 양식의 원래 소분류 코드
 
 
 @dataclass(frozen=True)
 class Taxonomy:
     source: str  # "private" | "sample" | 파일 경로
     groups: tuple[str, ...]
-    units: tuple[Unit, ...]
+    units: tuple[Unit, ...]  # 양식 소분류 + 갈라 낸 단위(뒤쪽)
     aliases: tuple[tuple[str, str], ...]  # (현장 표기, 코드)
 
     def by_code(self, code: str) -> Unit:
         return next(u for u in self.units if u.code == code)
+
+    @property
+    def form_units(self) -> tuple[Unit, ...]:
+        """양식에 있는 소분류만(갈라 낸 단위 빼고). 내려받기 양식의 드롭다운 목록."""
+        return tuple(u for u in self.units if u.split_from is None)
+
+    def form_name(self, code: str) -> str:
+        """엑셀 '장애부위②(소분류)'에 쓸 이름. 갈라 낸 단위는 원래 소분류 이름."""
+        u = self.by_code(code)
+        return self.by_code(u.split_from).name if u.split_from else u.name
+
+    def classify(self, unit_text: str, symptom: str | None = None) -> str | None:
+        """엑셀 한 줄의 소분류 글 + 장애내용① → 코드. 소분류가 갈라 낸 단위의 원래 소분류이고
+        장애내용①이 그 단위의 목록에 있으면 갈라 낸 단위 코드(예: 가동문 + "이탈" → GUIDE)."""
+        code = self.resolve(unit_text)
+        if code is None or not symptom:
+            return code
+        key = normalize(symptom)
+        for u in self.units:
+            if u.split_from == code and key in {normalize(s) for s in u.symptoms}:
+                return u.code
+        return code
 
     def resolve(self, text: str) -> str | None:
         """현장이 적은 소분류 이름 → 코드. 띄어쓰기·쉼표·가운뎃점·괄호 차이는 무시한다. 못 찾으면 None."""
@@ -95,6 +124,17 @@ def load() -> Taxonomy:
              tuple(u.get("main_parts") or ()), tuple(u.get("minor_parts") or ()))
         for u in raw["units"]
     )
+    form_codes = {u.code for u in units}
+    splits = []
+    for sp in raw.get("splits") or ():
+        if sp.get("from") not in form_codes:
+            raise ValueError(f"분류표 {path}: 갈라 낸 단위 {sp.get('name')!r}의 from {sp.get('from')!r}이 소분류에 없습니다")
+        if not sp.get("symptoms"):
+            raise ValueError(f"분류표 {path}: 갈라 낸 단위 {sp.get('name')!r}에 장애내용(symptoms)이 없습니다")
+        base = next(u for u in units if u.code == sp["from"])
+        splits.append(Unit(sp["code"], sp["name"], base.group, base.unit, None, tuple(sp["symptoms"]),
+                           tuple(sp.get("main_parts") or ()), tuple(sp.get("minor_parts") or ()), split_from=base.code))
+    units = units + tuple(splits)
     codes = [u.code for u in units]
     if len(set(codes)) != len(codes):
         raise ValueError(f"분류표 {path}: 소분류 코드가 겹칩니다")

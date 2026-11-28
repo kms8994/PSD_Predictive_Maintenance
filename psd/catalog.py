@@ -8,14 +8,37 @@ from psd.taxonomy import load as _load_taxonomy
 
 TAXONOMY = _load_taxonomy()
 
+# ---------- 예측 대상 (2026-11-28, 미팅/코레일_피드백_정리_1127.md 2장) ----------
+# 코레일 담당자: 구동부·센서부를 중점으로, 통신(RF장치·TIP)과 제어기 DCU, 가능하면 가이드레일.
+# 도어는 눈에 잘 보여 필요 없다(가동문 중 가이드레일 장애내용만 따로 — 분류표 splits).
+# 대상이 아닌 소분류의 엑셀 줄은 읽을 때 건너뛰고 몇 줄인지 알려 준다(psd/excel_io.py). 양식 자체는 그대로 받는다.
+TARGET_GROUPS = ("구동부 장애", "센서 장애", "통신 장애")  # 대분류 전체가 대상
+TARGET_CODES = ("DCU", "GUIDE")  # 대분류는 대상이 아니지만 이 소분류만 대상
+
+
+def is_target(u) -> bool:
+    return u.group in TARGET_GROUPS or u.code in TARGET_CODES
+
+
 # 소분류 = 예측 단위. 이름을 바꾸지 않고 "PART_TYPES"로 둔다(DB 표 part_types, 화면의 "부품" 열과 같은 자리).
+# 예측 대상만 담는다. 순서는 분류표 순서(갈라 낸 가이드레일은 원래 소분류 가동문 자리).
 # weather_sensitive: 날씨 공식으로 주기가 역마다 달라지는지(motor·dcm). fixed(10년)와 공식 없음(null)은 아니다
+# form_name: 엑셀 '장애부위②(소분류)'에 쓰는 이름(가이드레일 → 가동문)
+_ORDER = {u.code: i for i, u in enumerate(TAXONOMY.form_units)}
+
+
+def display_name(u) -> str:
+    """화면 이름. 양식의 '기타'처럼 대분류 없이는 무엇인지 모르는 이름은 대분류를 붙인다(구동부 장애 › 기타 → "구동부 기타")."""
+    return f"{u.group.removesuffix(' 장애')} {u.name}" if u.name == "기타" else u.name
+
+
 PART_TYPES = [
-    {"code": u.code, "name": u.name, "group": u.group, "unit": u.unit, "formula": u.formula,
-     "weather_sensitive": u.formula in ("motor", "dcm"), "symptoms": list(u.symptoms)}
-    for u in TAXONOMY.units
+    {"code": u.code, "name": display_name(u), "group": u.group, "unit": u.unit, "formula": u.formula,
+     "weather_sensitive": u.formula in ("motor", "dcm"), "symptoms": list(u.symptoms), "form_name": TAXONOMY.form_name(u.code)}
+    for u in sorted((u for u in TAXONOMY.units if is_target(u)), key=lambda u: _ORDER[u.split_from or u.code])
 ]
-GROUPS = list(TAXONOMY.groups)
+TARGET_SET = {p["code"] for p in PART_TYPES}
+GROUPS = [g for g in TAXONOMY.groups if any(p["group"] == g for p in PART_TYPES)]  # 대상이 있는 대분류(화면 거르기)
 CODE_TO_NAME = {p["code"]: p["name"] for p in PART_TYPES}
 DOOR_PART_CODES = [p["code"] for p in PART_TYPES if p["unit"] == "door"]
 STATION_PART_CODES = [p["code"] for p in PART_TYPES if p["unit"] == "station"]

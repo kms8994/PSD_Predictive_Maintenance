@@ -335,7 +335,7 @@ def test_switching_file_starts_over_and_is_logged(tmp_path, state_guard):
 def _record_xlsx(**over) -> bytes:
     from psd.excel_io import record_row, rows_to_excel_bytes
 
-    base = dict(day=date(2026, 10, 3), station="부전", reason="prev", unit_code="PSC", action="reset",
+    base = dict(day=date(2026, 10, 3), station="부전", reason="prev", unit_code="RF", action="reset",
                 symptom_detail=f"연동 테스트 {uuid.uuid4().hex[:8]}")
     return rows_to_excel_bytes([record_row(**{**base, **over})])
 

@@ -51,10 +51,31 @@ def test_new_station_in_the_middle_only_shifts_order(tmp_path):
     (lambda wb: setattr(_station_rows(wb)["거제"][7], "value", "폐역"), "운영은"),
     (lambda wb: setattr(_station_rows(wb)["거제"][3], "value", "부전"), "이름 '부전'"),
     (lambda wb: setattr(_station_rows(wb)["거제"][5], "value", date(2010, 1, 1)), "개통일"),
+    (lambda wb: setattr(_station_rows(wb)["거제"][9], "value", "업체 3"), "업체는"),
 ])
 def test_bad_station_file_is_rejected(tmp_path, edit, msg):
     with pytest.raises(st.StationFileError, match=msg):
         st.load_station_file(_copy(tmp_path, st.STATION_FILE, edit))
+
+
+def test_vendor_splits_the_line_at_ilgwang():
+    """코레일 확인(2026-11-28): 일광까지 업체 1, 좌천~태화강 업체 2."""
+    by_name = {s.name: s for s in st.STATIONS}
+    assert by_name["부전"].vendor == by_name["일광"].vendor == "업체 1"
+    assert by_name["좌천"].vendor == by_name["태화강"].vendor == "업체 2"
+    assert all(s.vendor in st.VENDORS for s in st.STATIONS if s.in_service)
+
+
+def test_station_file_without_vendor_column_still_loads(tmp_path):
+    """업체 칸이 없는 예전 파일도 읽는다(업체는 비어 있음). '업체1'처럼 붙여 써도 받는다."""
+    def drop(wb):
+        ws = wb["역 목록"]
+        ws.delete_cols([c.value for c in ws[1]].index("업체") + 1)
+    assert {s.vendor for s in st.load_station_file(_copy(tmp_path, st.STATION_FILE, drop))} == {""}
+
+    def squeeze(wb):
+        _station_rows(wb)["거제"][9].value = "업체1"
+    assert {s.name: s.vendor for s in st.load_station_file(_copy(tmp_path, st.STATION_FILE, squeeze))}["거제"] == "업체 1"
 
 
 def test_sample_environment_has_categories_but_no_values():

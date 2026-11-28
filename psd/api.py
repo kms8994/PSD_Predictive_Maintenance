@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import io
+import math
 import os
 from contextlib import asynccontextmanager, contextmanager
 from datetime import date, datetime, timedelta
@@ -20,7 +21,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from psd.calibrate import MAX_YEARS, PSD_START, Calibrated, calibration_map
-from psd.catalog import ACTIONS, FAULT_TYPE, MAIN_SIDES, PART_TYPES, REASONS, SIDES, TAXONOMY
+from psd.catalog import ACTIONS, FAULT_TYPE, GROUPS, MAIN_SIDES, PART_TYPES, REASONS, SIDES, TAXONOMY
 from psd.cycle import (
     SERVICE_INTERVAL_MIN,
     STATIONS,
@@ -163,6 +164,11 @@ def _cal_dict(cal: Calibrated | None) -> dict | None:
         "shape_lo": round(cal.shape_lo, 2),
         "shape_hi": round(cal.shape_hi, 2),
         "bias": round(cal.bias, 2),
+        # 담당자 기준(2026-11-28): 수동 주기를 두면 years가 그 값, learned_years가 학습값
+        "manual_years": cal.manual_years,
+        "learned_years": round(cal.learned_years, 2) if not math.isnan(cal.learned_years) else None,
+        "red_days": cal.red_days,
+        "yellow_days": cal.yellow_days,
     }
 
 
@@ -198,11 +204,13 @@ def get_today():
 
 
 @app.get("/api/part-types")
-def list_part_types():
+def list_part_types(db: Session = Depends(get_db)):
     """예측 단위(장애부위 소분류) 목록과 양식의 조치·장애인지·선로. 화면의 고정 표시용 — 계산값은 아님.
-    taxonomy: 어느 분류표를 읽었는지("private" 실제 / "sample" 예시)."""
-    return {"part_types": PART_TYPES, "groups": TAXONOMY.groups, "taxonomy": TAXONOMY.source, "line": LINE_NAME, "actions": ACTIONS,
-            "fault_type": FAULT_TYPE, "reasons": REASONS, "sides": SIDES}
+    taxonomy: 어느 분류표를 읽었는지("private" 실제 / "sample" 예시). status_default: 교체임박·주의 기본 기준(범례용)."""
+    from psd.calibrate import ALL_PARTS, status_rules
+
+    return {"part_types": PART_TYPES, "groups": GROUPS, "taxonomy": TAXONOMY.source, "line": LINE_NAME, "actions": ACTIONS,
+            "fault_type": FAULT_TYPE, "reasons": REASONS, "sides": SIDES, "status_default": status_rules(db)[ALL_PARTS]}
 
 
 def _cycle_map(db: Session) -> dict[tuple[int, str], CycleResult]:
@@ -289,6 +297,7 @@ def list_stations(db: Session = Depends(get_db)):
                 "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[s.name]],
                 "near_water": s.near_water,
                 "in_service": s.in_service,
+                "vendor": STATION_BY_ID[s.id].vendor if s.id in STATION_BY_ID else "",  # 유지보수 업체(역 목록 파일)
                 "counts": c,
                 "repeat_doors": repeat_by_station.get(s.id, 0),  # 반복 고장 의심 문 수(psd/repeat.py) — 노선도·역 목록 표시용
                 # 역 목록에서 "다음 교체가 언제인지"를 보여 주려고 — 개통 전 역은 부품이 없어 None
@@ -492,9 +501,10 @@ REPEAT_RULE = {"window_years": REPEAT_WINDOW_YEARS, "min_failures": REPEAT_MIN_F
 
 
 def _ensure_weather_table() -> None:
-    from psd.models import WeatherSetting
+    from psd.models import StatusSetting, WeatherSetting
 
     WeatherSetting.__table__.create(engine, checkfirst=True)
+    StatusSetting.__table__.create(engine, checkfirst=True)  # 교체임박 기준(2026-11-28)도 같이
 
 
 class WeatherSettingIn(BaseModel):
@@ -562,6 +572,86 @@ def set_weather_setting(body: WeatherSettingIn, background: BackgroundTasks, db:
     db.commit()
     _auto_retrain(background, "manual")
     return {"ok": True, "part_type_code": body.part_type_code, "bundle": body.bundle, "enabled": body.enabled}
+
+
+# ---------- 교체임박 기준·수동 주기 (2026-11-28, psd/models.py StatusSetting) ----------
+# 코레일 담당자: "교체임박 기준을 적을 수 있게, 학습된 값이 너무 아니다 싶으면 고칠 수 있게". 개월로 받아 일로 저장한다
+# (6개월 = 182일, 12개월 = 365일 — 예전 고정값과 같게 365/12를 곱해 버림).
+
+class StatusSettingIn(BaseModel):
+    part_type_code: str = Field(max_length=20)  # "*" = 모든 장애부위 기본
+    red_months: int | None = Field(default=None, ge=1, le=24)
+    yellow_months: int | None = Field(default=None, ge=1, le=36)
+    manual_years: float | None = Field(default=None, ge=0.5, le=MAX_YEARS)
+    updated_by: str | None = Field(default=None, max_length=50)
+    reason: str | None = Field(default=None, max_length=200)
+
+
+def _months_to_days(m: int | None) -> int | None:
+    return None if m is None else int(m * 365 / 12)
+
+
+@app.get("/api/status-settings")
+def status_settings(db: Session = Depends(get_db)):
+    """장애부위마다 지금 쓰는 교체임박·주의 기준(일), 수동 주기, 학습한 주기(역 사이 범위), 바꾼 사람·때·이유."""
+    from psd.calibrate import ALL_PARTS, DEFAULT_RULE, status_rules
+    from psd.models import StatusSetting
+
+    cal = calibration_map(db)
+    rules = status_rules(db)
+    try:
+        rows = {r.part_type_code: r for r in db.execute(select(StatusSetting)).scalars()}
+    except Exception:
+        db.rollback()
+        rows = {}
+    who = lambda r: {"red_days": r.red_days, "yellow_days": r.yellow_days, "manual_years": r.manual_years,  # noqa: E731
+                     "updated_by": r.updated_by, "reason": r.reason, "updated_at": r.updated_at} if r else None
+    parts = []
+    for p in PART_TYPES:
+        cs = [c for (sid, code), c in cal.items() if code == p["code"]]
+        if not cs:
+            continue
+        learned = [c.learned_years for c in cs]
+        parts.append({"code": p["code"], "name": p["name"], "group": p["group"].replace(" 장애", ""), "unit": p["unit"],
+                      "learned_min": round(min(learned), 2), "learned_max": round(max(learned), 2),
+                      "failures": sum(c.failures for c in cs), **rules.get(p["code"], rules[ALL_PARTS]), "setting": who(rows.get(p["code"]))})
+    return {"default": {**rules[ALL_PARTS], "setting": who(rows.get(ALL_PARTS))}, "builtin": DEFAULT_RULE, "parts": parts}
+
+
+@app.post("/api/status-settings")
+def set_status_setting(body: StatusSettingIn, background: BackgroundTasks, db: Session = Depends(get_db)):
+    """교체임박·주의 기준(개월)과 수동 주기(년)를 정한다. 모두 비우면 그 줄을 지워 자동(기본·학습값)으로 되돌린다.
+    수동 주기를 바꾸면 예정일이 바뀌므로 AI 위험도 모델도 기록이 바뀐 것처럼 다시 학습한다."""
+    from psd.calibrate import ALL_PARTS
+    from psd.models import StatusSetting
+
+    code = body.part_type_code
+    if code != ALL_PARTS and code not in NAME_BY_CODE:
+        raise HTTPException(400, "모르는 장애부위입니다")
+    if code == ALL_PARTS and body.manual_years is not None:
+        raise HTTPException(400, "수동 주기는 장애부위마다 정합니다(장애부위마다 수명이 달라서)")
+    if body.red_months is not None and body.yellow_months is not None and body.yellow_months <= body.red_months:
+        raise HTTPException(400, "주의 기준은 교체 임박 기준보다 길어야 합니다")
+    _ensure_weather_table()
+    row = db.execute(select(StatusSetting).where(StatusSetting.part_type_code == code)).scalar_one_or_none()
+    empty = body.red_months is None and body.yellow_months is None and body.manual_years is None
+    old_manual = row.manual_years if row is not None else None
+    if empty:
+        if row is not None:
+            db.delete(row)
+    else:
+        if row is None:
+            row = StatusSetting(part_type_code=code)
+            db.add(row)
+        row.red_days, row.yellow_days = _months_to_days(body.red_months), _months_to_days(body.yellow_months)
+        row.manual_years = round(body.manual_years, 2) if body.manual_years is not None else None
+        row.updated_at = datetime.now().replace(microsecond=0)
+        row.updated_by = (body.updated_by or "").strip() or None
+        row.reason = (body.reason or "").strip() or None
+    db.commit()
+    if old_manual != body.manual_years:  # 예정일이 바뀌는 건 수동 주기뿐 — 기준(개월)만 바꾸면 모델은 그대로
+        _auto_retrain(background, "manual")
+    return {"ok": True, "part_type_code": code, "cleared": empty}
 
 
 # ---------- 역별·시기별 고장 분석 (psd/analysis.py, 날씨_역분석_엑셀연동_설계.md 1·2장, 2026-11-27) ----------
@@ -723,6 +813,7 @@ def get_station(station_id: int, db: Session = Depends(get_db)):
             "aws_station": AWS_STATION_NAMES[AWS_STN_BY_STATION[station.name]],
             "near_water": station.near_water,
             "in_service": station.in_service,
+            "vendor": STATION_BY_ID[station.id].vendor if station.id in STATION_BY_ID else "",
             "psd_install_date": PSD_START[station.id],  # 역 화면에 개통일과 따로 보여 준다(개통 2016인데 PSD는 2022인 역이 있다)
             "service_interval_min": SERVICE_INTERVAL_MIN,  # 참고용, 계산에는 안 씀 — psd/cycle.py 주석 참고
             # 장애 이력 양식의 역 정보 칸(기록에서 채움, 2026-11-24 v3). 없으면 None
@@ -1020,7 +1111,7 @@ def _plan_counts(db: Session, today: date, buckets: list, bucket_of, which: str 
         years = c.years if which == "years" else max(0.5, min(getattr(c, which), MAX_YEARS))
         due = next_due_date(part.install_date, years)
         days_left = (due - today).days
-        status = judge_status(days_left, part.has_record)
+        status = judge_status(days_left, part.has_record, c.red_days, c.yellow_days)
         if status == "확인_필요":
             check[part.part_type_code] += 1
             continue
@@ -1159,6 +1250,102 @@ def export_replacement_plan(span: str = "12m", db: Session = Depends(get_db)):
     name = {"12m": "12개월", "3y": "3년", "5y": "5년"}[span]
     today = plan["today"]
     return _xlsx_response(buf.getvalue(), f"PSD_교체계획_{name}_{today:%Y%m%d}.xlsx", f"PSD_plan_{span}_{today:%Y%m%d}.xlsx")
+
+
+# ---------- 4-6-1. 내년 부품 사용량(예산) 계획 (2026-11-28, psd/demand.py) ----------
+# 코레일 요구: 연간 계획 예산 — 내년에 부품을 몇 개 쓸지 모델로, 전체와 업체별로. 교체 계획(예정일 하나씩)과 달리
+# 한 부품이 여러 번 고장 나는 것·돌발 고장·사전조치 교체까지 센다. 시뮬레이션이 몇 초 걸려 기록이 그대로면 결과를 다시 쓴다.
+
+_budget_cache: dict = {}
+
+
+def _budget(db: Session, year: int | None) -> dict:
+    from psd.calibrate import data_version
+    from psd.demand import forecast
+
+    today = date.today()
+    year = year or today.year + 1
+    if not today.year < year <= today.year + 3:
+        raise HTTPException(400, f"예측할 해는 {today.year + 1}~{today.year + 3}년 중 하나여야 합니다")
+    key = (data_version(db, today), year)
+    if _budget_cache.get("key") != key:
+        try:
+            _budget_cache.update(key=key, value=forecast(db, year, today))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    return _budget_cache["value"]
+
+
+@app.get("/api/budget-plan")
+def budget_plan(year: int | None = None, db: Session = Depends(get_db)):
+    """내년(year) 부품 사용량: 소분류 × (전체·업체 1·업체 2), 교체(주요 부품)·단순교체(부속 부품), 평균과 80% 범위.
+    비교용으로 재작년 실적, 올해 기록(마지막 기록 날까지)과 올해 예상(기록 + 모델이 채운 나머지)."""
+    out = dict(_budget(db, year))
+    out.pop("by_station")  # 화면엔 안 쓴다(엑셀 '역별' 시트)
+    return out
+
+
+@app.get("/api/budget-plan/export")
+def export_budget_plan(year: int | None = None, db: Session = Depends(get_db)):
+    """예산 계획 엑셀: 범위별 시트(전체·업체 1·업체 2 — 부품 x 교체/단순교체 평균·범위·비교), "역별"(역 x 부품 평균), "설명"."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    r = _budget(db, year)
+    Y = r["year"]
+    wb = Workbook()
+    head_fill = PatternFill("solid", fgColor="1D5EA8")
+
+    def sheet(ws, header: list[str], rows: list[list], widths: list[int]):
+        ws.append(header)
+        for cell in ws[1]:
+            cell.font, cell.fill = Font(bold=True, color="FFFFFF"), head_fill
+        for row in rows:
+            ws.append(row)
+        ws.freeze_panes = "B2"
+        for i, w in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+    rng = lambda x: f"{x['lo']}~{x['hi']}"  # noqa: E731
+    first = True
+    for scope in ("전체", *r["vendors"]):
+        ws = wb.active if first else wb.create_sheet()
+        ws.title = scope
+        first = False
+        rows = []
+        for row in [*r["rows"], {"name": "합계", "by": r["totals"]}]:
+            b = row["by"][scope]
+            ly, ty = b["last_year"], b["this_year_expected"]
+            rows.append([row["name"], round(b["next"]["full"]["mean"]), rng(b["next"]["full"]), round(b["next"]["partial"]["mean"]),
+                         rng(b["next"]["partial"]), round(b["next"]["uses"]["mean"]), rng(b["next"]["uses"]),
+                         round(b["next_fail"]["failures"]["mean"]), ly["uses"] if ly else "", round(ty["uses"]) if ty else "",
+                         b["this_year_recorded"]["uses"]])
+        sheet(ws, ["부품", f"{Y} 교체(주요 부품)", "범위", f"{Y} 단순교체(부속)", "범위", f"{Y} 부품 합계", "범위(80%)", f"{Y} 고장 출동",
+                   f"{Y - 2} 실적", f"{Y - 1} 예상", f"{Y - 1} 기록(~{r['data_end']:%m/%d})"], rows,
+              [16, 14, 10, 15, 10, 13, 11, 12, 10, 10, 15])
+        for cell in ws[ws.max_row]:
+            cell.font = Font(bold=True)
+    st = [[x["station"], x["vendor"], x["name"], x["full"], x["partial"], round(x["full"] + x["partial"], 2)] for x in r["by_station"]
+          if x["full"] or x["partial"]]
+    ws = wb.create_sheet("역별")
+    sheet(ws, ["역", "업체", "부품", f"{Y} 교체(평균)", f"{Y} 단순교체(평균)", "합계"], st, [12, 9, 16, 14, 16, 10])
+    ws.auto_filter.ref = ws.dimensions
+    note = wb.create_sheet("설명")
+    for line in [
+        f"{Y}년 부품 사용량 예측 — 만든 날 {r['today']}, 기록은 {r['data_end']}까지(그 뒤는 모델로 채움), 시뮬레이션 {r['n_sims']}번",
+        "부품 사용 = 조치가 교체(주요 부품) 또는 단순교체(부속 부품)인 건수. 수리·조정·리셋·기타는 부품을 사지 않는 것으로 봄",
+        "방법: 부품마다 지금 나이에서 출발해, 기록으로 보정한 수명(역 x 부품)으로 고장을 뽑고, 조치는 그 부품의 지난 고장 조치 비율대로. "
+        "사전조치 교체는 지난 1년 비율로 더함",
+        "범위(80%): 시뮬레이션 10번 중 8번이 이 안. 평균만 잡으면 절반은 모자라니 예비 몫은 범위 위 끝을 참고",
+        "업체: 역 목록 파일(data/stations/동해선_역목록.xlsx)의 업체 칸. 비어 있는 역은 전체에만 들어감",
+        "한계: 사전조치가 나이를 되돌리는 효과는 넣지 않아 고장 쪽이 조금 많게 나올 수 있음. 더미 기록이면 시뮬레이터 가정이 맞을 때의 값",
+    ]:
+        note.append([line])
+    note.column_dimensions["A"].width = 140
+    buf = io.BytesIO()
+    wb.save(buf)
+    return _xlsx_response(buf.getvalue(), f"부품사용량_예산계획_{Y}.xlsx", f"budget_plan_{Y}.xlsx")
 
 
 # ---------- 4-7. 교체 기록 올리기 (엑셀이 원본, psd/sync.py) ----------
@@ -1388,6 +1575,9 @@ def _sync(db: Session, content: bytes, file_name: str, delete_missing: bool, upl
         "sheet": parsed.sheet,
         "header_row": parsed.header_row,
         "skipped_other_line": parsed.skipped_other_line,  # 동해선이 아니라 건너뛴 줄
+        # 예측 대상이 아니라 건너뛴 줄: 모두 몇 줄, 소분류별로(많은 순)
+        "skipped_not_target": sum(parsed.skipped_not_target.values()),
+        "skipped_not_target_by": [{"name": n, "rows": c} for n, c in parsed.skipped_not_target.most_common()],
         "warnings": parsed.warnings[:SHOW_ROWS],  # 받았지만 확인할 것(장애형태 규칙과 다름 등)
         "warning_count": len(parsed.warnings),
         "added_tracks": added_tracks,  # 기록에 처음 나와 문을 만든 선로

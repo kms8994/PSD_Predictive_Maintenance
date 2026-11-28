@@ -36,7 +36,7 @@ def test_action_table_lists_warning_parts_most_urgent_first():
     statuses += [_unit(100 + i, 2, code, 2000) for i, code in enumerate(DOOR_CODES)]
     statuses[0] = _unit(0, 1, DOOR_CODES[0], 300)  # 주의
     statuses[7] = _unit(107, 2, DOOR_CODES[1], 30)  # 교체 임박
-    statuses.append(_unit(999, None, "PSC", -40))  # 확인 필요(기록 없이 지남)
+    statuses.append(_unit(999, None, "RF", -40))  # 확인 필요(기록 없이 지남)
     records = [RecordInfo(date(2026, 10, 1), "상선 1-1", ["DCU"], "fail", "정비1팀")]
 
     text = "".join(p.extract_text() for p in PdfReader(io.BytesIO(_build(statuses, doors, records))).pages)
@@ -50,7 +50,7 @@ def test_action_table_lists_warning_parts_most_urgent_first():
 
 def test_no_warning_parts_says_so_and_shows_soonest():
     doors = [DoorInfo(1, "U", 1, 1, "상선 1-1")]
-    statuses = [_unit(i, 1, code, 1000 + i) for i, code in enumerate(DOOR_CODES)] + [_unit(99, None, "PSC", 3000)]
+    statuses = [_unit(i, 1, code, 1000 + i) for i, code in enumerate(DOOR_CODES)] + [_unit(99, None, "RF", 3000)]
 
     text = PdfReader(io.BytesIO(_build(statuses, doors))).pages[0].extract_text()
 
@@ -64,7 +64,7 @@ def test_work_list_groups_doors_and_order_table_counts_by_period():
     dcu = DOOR_CODES.index("DCU")
     for i in (1, 2, 3):  # 문 세 개의 DCU가 같은 날 교체 임박
         statuses[(i - 1) * len(DOOR_CODES) + dcu] = _unit(10 * i + dcu, i, "DCU", 60)
-    statuses.append(_unit(999, None, "PSC", 3000))
+    statuses.append(_unit(999, None, "RF", 3000))
 
     text = PdfReader(io.BytesIO(_build(statuses, doors))).pages[0].extract_text()
 

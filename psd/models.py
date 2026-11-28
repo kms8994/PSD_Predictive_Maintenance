@@ -267,3 +267,25 @@ class WeatherSetting(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime)
     updated_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
     reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
+class StatusSetting(Base):
+    """교체임박 기준·수동 주기(2026-11-28, 미팅/코레일_피드백_정리_1127.md 1장 ②).
+
+    코레일 담당자: 교체임박 기준을 적을 수 있게, 학습된 값을 보고 너무 아니다 싶으면 기준을 고칠 수 있게.
+    - part_type_code = "*"는 모든 장애부위의 기본 기준, 그 밖엔 그 장애부위만(기본보다 앞선다).
+    - red_days / yellow_days: 남은 기간이 이만큼 이하면 교체 임박 / 주의. 비우면 기본(182일 / 365일).
+    - manual_years: 학습한 주기 대신 쓸 주기(전 역 공통). 비우면 학습값. 학습값은 계속 계산해 옆에 보여 준다.
+    줄은 바꿀 때마다 덮어쓰고, 모두 비우면 지운다(자동으로 되돌림). 바꾼 사람·때·이유를 남긴다.
+    """
+
+    __tablename__ = "status_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    part_type_code: Mapped[str] = mapped_column(String(20), unique=True)
+    red_days: Mapped[int | None] = mapped_column(nullable=True)
+    yellow_days: Mapped[int | None] = mapped_column(nullable=True)
+    manual_years: Mapped[float | None] = mapped_column(Float, nullable=True)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime)
+    updated_by: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(200), nullable=True)

@@ -9,7 +9,7 @@ def sig(day: int, door: int | None = 1, reason: str = "fail", parts=("DCU",), st
 
 
 def test_same_file_twice_changes_nothing():
-    rows = [sig(1), sig(2), sig(3, door=None, parts=("PSC",))]
+    rows = [sig(1), sig(2), sig(3, door=None, parts=("RF",))]
     d = diff_records(rows, [(i + 10, s) for i, s in enumerate(rows)])
     assert (d.new, d.changed, d.missing, d.db_duplicates, d.same) == ([], [], [], [], 3)
 

@@ -118,6 +118,11 @@ class Calibrated:
     prior_weight: float = PRIOR_FAILURES  # 사전값의 무게(고장 몇 건만큼 공식을 믿었나, 사후 평균)
     weather: dict | None = None  # 이 소분류의 날씨 민감도(전 역 공통): {"estimated", "reason", "w": {묶음: 값}, "p": {묶음: P(w>0)}, "off": [...]}
     speed: float = 1.0  # 이 역의 평균 나이 먹는 속도(1 + Σ w × (역 평균 점수 − 1)). 달력 주기 = 유효 주기 ÷ speed
+    # 담당자 기준(status_settings 표, 2026-11-28). 수동 주기를 두면 years·raw·범위가 그 값이 되고, 학습값은 learned_years에 남는다
+    red_days: int = 182  # 남은 기간이 이만큼 이하면 교체 임박
+    yellow_days: int = 365  # 이만큼 이하면 주의
+    manual_years: float | None = None
+    learned_years: float = math.nan  # 학습한 주기(수동 주기를 두기 전 값, 10년 제한 후)
 
     @property
     def capped(self) -> bool:
@@ -371,13 +376,66 @@ def _weather_version(session: Session) -> tuple:
 _cache: dict = {}  # {"key": 데이터 버전, "map": 전체 역 결과} — 마지막 한 벌만 둔다
 
 
+DEFAULT_RULE = {"red_days": 182, "yellow_days": 365, "manual_years": None}
+ALL_PARTS = "*"  # status_settings의 기본 기준 줄
+
+
+def status_rules(session: Session) -> dict[str, dict]:
+    """장애부위 → {"red_days", "yellow_days", "manual_years"}. 그 장애부위 줄 > 기본 줄("*") > DEFAULT_RULE 순으로 채운다.
+    "*" 키에 기본 기준도 넣는다. 표가 없으면(처음 켠 DB) 기본만."""
+    from psd.models import StatusSetting
+
+    try:
+        rows = {r.part_type_code: r for r in session.execute(select(StatusSetting)).scalars()}
+    except Exception:
+        session.rollback()
+        rows = {}
+    base = dict(DEFAULT_RULE)
+    if ALL_PARTS in rows:
+        r = rows[ALL_PARTS]
+        base.update({k: v for k, v in (("red_days", r.red_days), ("yellow_days", r.yellow_days)) if v is not None})
+    out = {ALL_PARTS: base}
+    for code, r in rows.items():
+        if code == ALL_PARTS:
+            continue
+        rule = dict(base)
+        rule.update({k: v for k, v in (("red_days", r.red_days), ("yellow_days", r.yellow_days), ("manual_years", r.manual_years))
+                     if v is not None})
+        if rule["yellow_days"] <= rule["red_days"]:  # 기본과 섞여 거꾸로 되면 주의 구간을 없앤다(임박만)
+            rule["yellow_days"] = rule["red_days"]
+        out[code] = rule
+    return out
+
+
+def _status_version(session: Session) -> tuple:
+    from psd.models import StatusSetting
+
+    try:
+        return tuple(session.execute(select(func.count(StatusSetting.id), func.max(StatusSetting.updated_at))).one())
+    except Exception:
+        session.rollback()
+        return (0, None)
+
+
+def apply_rules(cal: Calibrated, rule: dict) -> Calibrated:
+    """담당자 기준을 보정 결과에 얹는다. 수동 주기는 years·raw·범위를 그 값으로(범위 없음), 학습값은 learned_years에."""
+    from dataclasses import replace
+
+    learned = cal.years if math.isnan(cal.learned_years) else cal.learned_years
+    out = replace(cal, red_days=int(rule["red_days"]), yellow_days=int(rule["yellow_days"]), learned_years=learned, manual_years=None)
+    m = rule.get("manual_years")
+    if m:
+        out = replace(out, years=min(float(m), MAX_YEARS), raw_years=float(m), lo_years=float(m), hi_years=float(m), manual_years=float(m))
+    return out
+
+
 def data_version(session: Session, today: date) -> tuple:
     """기록·계산 결과·부품이 바뀌었는지 가늠하는 값. 기록을 넣거나 지우면 개수나 최대 id가 바뀐다."""
     rec = session.execute(select(func.count(ReplacementRecord.id), func.max(ReplacementRecord.id))).one()
     rp = session.execute(select(func.count(ReplacementPart.id), func.max(ReplacementPart.id))).one()
     cr = session.execute(select(func.count(), func.sum(CycleResult.base_years)).select_from(CycleResult)).one()
     parts = session.scalar(select(func.count(Part.id)))
-    return (today, tuple(rec), tuple(rp), tuple(cr), parts, _weather_version(session))
+    return (today, tuple(rec), tuple(rp), tuple(cr), parts, _weather_version(session), _status_version(session))
 
 
 def calibration_map(session: Session, today: date | None = None, station_id: int | None = None,
@@ -482,4 +540,5 @@ def _compute(session: Session, today: date) -> dict[tuple[int, str], Calibrated]
             raw = fit.raw_years / speed
             out[k] = replace(fit, years=min(raw, MAX_YEARS), raw_years=raw, lo_years=fit.lo_years / speed, hi_years=fit.hi_years / speed,
                              weather=info, speed=round(speed, 4))
-    return out
+    rules = status_rules(session)
+    return {k: apply_rules(c, rules.get(k[1], rules[ALL_PARTS])) for k, c in out.items()}

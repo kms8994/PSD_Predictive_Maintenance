@@ -5,6 +5,8 @@
 - 머리글 행: 위에서 40줄 안에서 "장애부위②" 칸이 있는 줄(양식은 12행, 우리 내려받기 양식은 1행)
 - 년·월·일·역이 모두 빈 줄은 건너뛴다(양식은 수식만 깔린 빈 줄이 1만 줄쯤 있다). 양식의 '일자' 칸(수식)은 읽지 않는다
 - 노선이 동해선이 아닌 줄은 건너뛰고 몇 줄인지 알려 준다(양식은 전 노선 공통)
+- 예측 대상이 아닌 소분류(도어·전원·현시 등, psd/catalog.py TARGET_GROUPS)의 줄도 건너뛰고 소분류별로 몇 줄인지 알려 준다(2026-11-28)
+- 가동문 줄은 장애내용①이 가이드레일 장애내용(분류표 splits의 목록)이면 가이드레일로 받고, 아니면 건너뛴다
 
 읽는 칸(머리글 이름. 띄어쓰기·줄바꿈은 무시하고, 양식 '작성기준' 시트의 다른 이름도 받는다):
     년도·월·일, 역, 장애인지, 장애부위②(소분류), 조치사항 — 꼭 있어야 한다
@@ -19,11 +21,12 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from io import BytesIO
 
-from psd.catalog import ACTION_ALIASES, ACTIONS, FAULT_TYPE, GROUPS, PART_TYPES, REASONS, SIDES, TAXONOMY
+from psd.catalog import ACTION_ALIASES, ACTIONS, FAULT_TYPE, PART_TYPES, REASONS, SIDES, TAXONOMY
 from psd.stations import LINE_NAME
 from psd.taxonomy import normalize
 
@@ -88,6 +91,7 @@ class ParsedRow:
 class ParseResult:
     rows: list[ParsedRow]
     skipped_other_line: int = 0  # 동해선이 아니라 건너뛴 줄
+    skipped_not_target: Counter = field(default_factory=Counter)  # 예측 대상이 아니라 건너뛴 줄 {소분류 이름: 줄 수}
     sheet: str = ""
     header_row: int = 0
 
@@ -161,6 +165,11 @@ def parse_upload(content: bytes) -> ParseResult:
         if line and normalize(line) != normalize(LINE_NAME):
             out.skipped_other_line += 1
             continue
+        # 대상이 아닌 소분류는 다른 칸을 검사하기 전에 건너뛴다 — 안 쓰는 줄의 날짜 실수로 파일 전체가 막히지 않게
+        code = TAXONOMY.classify(_text(get("장애부위②(소분류)")), _text(get("장애내용①")) or None)
+        if code is not None and code not in UNIT_BY_CODE:
+            out.skipped_not_target[TAXONOMY.by_code(code).name] += 1
+            continue
         try:
             out.rows.append(_parse_row(row_no, get))
         except ExcelFormatError as e:
@@ -168,7 +177,10 @@ def parse_upload(content: bytes) -> ParseResult:
     if errors:
         raise ExcelFormatError(0, f"{len(errors)}개 줄이 틀렸습니다 — " + " / ".join(errors[:30]) + (" ..." if len(errors) > 30 else ""))
     if not out.rows:
-        raise ExcelFormatError(0, "읽을 기록이 한 줄도 없습니다" + (f"(동해선이 아닌 줄 {out.skipped_other_line}개는 건너뜀)" if out.skipped_other_line else ""))
+        skipped = [f"동해선이 아닌 줄 {out.skipped_other_line}개"] if out.skipped_other_line else []
+        if out.skipped_not_target:
+            skipped.append(f"예측 대상이 아닌 소분류 {sum(out.skipped_not_target.values())}줄")
+        raise ExcelFormatError(0, "읽을 기록이 한 줄도 없습니다" + (f"({', '.join(skipped)}는 건너뜀)" if skipped else ""))
     return out
 
 
@@ -192,7 +204,8 @@ def _parse_row(row_no: int, get) -> ParsedRow:
         raise ExcelFormatError(row_no, f"장애인지는 {list(REASONS.values())} 중 하나여야 합니다: {reason_label!r}")
 
     unit_text = _text(get("장애부위②(소분류)"))
-    code = TAXONOMY.resolve(unit_text)
+    symptom = _text(get("장애내용①")) or None
+    code = TAXONOMY.classify(unit_text, symptom)
     if code is None:
         raise ExcelFormatError(row_no, f"분류표에 없는 장애부위②(소분류): {unit_text!r}")
     unit = UNIT_BY_CODE[code]
@@ -208,7 +221,6 @@ def _parse_row(row_no: int, get) -> ParsedRow:
     if fault and re.sub(r"\s", "", fault) != FAULT_TYPE[action]:
         warnings.append(f"장애형태 {fault!r}가 조치사항 {ACTIONS[action]!r}의 규칙({FAULT_TYPE[action]})과 다름 — 조치사항을 따름")
 
-    symptom = _text(get("장애내용①")) or None
     if symptom and unit["symptoms"] and normalize(symptom) not in {normalize(s) for s in unit["symptoms"]}:
         warnings.append(f"장애내용① {symptom!r}는 {unit['name']}의 목록에 없음 — 그대로 받음")
 
@@ -261,7 +273,7 @@ def record_row(*, day: date, station: str, reason: str, unit_code: str, action: 
         "DCU(MCU)업체": info.get("dcu_vendor") or "", "관할사업소": info.get("office") or "",
         "장애형태": FAULT_TYPE[action], "장애인지": REASONS[reason],
         "승강장 선로": track_raw or (SIDES[side] if side else ""), "승강장 홈": home or "", "출입문": door_no or "",
-        "장애부위①(대분류)": unit["group"], "장애부위②(소분류)": unit["name"], "장애내용①": symptom or "",
+        "장애부위①(대분류)": unit["group"], "장애부위②(소분류)": unit["form_name"], "장애내용①": symptom or "",
         "장애내용②(상세)": symptom_detail or "", "고장원인": cause_text or "", "조치사항": ACTIONS[action],
         "조치사항 상세": action_detail or "", "접수자": receiver or "", "접수일": received or "", "완료일": completed or "",
         "설치주체": info.get("install_owner") or "", "조치자": worker or "",
@@ -295,7 +307,9 @@ def _add_lists(wb, ws, n_rows: int) -> None:
     from openpyxl.utils import get_column_letter
     from openpyxl.worksheet.datavalidation import DataValidation
 
-    lists = {"장애인지": list(REASONS.values()), "장애부위①(대분류)": GROUPS, "장애부위②(소분류)": [p["name"] for p in PART_TYPES],
+    # 대분류·소분류 목록은 양식 전체(현장은 한 파일에 모든 장애를 적는다 — 대상이 아닌 줄은 읽을 때 건너뛴다)
+    lists = {"장애인지": list(REASONS.values()), "장애부위①(대분류)": list(TAXONOMY.groups),
+             "장애부위②(소분류)": [u.name for u in TAXONOMY.form_units],
              "조치사항": list(ACTIONS.values()), "장애형태": sorted(set(FAULT_TYPE.values()))}
     ls = wb.create_sheet("목록")
     last = max(n_rows + 1, 2000)

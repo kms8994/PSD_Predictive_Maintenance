@@ -62,7 +62,7 @@ DB_PASSWORD=<비밀번호>
 ### 5. 표 만들기와 교체주기 계산
 
 ```bash
-python scripts/init_db.py          # 표 생성 + 역 24개·문 736개·부품 약 1만 개(소분류 34종) 등 기본 데이터
+python scripts/init_db.py          # 표 생성 + 역 24개·문 736개·부품(예측 대상 16종: 구동부·센서·통신 전부 + DCU + 가이드레일 — 2026-11-28) 등 기본 데이터
 python scripts/compute_cycles.py   # 날씨로 역 x 장애부위 소분류 권장 교체주기를 계산해 저장
 ```
 
@@ -151,7 +151,8 @@ PDF 보고서의 한글 글꼴은 Windows의 맑은 고딕을 쓰고, 없으면(
 | 고장 기록으로 주기 보정 | `psd/calibrate.py` (날씨 공식 값을 사전값으로 와이블 + 베이지안) |
 | DB 모델 | `psd/models.py`, `psd/db.py`, `psd/catalog.py` |
 | DB 만들기 | `scripts/init_db.py`, `scripts/compute_cycles.py`, (선택) `scripts/load_initial_records.py` |
-| 경고 상태 | `psd/status.py` |
+| 경고 상태 | `psd/status.py` (교체 임박·주의 기준과 수동 주기는 담당자가 AI 관리 → 교체 기준에서 정함, `status_settings` 표) |
+| 내년 부품 사용량(예산) | `psd/demand.py` — 부품마다 지금 나이에서 내년 말까지 굴려 보는 시뮬레이션, 전체·업체별(교체 계획 → 내년 예산) |
 | 반복 고장 의심 문 | `psd/repeat.py` |
 | AI 고장 위험도(ML) | `psd/risk.py`, `scripts/train_risk_model.py` |
 | 보정 검증(숨은 정답 비교) | `scripts/check_calibration.py` |

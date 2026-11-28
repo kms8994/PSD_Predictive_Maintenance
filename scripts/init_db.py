@@ -134,12 +134,15 @@ def seed(session) -> None:
                                group_name=row["group"], formula=row["formula"]))
     session.flush()
 
-    # 분류표에서 빠진 소분류: 기록이 없으면 부품·계산 결과와 함께 지운다. 기록이 있으면 멈춘다(기록을 지울 수는 없다)
+    # 분류표(또는 예측 대상 psd/catalog.py TARGET_GROUPS)에서 빠진 소분류: 기록이 없으면 부품·계산 결과와 함께 지운다.
+    # 기록이 있으면 멈춘다(기록을 지울 수는 없다)
     gone = [c for (c,) in session.execute(select(PartType.code)) if c not in codes]
     if gone:
         used = session.scalar(select(ReplacementPart.id).where(ReplacementPart.part_type_code.in_(gone)).limit(1))
         if used:
-            sys.exit(f"분류표에 없는 소분류 {gone}의 기록이 DB에 있습니다. 분류표 파일을 확인하세요({TAXONOMY.source}).")
+            sys.exit(f"분류표·예측 대상에 없는 소분류 {gone}의 기록이 DB에 있습니다. 분류표 파일({TAXONOMY.source})과 "
+                     "psd/catalog.py의 예측 대상을 확인하세요. 대상을 줄인 것이 맞으면 --reset으로 DB를 새로 만들고 기록 엑셀을 다시 올리세요"
+                     "(대상이 아닌 줄은 읽을 때 건너뜁니다).")
         session.execute(delete(Part).where(Part.part_type_code.in_(gone)))
         session.execute(delete(CycleResult).where(CycleResult.part_type_code.in_(gone)))
         session.execute(delete(PartType).where(PartType.code.in_(gone)))

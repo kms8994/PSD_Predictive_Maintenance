@@ -111,3 +111,28 @@ def test_due_range_follows_cycle_range_and_caps_at_ten_years():
     assert u.due_lo == date(2027, 1, 1)
     assert u.due_hi == date(2032, 1, 1)  # 12년이 아니라 10년
     assert UnitStatus(1, 1, 1, "DCM", date(2022, 1, 1), True, None, date(2028, 1, 1), 0, "초록").due_lo is None
+
+
+# ---------- 담당자 기준 (2026-11-28, psd/calibrate.py status_rules·apply_rules) ----------
+
+
+def test_custom_thresholds_change_the_status():
+    """교체 임박 3개월·주의 6개월로 바꾸면 4개월 남은 부품은 임박이 아니라 주의."""
+    assert judge_status(120, True) == "빨강"
+    assert judge_status(120, True, red_days=91, yellow_days=182) == "노랑"
+    assert judge_status(200, True, red_days=91, yellow_days=182) == "초록"
+    assert judge_status(-5, False, red_days=91, yellow_days=182) == "확인_필요"
+
+
+def test_manual_cycle_replaces_learned_years_and_keeps_learned_for_display():
+    from psd.calibrate import Calibrated, apply_rules
+
+    cal = Calibrated(formula_years=10, years=4.2, failures=12, units=30, observed_years=60, raw_years=4.2, lo_years=3.0, hi_years=6.0)
+    out = apply_rules(cal, {"red_days": 91, "yellow_days": 182, "manual_years": 6.0})
+    assert (out.years, out.raw_years, out.lo_years, out.hi_years, out.manual_years) == (6.0, 6.0, 6.0, 6.0, 6.0)
+    assert (out.learned_years, out.red_days, out.yellow_days) == (4.2, 91, 182)
+    back = apply_rules(out, {"red_days": 182, "yellow_days": 365, "manual_years": None})
+    assert back.learned_years == 4.2 and back.manual_years is None
+    part = _part(TODAY - timedelta(days=round(5.6 * 365.25)), True)
+    u = to_unit_status(part, _cycle(10), TODAY, out)
+    assert u.due == next_due_date(part.install_date, 6.0) and u.status == "노랑"  # 0.4년(약 146일) 남음: 3개월 넘고 6개월 안

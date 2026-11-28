@@ -51,12 +51,13 @@ def next_due_date(install_date: date, base_years: float) -> date:
     return install_date + timedelta(days=round(base_years * 365.25))
 
 
-def judge_status(days_left: int, has_record: bool) -> str:
+def judge_status(days_left: int, has_record: bool, red_days: int = 182, yellow_days: int = 365) -> str:
+    """red_days·yellow_days는 담당자 기준(psd/calibrate.py status_rules, 2026-11-28). 기본은 6개월·1년."""
     if days_left < 0 and not has_record:
         return "확인_필요"
-    if days_left <= 182:
+    if days_left <= red_days:
         return "빨강"
-    if days_left <= 365:
+    if days_left <= yellow_days:
         return "노랑"
     return "초록"
 
@@ -75,7 +76,7 @@ def to_unit_status(part: Part, cycle: CycleResult, today: date | None = None, ca
         cycle=cycle,
         due=due,
         days_left=days_left,
-        status=judge_status(days_left, part.has_record),
+        status=judge_status(days_left, part.has_record, *((cal.red_days, cal.yellow_days) if cal else ())),
         cal=cal,
     )
 
